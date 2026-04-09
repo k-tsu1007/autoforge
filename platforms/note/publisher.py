@@ -225,7 +225,15 @@ def publish_via_noteclient(article: dict) -> dict:
         print(f"NoteClient2 結果: {result}")
 
         status = "published" if is_publish else "draft_on_note"
-        note_url = result.get("note_url", "") if isinstance(result, dict) else ""
+        # NoteClient2 は public_url を result["data"] に入れて返す
+        note_url = ""
+        if isinstance(result, dict):
+            data = result.get("data") or {}
+            note_url = data.get("public_url") or result.get("note_url") or ""
+            # 最終フォールバック: note_key から組み立てる
+            if not note_url and data.get("note_key"):
+                urlname = os.environ.get("NOTE_URLNAME", "ai_fuku07")
+                note_url = f"https://note.com/{urlname}/n/{data['note_key']}"
 
         return {
             "note_id": f"nc2_{datetime.now(JST).strftime('%Y%m%d_%H%M%S')}",
