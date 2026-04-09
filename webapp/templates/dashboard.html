@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📊 サマリー <span style="font-size:0.6em;color:#71767b;">(30秒ごと自動更新)</span></h2>
+<div hx-get="/partial/summary" hx-trigger="every 30s" hx-swap="innerHTML">
+    {% include "_summary_partial.html" %}
+</div>
+
+<h2>🖥️ システム稼働状況 <span style="font-size:0.6em;color:#71767b;">(5秒ごと自動更新)</span></h2>
+<div class="card" hx-get="/partial/health" hx-trigger="every 5s" hx-swap="innerHTML">
+    {% include "_health_partial.html" %}
+</div>
+
+<h2>📦 最近のパイプライン実行</h2>
+<div class="card">
+    {% if runs %}
+    <table>
+        <thead>
+            <tr><th>日付</th><th>状態</th><th>モード</th><th>所要時間</th><th>記事</th></tr>
+        </thead>
+        <tbody>
+            {% for r in runs %}
+            <tr>
+                <td>{{ r.run_date }}</td>
+                <td class="status-{{ r.status }}">{{ r.status }}</td>
+                <td>{{ r.mode }}</td>
+                <td>{{ "%.1f"|format(r.duration_seconds or 0) }}秒</td>
+                <td>{{ (r.last_article or '')[:50] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>パイプライン実行履歴がありません</p>
+    {% endif %}
+</div>
+
+<h2>📈 成長グラフ</h2>
+<div class="card">
+    <img src="/charts/note-growth.png" alt="Note Growth" style="width: 100%; height: auto; border-radius: 8px;">
+</div>
+
+<h2>🥇 ベスト記事</h2>
+<div class="card">
+    {% if summary.best_article %}
+    <p><strong>{{ summary.best_article.title }}</strong></p>
+    <p>PV: {{ summary.best_article.views }} / スキ: {{ summary.best_article.likes }}</p>
+    {% else %}
+    <p>データなし</p>
+    {% endif %}
+</div>
+{% endblock %}

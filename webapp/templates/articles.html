@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📝 公開した記事 ({{ articles|length }}本)</h2>
+<p style="color:#71767b; margin-bottom:1rem;">読まれた順に並んでいます</p>
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>タイトル</th>
+                <th>ジャンル</th>
+                <th>読まれた回数</th>
+                <th>いいね</th>
+                <th>Noteで見る</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in articles|sort(attribute='views', reverse=true) %}
+            <tr>
+                <td>{{ a.title[:60] }}</td>
+                <td>{{ a.genre }}</td>
+                <td>{{ a.views }}</td>
+                <td>{{ a.likes }}</td>
+                <td>{% if a.note_url %}<a href="{{ a.note_url }}" target="_blank">開く</a>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

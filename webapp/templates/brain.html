@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}Brain — auto-content-engine{% endblock %}
+{% block content %}
+<meta http-equiv="refresh" content="30">
+<style>
+.brain-card { background: #15202b; border: 1px solid #2f3336; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+.brain-card h3 { color: #1d9bf0; font-size: 1.05rem; margin: 0 0 1rem; }
+
+/* North Star */
+.ns-block { text-align: center; padding: 1rem 0 0.5rem; }
+.ns-name { color: #71767b; font-size: 0.85rem; margin-bottom: 0.3rem; }
+.ns-value { font-size: 3.5rem; font-weight: bold; color: #1d9bf0; line-height: 1; }
+.ns-target { color: #71767b; font-size: 1rem; margin-top: 0.3rem; }
+.ns-bar { background: #2f3336; height: 14px; border-radius: 999px; margin: 1rem auto; max-width: 500px; overflow: hidden; }
+.ns-fill { background: linear-gradient(90deg, #1d9bf0, #00ba7c); height: 100%; transition: width 0.5s; }
+.ns-trend { color: #71767b; font-size: 0.9rem; margin-top: 0.5rem; }
+.ns-trend.up { color: #00ba7c; }
+.ns-trend.down { color: #f4212e; }
+
+/* サブ指標 */
+.sub-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #2f3336; }
+.sub-mini { background: #1e2a36; padding: 0.7rem; border-radius: 8px; text-align: center; }
+.sub-mini .label { color: #71767b; font-size: 0.72rem; }
+.sub-mini .value { font-size: 1.5rem; font-weight: bold; color: #e7e9ea; margin-top: 0.2rem; }
+
+/* 効いてる/効いてない */
+.insight-section { margin-bottom: 1rem; }
+.insight-title { font-weight: 600; margin-bottom: 0.5rem; }
+.insight-title.good { color: #00ba7c; }
+.insight-title.bad  { color: #f4212e; }
+.insight-row { display: flex; justify-content: space-between; padding: 0.5rem 0.8rem; background: #1e2a36; border-radius: 6px; margin-bottom: 0.4rem; font-size: 0.92rem; }
+.insight-row .what { color: #e7e9ea; }
+.insight-row .how-much { color: #71767b; }
+
+/* アクション */
+.action-item { padding: 0.8rem 1rem; border-left: 3px solid #f0b933; background: #1e2a36; border-radius: 6px; margin-bottom: 0.6rem; }
+.action-item.error { border-left-color: #f4212e; }
+.action-item .title { font-weight: 600; }
+.action-item .detail { color: #71767b; font-size: 0.85rem; margin-top: 0.2rem; }
+.action-ok { color: #00ba7c; padding: 1.2rem; text-align: center; font-weight: 600; font-size: 1.05rem; }
+
+.advisor-quote { color: #d3d6db; padding: 1rem 1.4rem; border-left: 3px solid #1d9bf0; background: #1e2a36; border-radius: 6px; line-height: 1.7; }
+
+.event-row { display: grid; grid-template-columns: 70px 100px 1fr; gap: 0.8rem; padding: 0.4rem 0; border-bottom: 1px solid #2f3336; font-size: 0.85rem; }
+.event-row:last-child { border-bottom: none; }
+.event-time { color: #71767b; }
+.event-type { font-weight: 600; }
+.event-detail { color: #d3d6db; }
+
+.detail-card { background: #15202b; border: 1px solid #2f3336; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1rem; }
+.detail-card details summary { cursor: pointer; color: #71767b; font-size: 0.9rem; padding: 0.3rem 0; }
+.detail-card details summary:hover { color: #1d9bf0; }
+.detail-card details[open] summary { color: #1d9bf0; }
+
+details summary { cursor: pointer; }
+
+.label-friendly { color: #71767b; font-size: 0.78rem; margin-bottom: 0.3rem; }
+</style>
+
+<h2>🧠 いまの状態</h2>
+<p style="color: #71767b; margin-bottom: 1.5rem;">成果が出ているか、AIが何をしているか、あなたの対応が必要か — このページだけ見ればわかります <span style="color:#444;">(30秒ごとに自動更新)</span></p>
+
+
+<!-- ① 成果（North Star + サブ） -->
+<div class="brain-card">
+  <h3>🎯 いまの目標と達成度</h3>
+  {% if data.goal and data.goal.target_revenue %}
+  <div style="background:#0f1419; border:1px solid #1d9bf0; border-radius:8px; padding:0.8rem; margin-bottom:1rem;">
+    <div style="color:#1d9bf0; font-weight:600;">🏁 ゴール: 月{{ data.goal.target_revenue }}円 ({{ data.goal.target_date }})</div>
+    <div style="color:#71767b; font-size:0.85rem; margin-top:0.3rem;">
+      残り <strong style="color:#fff;">{{ data.goal.days_left }}日</strong> / 経過 {{ data.goal.elapsed_pct }}%
+    </div>
+    {% if data.goal.note %}<div style="color:#71767b; font-size:0.8rem; margin-top:0.3rem;">{{ data.goal.note }}</div>{% endif %}
+  </div>
+  {% endif %}
+  <div class="ns-block">
+    <div class="ns-name">{{ data.north_star.name }}</div>
+    <div class="ns-value">{{ "%.1f"|format(data.north_star.value) }}</div>
+    <div class="ns-target">目標 {{ data.north_star.target }}</div>
+    <div class="ns-bar">
+      <div class="ns-fill" style="width: {{ data.north_star.progress_pct }}%;"></div>
+    </div>
+    <div class="ns-trend {% if data.north_star.trend_delta is not none and data.north_star.trend_delta > 0 %}up{% elif data.north_star.trend_delta is not none and data.north_star.trend_delta < 0 %}down{% endif %}">
+      {% if data.north_star.trend_delta is not none %}
+        7日前と比べて {{ data.north_star.trend_arrow }} {{ "%+.1f"|format(data.north_star.trend_delta) }}
+      {% else %}
+        7日前のデータがまだありません（記録は今日から積み上げ中）
+      {% endif %}
+    </div>
+  </div>
+  <div class="sub-metrics">
+    <div class="sub-mini"><div class="label">公開した記事</div><div class="value">{{ data.metrics.article_count }}</div></div>
+    <div class="sub-mini"><div class="label">記事1本あたりPV</div><div class="value">{{ data.metrics.avg_views }}</div></div>
+    <div class="sub-mini"><div class="label">投稿したツイート</div><div class="value">{{ data.metrics.tweet_count }}</div></div>
+    <div class="sub-mini"><div class="label">ツイート1本平均見られた回数</div><div class="value">{{ data.metrics.avg_imp }}</div></div>
+  </div>
+</div>
+
+
+<!-- ② 効いてる/効いてないこと（旧 Lift） -->
+{% set winners = [] %}{% set losers = [] %}
+{% for param_name, rows in data.lifts.groups.items() %}
+  {% for r in rows %}
+    {% if r.status == 'active' and r.lift_likes >= 1.2 %}
+      {% set _ = winners.append({'param': param_name, 'value': r.value, 'mult': r.lift_likes, 'n': r.samples}) %}
+    {% elif r.status == 'active' and r.lift_likes <= 0.7 %}
+      {% set _ = losers.append({'param': param_name, 'value': r.value, 'mult': r.lift_likes, 'n': r.samples}) %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+<div class="brain-card">
+  <h3>💡 何が効いていて、何が効いていないか</h3>
+  {% if winners or losers %}
+    {% set param_label = {'genre': 'ジャンル', 'title_prefix': 'タイトルの最初', 'title_suffix': 'タイトルの最後', 'title_category': 'タイトル型'} %}
+    {% if winners %}
+    <div class="insight-section">
+      <div class="insight-title good">✅ 読者によく読まれているもの</div>
+      {% for w in winners|sort(attribute='mult', reverse=True) %}
+      <div class="insight-row">
+        <div class="what">{{ param_label.get(w.param, w.param) }}: <strong>「{{ w.value }}」</strong></div>
+        <div class="how-much">いつもの<strong style="color:#00ba7c;">{{ w.mult }}倍</strong>読まれてる ({{ w.n }}件で実証)</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if losers %}
+    <div class="insight-section">
+      <div class="insight-title bad">❌ あまり読まれていないもの — AIが避けるよう調整中</div>
+      {% for l in losers|sort(attribute='mult') %}
+      <div class="insight-row">
+        <div class="what">{{ param_label.get(l.param, l.param) }}: <strong>「{{ l.value }}」</strong></div>
+        <div class="how-much">いつもの<strong style="color:#f4212e;">{{ l.mult }}倍</strong>のみ ({{ l.n }}件)</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div style="color:#71767b; font-size:0.78rem; margin-top:0.8rem;">
+      ※ 過去{{ data.lifts.baseline.n }}記事のいいね数を分析。明日以降の記事は「読まれているもの」を優先するようAIに自動指示されます。
+    </div>
+  {% else %}
+    <div style="color:#71767b;">まだ十分なデータがありません。記事が貯まるほど精度が上がります（明日朝の分析で更新）。</div>
+  {% endif %}
+</div>
+
+
+<!-- ③a 今日のスケジュール -->
+{% if data.today_plan %}
+<div class="brain-card">
+  <h3>📅 今日の予定 (advisor が決めた値)</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:0.92rem; table-layout:fixed;">
+    <colgroup>
+      <col style="width:2.2rem;">
+      <col style="width:30%;">
+      <col>
+    </colgroup>
+    {% for row in data.today_plan %}
+    <tr style="border-bottom:1px solid #1e2935; vertical-align:top;">
+      <td style="padding:0.6rem 0.4rem; white-space:nowrap;">{{ row.icon }}</td>
+      <td style="padding:0.6rem 0.4rem;">
+        <div style="font-weight:600; margin-bottom:0.25rem;">{{ row.what }}</div>
+        <div style="color:#71767b; font-size:0.76rem;">{{ row.detail }}</div>
+      </td>
+      <td style="padding:0.6rem 0.4rem;">
+        {% set times = row.time.split(' / ') %}
+        {% if times|length > 1 %}
+          <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
+            {% for t in times %}
+              <span style="background:#0f1419; border:1px solid #1d9bf0; color:#1d9bf0; padding:0.15rem 0.45rem; border-radius:4px; font-family:monospace; font-size:0.82rem;">{{ t }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <span style="color:#1d9bf0; font-family:monospace;">{{ row.time }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p style="margin-top:0.6rem; color:#71767b; font-size:0.78rem;">
+    詳細なジョブ一覧と実行履歴は <a href="/activity" style="color:#1d9bf0;">⚡ 動き</a> ページで確認できます。
+  </p>
+</div>
+{% endif %}
+
+
+<!-- ③ AIの今日の判断 -->
+<div class="brain-card">
+  <h3>🤖 AIが今日決めたこと</h3>
+  {% if data.advisor_summary %}
+    <div class="advisor-quote">{{ data.advisor_summary }}</div>
+    <details style="margin-top: 0.8rem;">
+      <summary style="color:#71767b; font-size:0.85rem;">▼ 細かい設定値を見る</summary>
+      <table style="margin-top: 0.5rem;">
+        {% set adv_label = {
+          'thread_length_default': 'スレッドの長さ（基本）',
+          'thread_length_min': 'スレッド最短',
+          'thread_length_max': 'スレッド最長',
+          'thread_weekly_target': '週のスレッド目標数',
+          'single_daily_target': '1日の単発ツイート数',
+          'single_post_slots': '単発ツイート投稿時刻',
+          'quote_daily_target': '1日の引用RT数',
+          'quote_post_slots': '引用RT時刻',
+          'reply_daily_target': '1日のリプライ数',
+          'reply_post_slots': 'リプライ時刻',
+          'like_post_slots': 'いいね時刻',
+          'min_gap_minutes': '連投の最短間隔(分)',
+          'growth_daily_likes': '1日に押すいいね数',
+          'note_daily_target': '1日のNote記事数',
+          'note_post_slots': 'Note投稿時刻',
+          'tweet_draft_patterns': 'ツイートの文体',
+          'growth_search_keywords': 'いいね探索キーワード',
+        } %}
+        {% for k, v in data.advisor.items() %}
+          {% if k not in ('reasoning', 'updated_at') %}
+            <tr><td style="color:#71767b; padding-right:1rem;">{{ adv_label.get(k, k) }}</td><td>{{ v }}</td></tr>
+          {% endif %}
+        {% endfor %}
+      </table>
+      <div style="color:#71767b; font-size:0.78rem; margin-top:0.5rem;">最終判断: {{ data.advisor.updated_at[:16] if data.advisor.updated_at else '不明' }}</div>
+    </details>
+  {% else %}
+    <div style="color: #71767b;">まだ判断データがありません。明日 06:00 にAIが今日の作戦を決めます。</div>
+  {% endif %}
+</div>
+
+
+<!-- ④ あなたの対応 -->
+<div class="brain-card">
+  <h3>⚠ あなたの対応が必要なこと</h3>
+  {% if data.actions %}
+    {% for a in data.actions %}
+    <div class="action-item {% if a.level == 'error' %}error{% endif %}">
+      <div class="title">{{ a.title }}</div>
+      <div class="detail">{{ a.detail }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="action-ok">✅ ぜんぶ自動で動いています。対応不要。</div>
+  {% endif %}
+</div>
+
+
+<!-- ⑤ 今日起きたこと -->
+<div class="brain-card">
+  <h3>📅 直近24時間に起きたこと ({{ data.events|length }}件)</h3>
+  {% if data.events %}
+    <details {% if data.events|length <= 6 %}open{% endif %}>
+      <summary style="color:#71767b; font-size:0.85rem;">▼ {{ '展開して見る' if data.events|length > 6 else '一覧を見る' }}</summary>
+      <div style="margin-top:0.5rem;">
+      {% for e in data.events %}
+      <div class="event-row">
+        <div class="event-time">{{ e.ts_display or '' }}</div>
+        <div class="event-type">{{ e.type }}</div>
+        <div class="event-detail">{{ e.detail }}</div>
+      </div>
+      {% endfor %}
+      </div>
+    </details>
+  {% else %}
+    <div style="color:#71767b;">直近24時間は静かです。</div>
+  {% endif %}
+</div>
+
+
+<!-- ⑥ おまけ詳細（折りたたみ） -->
+<div class="detail-card">
+  <details>
+    <summary>💰 AIにかかったお金（過去7日 ${{ "%.2f"|format(data.cost7.total_cost or 0) }} / 30日 ${{ "%.2f"|format(data.cost30.total_cost or 0) }}）</summary>
+    <div style="margin-top:0.6rem; color:#71767b; font-size:0.85rem;">
+      呼び出し回数: 7日 {{ data.cost7.total_calls or 0 }}回 / 30日 {{ data.cost30.total_calls or 0 }}回。<br>
+      Maxプラン CLI 経由は0円カウントです。
+    </div>
+  </details>
+</div>
+
+<div class="detail-card">
+  <details>
+    <summary>📊 過去30日の数字の推移 ({{ data.snapshots|length }}件)</summary>
+    {% if data.snapshots %}
+    <table style="margin-top: 0.5rem;">
+      <tr><th>日付</th><th>{{ data.north_star.name }}</th><th>記事数</th><th>PV/記事</th><th>imp/ツイート</th></tr>
+      {% for s in data.snapshots %}
+        {% set sup = s.supporting_json|fromjson if s.supporting_json else {} %}
+        <tr>
+          <td>{{ s.date }}</td>
+          <td>{{ "%.1f"|format(s.north_star_value or 0) }}</td>
+          <td>{{ sup.article_count or '—' }}</td>
+          <td>{{ sup.avg_views or '—' }}</td>
+          <td>{{ sup.avg_imp or '—' }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div style="color:#71767b; padding-top:0.5rem;">まだ記録がありません。明日から積み上げ開始。</div>
+    {% endif %}
+  </details>
+</div>
+
+{% endblock %}

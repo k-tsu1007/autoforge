@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>🐦 ツイート</h2>
+
+<h3 style="margin-top:1rem;">この1週間の成績</h3>
+<div class="grid">
+    <div class="stat">
+        <div class="stat-label">投稿した数</div>
+        <div class="stat-value">{{ weekly.tweet_count or 0 }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">もらったいいね</div>
+        <div class="stat-value">{{ weekly.total_likes or 0 }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">見られた回数</div>
+        <div class="stat-value">{{ weekly.total_impressions or 0 }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">1本平均いいね</div>
+        <div class="stat-value">{{ weekly.avg_likes or 0 }}</div>
+    </div>
+</div>
+
+<h3 style="margin-top:2rem;">これから投稿される予定 ({{ queue|length }}件)</h3>
+<div class="card">
+    {% if queue %}
+        {% for q in queue %}
+        <div class="pre">{{ q.text }}</div>
+        {% endfor %}
+    {% else %}
+    <p style="color:#71767b;">予定なし。次のNote公開時に補充されます。</p>
+    {% endif %}
+</div>
+
+<h3 style="margin-top:2rem;">投稿済み (反応順)</h3>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>本文</th><th>いいね</th><th>RT</th><th>返信</th><th>見られた</th></tr>
+        </thead>
+        <tbody>
+            {% for t in tweets|sort(attribute='likes', reverse=true) %}
+            <tr>
+                <td>{{ t.text[:80] }}</td>
+                <td>{{ t.likes }}</td>
+                <td>{{ t.retweets }}</td>
+                <td>{{ t.replies }}</td>
+                <td>{{ t.impressions }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

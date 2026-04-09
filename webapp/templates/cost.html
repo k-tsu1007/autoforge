@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>💰 LLM使用量・コスト</h2>
+
+<h3>📅 過去7日間</h3>
+<div class="grid">
+    <div class="stat">
+        <div class="stat-label">総コスト</div>
+        <div class="stat-value">${{ "%.2f"|format(summary7.total_cost) }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">呼び出し回数</div>
+        <div class="stat-value">{{ summary7.total_calls }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>プロバイダ</th>
+                <th>モデル</th>
+                <th>用途</th>
+                <th>呼び出し</th>
+                <th>入力tokens</th>
+                <th>出力tokens</th>
+                <th>コスト</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in summary7.by_purpose %}
+            <tr>
+                <td>{{ r.provider }}</td>
+                <td>{{ r.model }}</td>
+                <td>{{ r.purpose }}</td>
+                <td>{{ r.call_count }}</td>
+                <td>{{ r.total_input }}</td>
+                <td>{{ r.total_output }}</td>
+                <td>${{ "%.4f"|format(r.total_cost or 0) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h3>📅 過去30日間</h3>
+<div class="grid">
+    <div class="stat">
+        <div class="stat-label">総コスト</div>
+        <div class="stat-value">${{ "%.2f"|format(summary30.total_cost) }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">呼び出し回数</div>
+        <div class="stat-value">{{ summary30.total_calls }}</div>
+    </div>
+</div>
+{% endblock %}

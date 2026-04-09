@@ -1,0 +1,681 @@
+{
+  "articles": [
+    {
+      "title": "ChatGPTで「Xのプロフィール」を5分で最適化！フォロワーが増える自己紹介文をコピペで作るプロンプト術【テンプレ付き】",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "SNS運用",
+        "X",
+        "Twitter"
+      ],
+      "note_id": "154150880",
+      "note_url": "https://note.com/ai_fuku07/n/nbdba7004a792",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:47.481294+09:00",
+      "views": 24,
+      "likes": 3,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「Instagram運用計画」を1時間で設計！フォロワー1000人を目指す投稿カレンダーをコピペで作るプロンプト術",
+      "genre": "",
+      "tags": [],
+      "note_id": "154162366",
+      "note_url": "https://note.com/ai_fuku07/n/n81e9f194ceda",
+      "status": "published",
+      "published_at": "",
+      "views": 16,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "Instagramのネタ切れを解決する「投稿テーマの設計」3ステップ",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "Instagram",
+        "副業",
+        "フォロワー増加",
+        "コンテンツ設計",
+        "発信力",
+        "個人ブランディング",
+        "AI",
+        "生成AI"
+      ],
+      "note_id": "154338069",
+      "note_url": "https://note.com/ai_fuku07/n/nd80fe9f41469",
+      "status": "published",
+      "published_at": "2026-04-05T15:55:38.141871+09:00",
+      "views": 16,
+      "likes": 5,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "仕事が速い人がやっている「AIへの質問の仕方」5つの法則",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "業務効率化",
+        "仕事術",
+        "生産性向上"
+      ],
+      "note_id": "154238201",
+      "note_url": "https://note.com/ai_fuku07/n/n96cccca76ecf",
+      "status": "published",
+      "published_at": "2026-04-04T22:18:11.063715+09:00",
+      "views": 14,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "Xのフォロワーが増えない人に共通する「プロフィール設計」の3つの落とし穴",
+      "genre": "",
+      "tags": [],
+      "note_id": "154374875",
+      "note_url": "https://note.com/ai_fuku07/n/na1c1a6b2e7fc",
+      "status": "published",
+      "published_at": "",
+      "views": 12,
+      "likes": 3,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "TikTokのフォロワーが増えない人に共通する「3つの投稿ミス」と今すぐ直せる改善策",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "TikTok",
+        "フォロワー増加",
+        "動画マーケティング",
+        "副業",
+        "コンテンツ制作",
+        "仕事術",
+        "在宅ワーク",
+        "生成AI"
+      ],
+      "note_id": "154336801",
+      "note_url": "https://note.com/ai_fuku07/n/nc1d38ce249d7",
+      "status": "published",
+      "published_at": "2026-04-05T15:46:07.724464+09:00",
+      "views": 11,
+      "likes": 5,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「ランディングページ（LP）の文章」を20分で作成！売れるコピーをコピペで作るプロンプト術【コピペOK】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "コピーライティング",
+        "マーケティング"
+      ],
+      "note_id": "154150864",
+      "note_url": "https://note.com/ai_fuku07/n/n9b977625d5f6",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:41.521763+09:00",
+      "views": 10,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「社内研修資料」を1時間で作成！準備ゼロから始めるプロンプト術【コピペOK】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "業務効率化",
+        "研修",
+        "資料作成"
+      ],
+      "note_id": "154150840",
+      "note_url": "https://note.com/ai_fuku07/n/nd672a318bd66",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:29.259440+09:00",
+      "views": 9,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「採用面接の想定Q&A」を20分で完成！転職・就活を有利に進めるプロンプト術【コピペOK】",
+      "genre": "",
+      "tags": [],
+      "note_id": "154163394",
+      "note_url": "https://note.com/ai_fuku07/n/n7c9f7efd45c5",
+      "status": "published",
+      "published_at": "",
+      "views": 9,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "実は9割の人がやっている「ChatGPTの使い方ミス」——出力品質が劇的に変わる5つの改善ポイント",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "プロンプト",
+        "生成AI",
+        "仕事術",
+        "業務効率化"
+      ],
+      "note_id": "154240790",
+      "note_url": "https://note.com/ai_fuku07/n/n6663f867ac92",
+      "status": "published",
+      "published_at": "2026-04-04T22:36:04.610497+09:00",
+      "views": 9,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで週報・日報を3分で完成！上司に刺さる報告書をコピペで作るプロンプト術",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "業務効率化",
+        "仕事術",
+        "時短"
+      ],
+      "note_id": "154150683",
+      "note_url": "https://note.com/ai_fuku07/n/n30f8a2267220",
+      "status": "published",
+      "published_at": "2026-04-04T11:31:22.174830+09:00",
+      "views": 8,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "転職活動の「職務経歴書」の書き方——採用担当者の目に止まる自己PR文の例文テンプレート付き",
+      "genre": "副業・収益化ガイド",
+      "tags": [
+        "転職",
+        "職務経歴書",
+        "自己PR",
+        "書き方",
+        "テンプレート",
+        "例文",
+        "キャリア",
+        "ChatGPT",
+        "AI"
+      ],
+      "note_id": "154341195",
+      "note_url": "https://note.com/ai_fuku07/n/n1bf198ea4fb4",
+      "status": "published",
+      "published_at": "2026-04-05T16:17:57.709234+09:00",
+      "views": 8,
+      "likes": 1,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "Xのフォロワーが増えない人に共通する3つの特徴——今すぐ直せる改善ポイント",
+      "genre": "",
+      "tags": [],
+      "note_id": "154513371",
+      "note_url": "https://note.com/ai_fuku07/n/na409bf7b29e5",
+      "status": "published",
+      "published_at": "",
+      "views": 8,
+      "likes": 3,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「FAQ・よくある質問」を10分で作成！顧客対応を自動化するプロンプト術【コピペOK】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "業務効率化",
+        "顧客対応",
+        "副業"
+      ],
+      "note_id": "154150792",
+      "note_url": "https://note.com/ai_fuku07/n/ncc27db73627f",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:04.703502+09:00",
+      "views": 7,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「プレゼン資料の構成」を15分で完成！説得力が上がるスライド設計プロンプト術【コピペOK】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "仕事効率化",
+        "プレゼン",
+        "ビジネス"
+      ],
+      "note_id": "154150851",
+      "note_url": "https://note.com/ai_fuku07/n/nd865d323245a",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:35.343811+09:00",
+      "views": 7,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "副業で月3万円を稼ぐ人が最初にやる「SNS発信の設計」3ステップ",
+      "genre": "副業・収益化ガイド",
+      "tags": [
+        "副業",
+        "SNS運用",
+        "副業初心者",
+        "在宅ワーク",
+        "note",
+        "仕事術",
+        "収益化",
+        "発信力",
+        "ビジネス"
+      ],
+      "note_id": "154249772",
+      "note_url": "https://note.com/ai_fuku07/n/n38635aead5d9",
+      "status": "published",
+      "published_at": "2026-04-04T23:41:03.516511+09:00",
+      "views": 7,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTでブログ記事を30分で量産！SEOに強い記事構成をそのまま使えるプロンプト術",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "ブログ",
+        "SEO"
+      ],
+      "note_id": "154150710",
+      "note_url": "https://note.com/ai_fuku07/n/na78ecfdcfae1",
+      "status": "published",
+      "published_at": "2026-04-04T11:31:34.181411+09:00",
+      "views": 6,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「勉強ノート」を最強の副業コンテンツに変える！学んだことを5分でnote記事にするプロンプト術",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "note",
+        "勉強法"
+      ],
+      "note_id": "154150769",
+      "note_url": "https://note.com/ai_fuku07/n/n941ce495ec8f",
+      "status": "published",
+      "published_at": "2026-04-04T11:31:58.629890+09:00",
+      "views": 6,
+      "likes": 2,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「クレーム対応メール」を3分で完成！感情的にならずに誠実に伝えるプロンプト術【コピペOK】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "業務効率化",
+        "ビジネス文書"
+      ],
+      "note_id": "154150810",
+      "note_url": "https://note.com/ai_fuku07/n/nf0940b6e93ff",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:17.062421+09:00",
+      "views": 6,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「アンケート・調査フォーム」を10分で作成！顧客の本音を引き出す質問設計プロンプト術【コピペOK】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "マーケティング",
+        "業務効率化"
+      ],
+      "note_id": "154150827",
+      "note_url": "https://note.com/ai_fuku07/n/nc4cdb6a1e41e",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:23.105120+09:00",
+      "views": 6,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTでLinkedIn投稿を量産！仕事の依頼が来るプロフィール＆投稿文を5分で作るプロンプト術",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "SNS運用",
+        "LinkedIn",
+        "副業"
+      ],
+      "note_id": "154150696",
+      "note_url": "https://note.com/ai_fuku07/n/n0b65f681e2a4",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:47.481294+09:00",
+      "views": 24,
+      "likes": 3,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで企画書・提案書を30分で仕上げる！上司もうなるビジネス文書をコピペで作るプロンプト術",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "業務効率化",
+        "ビジネス文書",
+        "仕事術"
+      ],
+      "note_id": "154150728",
+      "note_url": "https://note.com/ai_fuku07/n/n2ba89e90de92",
+      "status": "published",
+      "published_at": "2026-04-04T22:18:11.063715+09:00",
+      "views": 14,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで自己紹介文を5分で作成！転職・副業・SNSで使えるプロフィール文のプロンプト術",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "自己紹介",
+        "キャリア"
+      ],
+      "note_id": "154150743",
+      "note_url": "https://note.com/ai_fuku07/n/n6135cbc7daa7",
+      "status": "published",
+      "published_at": "2026-04-04T11:31:46.548286+09:00",
+      "views": 5,
+      "likes": 2,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで読書メモを資産に変える！本の内容を10分でアウトプットできるプロンプト術【SNS・副業にも使える】",
+      "genre": "AI・ChatGPT活用術",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "読書",
+        "アウトプット",
+        "副業"
+      ],
+      "note_id": "154150756",
+      "note_url": "https://note.com/ai_fuku07/n/n7a75350f3905",
+      "status": "published",
+      "published_at": "2026-04-04T11:31:52.522977+09:00",
+      "views": 5,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "ChatGPTで「商品説明文」を5分で量産！メルカリ・ネットショップの売上を上げるプロンプト術【コピペOK】",
+      "genre": "副業・収益化ガイド",
+      "tags": [
+        "AI",
+        "ChatGPT",
+        "副業",
+        "メルカリ",
+        "ネットショップ"
+      ],
+      "note_id": "154150803",
+      "note_url": "https://note.com/ai_fuku07/n/nf460aac2ee53",
+      "status": "published",
+      "published_at": "2026-04-04T11:32:10.918284+09:00",
+      "views": 5,
+      "likes": 1,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "AIを使った副業で月3万円を稼ぐロードマップ——初月から収益化できる3つのステップ",
+      "genre": "副業・収益化ガイド",
+      "tags": [
+        "AI",
+        "副業",
+        "ChatGPT",
+        "生成AI",
+        "収益化",
+        "仕事術",
+        "業務効率化",
+        "プロンプト",
+        "時短"
+      ],
+      "note_id": "154247216",
+      "note_url": "https://note.com/ai_fuku07/n/n82a3c5fb5c83",
+      "status": "published",
+      "published_at": "2026-04-04T23:22:10.948560+09:00",
+      "views": 3,
+      "likes": 1,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "Instagram運用で「何を投稿すればいいかわからない」を解決する5つのネタ切れ対策",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "Instagram",
+        "副業",
+        "コンテンツ制作",
+        "フォロワー増加",
+        "仕事術",
+        "時短",
+        "生成AI",
+        "AI"
+      ],
+      "note_id": "154248267",
+      "note_url": "https://note.com/ai_fuku07/n/nf540f7ac4d47",
+      "status": "published",
+      "published_at": "2026-04-04T23:30:04.028121+09:00",
+      "views": 2,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "副業で月3万円を稼ぐ人が最初にやる「SNS発信の設計」3ステップ",
+      "genre": "副業・収益化ガイド",
+      "tags": [
+        "副業",
+        "SNS運用",
+        "副業初心者",
+        "在宅ワーク",
+        "note",
+        "仕事術",
+        "収益化",
+        "発信力",
+        "ビジネス"
+      ],
+      "note_id": "nc2_20260404_234103",
+      "note_url": "",
+      "status": "published",
+      "published_at": "2026-04-04T23:41:03.516511+09:00",
+      "views": 7,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "TikTokのフォロワーが増えない人に共通する「3つの投稿ミス」と今すぐ直せる改善策",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "TikTok",
+        "フォロワー増加",
+        "動画マーケティング",
+        "副業",
+        "コンテンツ制作",
+        "仕事術",
+        "在宅ワーク",
+        "生成AI"
+      ],
+      "note_id": "nc2_20260405_154607",
+      "note_url": "",
+      "status": "published",
+      "published_at": "2026-04-05T15:46:07.724464+09:00",
+      "views": 11,
+      "likes": 5,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "Instagramのネタ切れを解決する「投稿テーマの設計」3ステップ——フォロワーに刺さる発信を仕組み化する方法",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "Instagram",
+        "副業",
+        "フォロワー増加",
+        "コンテンツ設計",
+        "発信力",
+        "個人ブランディング",
+        "AI",
+        "生成AI"
+      ],
+      "note_id": "nc2_20260405_155538",
+      "note_url": "",
+      "status": "published",
+      "published_at": "2026-04-05T15:55:38.141871+09:00",
+      "views": 15,
+      "likes": 5,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "転職活動の「職務経歴書」の書き方——採用担当者の目に止まる自己PR文の例文テンプレート付き",
+      "genre": "副業・収益化ガイド",
+      "tags": [
+        "転職",
+        "職務経歴書",
+        "自己PR",
+        "書き方",
+        "テンプレート",
+        "例文",
+        "キャリア",
+        "ChatGPT",
+        "AI"
+      ],
+      "note_id": "nc2_20260405_161757",
+      "note_url": "",
+      "status": "published",
+      "published_at": "2026-04-05T16:17:57.709234+09:00",
+      "views": 8,
+      "likes": 1,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "プロフィール文を書き直したら反応が変わった——SNS・転職活動で「刺さる自己紹介文」の書き方【実例付き】",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "自己紹介文",
+        "プロフィール",
+        "仕事術",
+        "転職",
+        "副業"
+      ],
+      "note_id": "154342893",
+      "note_url": "https://note.com/ai_fuku07/n/n545bbf3a1b60",
+      "status": "published",
+      "published_at": "2026-04-05T16:30:20.883817+09:00",
+      "views": 1,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "プロフィール文を書き直したら反応が変わった——SNS・転職活動で「刺さる自己紹介文」の書き方【実例付き】",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "自己紹介文",
+        "プロフィール",
+        "仕事術",
+        "転職",
+        "副業"
+      ],
+      "note_id": "154359676",
+      "note_url": "https://note.com/ai_fuku07/n/n6cb01cef3676",
+      "status": "published",
+      "published_at": "2026-04-05T16:30:20.883817+09:00",
+      "views": 1,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    },
+    {
+      "title": "Xのフォロワーが増えない人に共通する3つの特徴——今すぐ直せる改善ポイント",
+      "genre": "SNS運用ノウハウ",
+      "tags": [
+        "SNS運用",
+        "X（Twitter）",
+        "フォロワー増加",
+        "プロフィール",
+        "発信戦略"
+      ],
+      "note_id": "nc2_20260406_190455",
+      "note_url": "",
+      "status": "published",
+      "published_at": "2026-04-06T19:04:55.992994+09:00",
+      "views": 0,
+      "likes": 0,
+      "comments": 0,
+      "revenue": 0
+    }
+  ],
+  "metrics_summary": {
+    "total_articles": 25,
+    "total_views": 184,
+    "total_likes": 20,
+    "avg_views_per_article": 7.7,
+    "avg_likes_per_article": 0.8,
+    "best_article": {
+      "title": "TikTokのフォロワーが増えない人に共通する「3つの投稿ミス」と今すぐ直せる改善策",
+      "views": 11,
+      "likes": 5
+    }
+  }
+}

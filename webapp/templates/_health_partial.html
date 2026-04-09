@@ -1,0 +1,16 @@
+<table>
+    <thead>
+        <tr><th>コンポーネント</th><th>状態</th><th>ノート</th><th>最終ハートビート</th><th>ホスト</th></tr>
+    </thead>
+    <tbody>
+        {% for name, h in health.items() %}
+        <tr>
+            <td><strong>{{ name }}</strong></td>
+            <td class="status-{{ h.status }}">{{ h.status }}</td>
+            <td>{{ h.note }}</td>
+            <td>{{ h.last_heartbeat[:19] }}</td>
+            <td>{{ h.host }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

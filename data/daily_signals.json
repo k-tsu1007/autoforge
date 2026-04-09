@@ -1,0 +1,31 @@
+{
+  "date": "2026-04-07",
+  "baseline": {
+    "avg_likes": 1.26,
+    "avg_views": 9.29,
+    "n": 31
+  },
+  "trend": "no_baseline",
+  "trend_data": {
+    "recent7_avg_likes": 1.26,
+    "prev7_avg_likes": 0
+  },
+  "outliers_high": [
+    {
+      "title": "Xのフォロワーが増えない人に共通する3つの特徴——今すぐ直せる改善ポイント",
+      "genre": "SNS運用ノウハウ",
+      "likes": 4,
+      "expected": 1.26,
+      "delta": 2.74
+    }
+  ],
+  "outliers_low": [
+    {
+      "title": "Xのフォロワーが増えない人に共通する3つの特徴——今すぐ直せる改善ポイント",
+      "genre": "SNS運用ノウハウ",
+      "likes": 0,
+      "expected": 1.26,
+      "delta": -1.26
+    }
+  ]
+}

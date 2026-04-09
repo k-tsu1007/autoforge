@@ -1,0 +1,68 @@
+# ==========================================================================
+# Instance: fuku_ai_sns
+# ==========================================================================
+# Genre  : 副業 × AI × SNS発信
+# Persona: 非エンジニアが AI で Note 自動化を試している実験記録
+# 起動    : python -m tools.run_daemon --instance fuku_ai_sns
+# ==========================================================================
+
+instance:
+  name: fuku_ai_sns
+  display_name: "ふく｜AIで稼ぐ非エンジニア"
+  description: "副業×AI×SNS発信の検証係。非エンジニアが AI で Note を自動化中。"
+  webapp_port: 8001        # legacy v1 が 8000 を使うので衝突回避
+  timezone: "Asia/Tokyo"
+
+# 各プラットフォームの有効化と接続情報
+platforms:
+  note:
+    enabled: true
+    urlname: "ai_fuku07"
+    # 認証情報は cookies/session.json に格納 (env で上書き可)
+    magazine_auto_classify: true
+
+  x:
+    enabled: true
+    username: "fuku_ai07"
+    # cookies/x_session.json
+    monetization_eligible: false
+
+  wordpress:
+    enabled: false
+    site_url: ""
+    user: ""
+    # app_password は cookies/wp_password.txt 等に置く
+
+  pinterest:
+    enabled: false
+    business_account: false
+
+# コンテンツ戦略 (旧 strategy.json content_params 相当)
+content:
+  genres:
+    - "SNS運用ノウハウ"
+    - "副業・収益化ガイド（SNS連動型）"
+  voice: "解説型・整理型・読者提案型 (実体験捏造禁止)"
+  target_reader: "副業始めたい非エンジニア初心者"
+  target_length_chars: 2800
+  free_ratio: 0.65
+  banned_phrases:
+    - "私が試した結果"
+    - "○ヶ月で○人増えた"
+    - "月収○円稼げた"
+
+# 投稿目標とスロット (advisor が動的に上書きする)
+goals:
+  note_articles_per_day: 4
+  x_posts_per_day: 20
+  x_quotes_per_day: 4
+  x_replies_per_day: 8
+  x_likes_per_day: 20
+  monthly_revenue_jpy: 10000
+  target_date: "2026-07-07"
+
+# 環境変数 (Daemon 起動時に注入される)
+env:
+  USE_CLAUDE_CLI: "1"
+  X_USERNAME: "fuku_ai07"
+  NOTE_URLNAME: "ai_fuku07"

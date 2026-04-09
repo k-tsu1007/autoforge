@@ -1,0 +1,23 @@
+<div class="grid">
+    {% for status, count in stats.items() %}
+    <div class="stat">
+        <div class="stat-label">{{ status }}</div>
+        <div class="stat-value">{{ count }}</div>
+    </div>
+    {% endfor %}
+</div>
+<table style="margin-top:1rem;">
+    <thead>
+        <tr><th>ID</th><th>名前</th><th>状態</th><th>作成</th></tr>
+    </thead>
+    <tbody>
+        {% for j in recent %}
+        <tr>
+            <td>{{ j.id }}</td>
+            <td>{{ j.name }}</td>
+            <td class="status-{{ j.status }}">{{ j.status }}</td>
+            <td>{{ j.created_at[:19] }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

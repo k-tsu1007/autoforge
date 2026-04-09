@@ -1,0 +1,371 @@
+{
+  "version": 16,
+  "goal": {
+    "target_revenue": 10000,
+    "target_date": "2026-07-07",
+    "set_at": "2026-04-07",
+    "note": "3ヶ月で月1万円。月1=3本/日信頼構築、月2=有料記事投入、月3=収益化"
+  },
+  "generation_params": {
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.8,
+    "max_tokens": 8192
+  },
+  "content_params": {
+    "target_length_chars": 2800,
+    "free_ratio": 0.65,
+    "price_yen": 0,
+    "genres": [
+      "AI活用術",
+      "SNS運用ノウハウ",
+      "副業・収益化ガイド"
+    ],
+    "genre_weights": [
+      0.05,
+      0.6,
+      0.35
+    ],
+    "tags_main": [
+      "SNS運用",
+      "副業",
+      "ChatGPT",
+      "生成AI",
+      "フォロワー増加",
+      "発信力",
+      "コンテンツ設計",
+      "個人ブランディング",
+      "在宅ワーク",
+      "Instagram",
+      "TikTok",
+      "X"
+    ],
+    "title_patterns": [
+      "{数字}分でできる{トピック}",
+      "{トピック}で月{数字}万円稼ぐ方法",
+      "{トピック}で{ベネフィット}する方法",
+      "知らないと損する{トピック}の使い方{数字}選",
+      "非エンジニアでも{数字}分でできる{トピック}",
+      "仕事が速い人がやっている{トピック}活用術{数字}選",
+      "【実体験】{トピック}を試してみた結果と正直な感想",
+      "今すぐ使える{トピック}テンプレート{数字}選【無料配布】",
+      "{トピック}を使い始めて{期間}で変わった{ベネフィット}",
+      "正直に言う。{トピック}で{ベネフィット}できた理由",
+      "{職種}の私が{トピック}を1ヶ月使って気づいた{数字}つのこと",
+      "AIを使っても成果が出ない人がやりがちな{数字}つのミス",
+      "{トピック}を始める前に知っておきたい{数字}つのこと",
+      "{トピック}で{ベネフィット}できた人とできなかった人の違い",
+      "SNS運用で挫折した私が{トピック}で立て直した話",
+      "副業を始めて{期間}。正直な収益と{数字}つの学び",
+      "フォロワー{数字}人から始めるSNS運用——{トピック}で変わった{数字}つのこと",
+      "{トピック}を{数字}週間続けた結果【リアルな数字で報告】",
+      "{数字}つの質問に答えるだけでわかる「あなたに合った{トピック}」",
+      "{トピック}を始めたいけど何から？という人への{数字}ステップ",
+      "フォロワーが増えない本当の理由——{トピック}で気づいた{数字}つのこと",
+      "副業で稼げない人と稼げる人の違いは「{トピック}」だった",
+      "SNSを毎日更新しても伸びない人へ——{トピック}で変えた{数字}つの習慣",
+      "月{数字}万円の副業収入を得るまでにやった{数字}つのこと",
+      "「{トピック}」で検索している人に伝えたい{数字}つの真実",
+      "Xのプロフィールを直したら{ベネフィット}した話",
+      "副業初心者が最初の{数字}円を稼ぐまでにやった{数字}つのこと",
+      "{トピック}で「何を発信すればいいかわからない」を解決する{数字}つの方法",
+      "ChatGPTを使い始めて{期間}——正直な感想と{数字}つの活用シーン",
+      "Instagramのフォロワーが増えない人が見落としている{数字}つのこと",
+      "{トピック}の書き方がわからない人へ——そのまま使える例文{数字}選",
+      "転職・副業・SNSで使える「{トピック}」の作り方【テンプレ付き】",
+      "{トピック}を{数字}分で仕上げる——実際に使ったステップと例文を公開",
+      "「{トピック}」で悩んでいる人が見落としている{数字}つのポイント",
+      "{トピック}を改善したら{ベネフィット}が変わった——ビフォーアフターで解説"
+    ],
+    "duplicate_avoidance": {
+      "enabled": true,
+      "min_interval_days": 14,
+      "same_platform_interval_days": 21,
+      "similar_suffix_rotation": [
+        "コピペOK",
+        "テンプレ付き",
+        "プロンプト付き",
+        "完全ガイド",
+        "実体験レポート",
+        "初心者向け解説",
+        "無料配布",
+        "保存版"
+      ],
+      "suffix_consecutive_limit": 3,
+      "copy_ok_window_limit": 3,
+      "copy_ok_window_size": 5,
+      "prompt_jutsu_window_limit": 3,
+      "prompt_jutsu_window_size": 5
+    },
+    "category_rotation": [
+      "ビジネス文書系",
+      "SNS系",
+      "副業・収益化系",
+      "学習・自己成長系"
+    ],
+    "article_format_rotation": [
+      "プロンプト集型",
+      "ステップバイステップ型",
+      "比較・検証型",
+      "失敗談・学び型",
+      "Q&A型",
+      "ケーススタディ型",
+      "ビフォーアフター型",
+      "体験レポート型",
+      "ロードマップ型",
+      "インタビュー風型",
+      "数字で振り返り型"
+    ],
+    "title_prefix_rotation": [
+      "ChatGPTで",
+      "非エンジニアでも",
+      "仕事が速い人がやっている",
+      "今すぐ使える",
+      "知らないと損する",
+      "【実体験】",
+      "正直に言う。",
+      "AIを使っても成果が出ない人へ：",
+      "「{トピック}」で悩んでいる人へ：",
+      "これだけ覚えれば十分。",
+      "SNS運用で悩んでいる人へ：",
+      "副業を始めたいけど何から？という人へ：",
+      "フォロワーが増えない原因は",
+      "副業で稼げない人が見落としている",
+      "SNSを毎日投稿しても伸びない人へ："
+    ],
+    "prohibited_in_article": [
+      "SNS拡散用フック文",
+      "Markdownテーブル",
+      "品質チェックリスト",
+      "量産・爆速・バズるなどの誇張表現（完全禁止）",
+      "関連記事セクション（URLを生成できないため）",
+      "他記事へのリンクや参照",
+      "抽象度の高いSNS運用テーマ（ハッシュタグ戦略・コンテンツカレンダー等）"
+    ],
+    "article_closing_cta": "この記事が役に立ったらスキ♡をお願いします",
+    "tweet_params": {
+      "tone": "共感・体験談ベース（断言より問いかけ・自分の気づきを語る）",
+      "account_stage": "初期信頼構築（フォロワー少数・インプレッション低め）",
+      "high_engagement_patterns": [
+        "自分の体験・気づきを短く語る（例：X始めて1週間。プロフィール何度も書き直してる。）",
+        "読者の悩みに共感してから解決策を提示する構成",
+        "箇条書き3点で価値を圧縮する（①②③形式）",
+        "記事URLは末尾に自然に添える"
+      ],
+      "low_engagement_patterns": [
+        "ハッシュタグ多用（3個以上）はインプレッション低下傾向",
+        "ツール紹介・プロンプト紹介のみで終わるツイート（体験談なし）",
+        "URLのみ・説明なしのシェアツイート"
+      ],
+      "recommended_length": "100〜180文字（本文）＋URL",
+      "hashtag_count": "1〜2個に絞る",
+      "weekly_tweet_target": 5,
+      "reply_ratio_target": 0.3
+    },
+    "tags_by_genre": {
+      "AI活用術": [
+        "AI",
+        "ChatGPT",
+        "生成AI",
+        "プロンプト",
+        "業務効率化",
+        "仕事術",
+        "時短",
+        "AIツール",
+        "ChatGPT活用"
+      ],
+      "SNS運用ノウハウ": [
+        "SNS運用",
+        "X",
+        "Instagram",
+        "TikTok",
+        "フォロワー",
+        "SNS",
+        "コンテンツ",
+        "発信",
+        "ChatGPT"
+      ],
+      "副業・収益化ガイド": [
+        "副業",
+        "収益化",
+        "note",
+        "AI",
+        "ChatGPT",
+        "副業初心者",
+        "在宅ワーク",
+        "フリーランス",
+        "生成AI"
+      ]
+    },
+    "article_opening_rule": "記事冒頭100文字以内に「この記事でわかること」を箇条書き3点で明示する",
+    "tag_count_rule": "毎回タグを9個フルに設定する（Note検索インデックス強化のため上限まで使い切る）",
+    "article_internal_link_rule": "記事末尾（スキ促進文の直前）に関連する過去記事を1〜2本テキストリンクで紹介する",
+    "article_experience_rule": "記事内に一人称の体験談・具体例を最低1箇所挿入する（信頼性・読了率向上のため）",
+    "ai_weekly_cap": 1,
+    "article_opening_patterns": [
+      "疑問形（〜で悩んでいませんか？）",
+      "共感形（〜という経験、ありませんか？）",
+      "驚き形（実は〜だということをご存知ですか？）",
+      "データ提示形（〜という調査結果があります）"
+    ],
+    "title_ending_rotation_rule": "「〜術」「〜法」で終わるタイトルが3記事連続しないよう管理する",
+    "high_pv_themes": [
+      "Xプロフィール最適化",
+      "AIへの質問の仕方",
+      "Instagramネタ設計",
+      "LP文章作成",
+      "社内研修資料",
+      "採用面接Q&A",
+      "週報・日報作成",
+      "プレゼン構成",
+      "TikTok投稿改善",
+      "SNS発信設計"
+    ],
+    "high_engagement_formats": [
+      "体験談型",
+      "変換型",
+      "ビフォーアフター型",
+      "ロードマップ型",
+      "共通パターン指摘型"
+    ],
+    "low_pv_themes_to_avoid": [
+      "ハッシュタグ戦略",
+      "コンテンツカレンダー",
+      "競合リサーチ",
+      "TikTok台本量産",
+      "YouTubeショート台本",
+      "LinkedIn量産",
+      "ブログ量産",
+      "メール返信",
+      "量産・爆速・バズる系"
+    ],
+    "title_prefix_chatgpt_window_limit": 3,
+    "title_prefix_chatgpt_window_size": 5,
+    "article_concreteness_rule": "記事内に「そのまま使える成果物」（テンプレート・例文・チェックリスト・ステップ一覧）を1つ以上必須で含める",
+    "title_search_suffix_patterns": [
+      "の書き方【例文付き】",
+      "完全ガイド",
+      "3つのステップ",
+      "改善策",
+      "テンプレート付き",
+      "に共通する〜",
+      "実は〜",
+      "〜したら変わった"
+    ],
+    "title_prefix_patterns": [
+      "ChatGPTで",
+      "実は",
+      "〜に共通する",
+      "〜したら反応が変わった",
+      "仕事が速い人がやっている",
+      "9割の人がやっている"
+    ],
+    "chatgpt_prefix_limit": "直近5記事中2本以内",
+    "non_chatgpt_prefix_target": "直近5記事中3本以上",
+    "platform_interval_days": 21,
+    "chatgpt_prefix_max_in_5": 1,
+    "no_chatgpt_prefix_min_in_5": 4,
+    "chatgpt_prefix_limit_in_5": 1,
+    "no_chatgpt_prefix_in_5": 4,
+    "same_platform_interval_days": 21,
+    "title_prefix_rules": {
+      "chatgpt_prefix_max_in_last_10": 3,
+      "chatgpt_prefix_max_in_last_5": 1
+    },
+    "duplicate_title_check": true,
+    "title_patterns_priority": [
+      "共感型：〜できない人の特徴",
+      "共感型：実は〜",
+      "体験談型：〜したら〇〇が変わった",
+      "解決型：〜を解決する〇つの方法",
+      "ガイド型：〜の書き方【例文付き】"
+    ],
+    "copipe_pattern_limit_per_10": 2,
+    "chatgpt_prefix_limit_per_5": 1,
+    "tags_remove": [
+      "業務効率化"
+    ],
+    "preferred_post_days": [
+      "土曜",
+      "日曜"
+    ],
+    "avoid_post_days": [
+      "月曜",
+      "火曜",
+      "水曜",
+      "木曜"
+    ]
+  },
+  "publishing_params": {
+    "phase": "trust_building",
+    "daily_free_count": 1,
+    "daily_paid_count": 0,
+    "paid_price_yen": 980,
+    "paid_min_prompts": 30,
+    "phase_rules": {
+      "trust_building": {
+        "description": "無料記事でフォロワー獲得。有料は出さない",
+        "advance_when": "total_articles >= 100 and avg_likes_per_article >= 2.0"
+      },
+      "early_monetization": {
+        "description": "無料1本/日 + 有料を週1本",
+        "daily_free_count": 1,
+        "daily_paid_count": 0,
+        "weekly_paid_count": 1,
+        "advance_when": "total_articles >= 200 and avg_likes_per_article >= 3.0"
+      },
+      "scaling": {
+        "description": "無料を週3本に減らし、有料を週2本に増やす",
+        "daily_free_count": 0,
+        "weekly_free_count": 3,
+        "weekly_paid_count": 2,
+        "advance_when": "manual"
+      }
+    },
+    "phase_transition_reason": "総記事数29本・平均PV7.7・平均スキ0.8。フェーズ遷移条件（total_articles>=20 AND total_likes>=10）のうち記事数は達成済み。しかしスキの大半がTikTok投稿ミス(5)・Instagramネタ設計(5)・Xプロフィール(3)の3記事に集中しており、平均スキ0.8はearly_monetization条件（avg_likes_per_article>=3）に大きく届かない。現フェーズ維持が妥当。次回判断は記事40本到達時または平均スキ1.5超過時。",
+    "daily_count_reason": "1日1本の質重視路線を継続。土日優先投稿に切り替え（土曜平均PV8.8・日曜平均PV8.9 vs 月曜平均PV0.0）。スキ獲得実績のある共感型・体験談型テーマへの集中投下でスキ獲得率の改善を図る。",
+    "post_time_slots": [
+      "07:00-08:00",
+      "12:00-13:00",
+      "21:00-22:00"
+    ],
+    "weekly_paid_count": 0,
+    "preferred_post_days": [
+      "土曜",
+      "日曜"
+    ]
+  },
+  "evolution_params": {
+    "lookback_articles": 10,
+    "min_articles_for_evolution": 3,
+    "improvement_threshold": 0.1
+  },
+  "advisor": {
+    "thread_length_default": 4,
+    "thread_length_min": 3,
+    "thread_length_max": 6,
+    "thread_weekly_target": 2,
+    "single_daily_target": 2,
+    "min_gap_minutes": 60,
+    "growth_daily_likes": 3,
+    "note_daily_target": 1,
+    "growth_search_keywords": [
+      "SNS運用 副業",
+      "X フォロワー増やす",
+      "ChatGPT 副業",
+      "Instagram 運用",
+      "Note 収益化",
+      "AI 副業 初心者",
+      "SNS 発信 設計"
+    ],
+    "tweet_draft_patterns": [
+      "trivia",
+      "question",
+      "experience"
+    ],
+    "note_post_slots": [
+      9
+    ],
+    "reasoning": "trust_buildingかつqueue少のため頻度抑制。trend_ratio=1.75で上向きなので単発2本・スレッド週2と少し攻める。article_avg_likes<1のためNote質優先で1本/日。20時が最高imp(20.4)・9時次点(10.7)でスロット設定。いいねは控えめ3件。",
+    "updated_at": "2026-04-07T21:52:46.923245+09:00"
+  }
+}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>⚙ 設定</h2>
+<p style="color:#71767b; margin-bottom:1rem;">運用パラメータの直接編集 (上級者向け)</p>
+
+<div class="card">
+    <h3 style="color:#1d9bf0; margin-bottom:0.8rem;">戦略ファイル (strategy.json)</h3>
+    <form method="post" action="/strategy/save">
+        <p style="color:#71767b; font-size:0.85rem; margin-bottom:0.5rem;">直接編集できます。保存時に文法チェックされます。AIが毎朝書き換えるので普段は触らなくてOK。</p>
+        <textarea name="strategy_text" rows="30">{{ strategy_text }}</textarea>
+        <p style="margin-top: 1rem;">
+            <button type="submit">💾 保存</button>
+        </p>
+    </form>
+</div>
+
+<details class="card">
+    <summary style="cursor:pointer; color:#1d9bf0; font-weight:600;">📜 AIへの指示書 (program.md)</summary>
+    <pre class="pre" style="margin-top:1rem;">{{ program_text }}</pre>
+</details>
+
+<details class="card">
+    <summary style="cursor:pointer; color:#1d9bf0; font-weight:600;">🧪 A/Bテスト (技術詳細)</summary>
+    <p style="color:#71767b; padding:0.5rem 0;">
+        詳細は <a href="/ab">/ab</a> でご覧いただけます。
+    </p>
+</details>
+
+<details class="card">
+    <summary style="cursor:pointer; color:#1d9bf0; font-weight:600;">📬 ジョブキュー (技術詳細)</summary>
+    <p style="color:#71767b; padding:0.5rem 0;">
+        詳細は <a href="/jobs">/jobs</a> でご覧いただけます。
+    </p>
+</details>
+{% endblock %}

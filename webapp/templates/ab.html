@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>🧪 A/Bテスト</h2>
+{% if grouped %}
+    {% for test_name, variants in grouped.items() %}
+    <div class="card">
+        <h3>{{ test_name }}</h3>
+        <table>
+            <thead>
+                <tr><th>バリアント</th><th>タイトル</th><th>PV</th><th>スキ</th></tr>
+            </thead>
+            <tbody>
+                {% for v in variants %}
+                <tr>
+                    <td><strong>{{ v.variant }}</strong></td>
+                    <td>{{ v.article_title[:60] }}</td>
+                    <td>{{ v.article_views or 0 }}</td>
+                    <td>{{ v.article_likes or 0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <p>A/Bテストデータがありません。</p>
+    </div>
+{% endif %}
+{% endblock %}
