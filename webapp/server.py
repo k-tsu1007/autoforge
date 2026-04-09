@@ -101,7 +101,7 @@ def root_redirect(user: str = Depends(check_auth)):
 @app.get("/articles", response_class=HTMLResponse)
 def articles_page(request: Request, user: str = Depends(check_auth)):
     """記事一覧。"""
-    from db import get_all_articles
+    from core.db import get_all_articles
     articles = get_all_articles()
     return templates.TemplateResponse(
         request=request,
@@ -113,7 +113,7 @@ def articles_page(request: Request, user: str = Depends(check_auth)):
 @app.get("/tweets", response_class=HTMLResponse)
 def tweets_page(request: Request, user: str = Depends(check_auth)):
     """ツイート一覧。"""
-    from db import get_all_tweets, get_tweet_weekly_summary, get_unposted_tweets
+    from core.db import get_all_tweets, get_tweet_weekly_summary, get_unposted_tweets
     return templates.TemplateResponse(
         request=request,
         name="tweets.html",
@@ -160,7 +160,7 @@ def save_strategy(
 @app.get("/partial/health", response_class=HTMLResponse)
 def partial_health(request: Request, user: str = Depends(check_auth)):
     """ヘルス状況パーシャル（HTMX用）。"""
-    from db import get_health
+    from core.db import get_health
     return templates.TemplateResponse(
         request=request,
         name="_health_partial.html",
@@ -171,7 +171,7 @@ def partial_health(request: Request, user: str = Depends(check_auth)):
 @app.get("/partial/summary", response_class=HTMLResponse)
 def partial_summary(request: Request, user: str = Depends(check_auth)):
     """サマリーパーシャル（HTMX用）。"""
-    from db import get_metrics_summary
+    from core.db import get_metrics_summary
     return templates.TemplateResponse(
         request=request,
         name="_summary_partial.html",
@@ -183,8 +183,8 @@ def partial_summary(request: Request, user: str = Depends(check_auth)):
 def partial_jobs(request: Request, user: str = Depends(check_auth)):
     """ジョブ統計パーシャル（HTMX用）。"""
     try:
-        from jobs import get_stats
-        from db import get_connection
+        from core.scheduler.jobs import get_stats
+        from core.db import get_connection
         stats = get_stats()
         conn = get_connection()
         recent = conn.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT 10").fetchall()
@@ -202,7 +202,7 @@ def partial_jobs(request: Request, user: str = Depends(check_auth)):
 @app.get("/brain", response_class=HTMLResponse)
 def brain_page(request: Request, user: str = Depends(check_auth)):
     """Brain — システムの判断根拠を1ページに集約。"""
-    from brain import build_brain_data
+    from webapp.brain import build_brain_data
     data = build_brain_data()
     return templates.TemplateResponse(request=request, name="brain.html", context={"data": data})
 
@@ -229,7 +229,7 @@ SCHEDULER_JOBS = [
 
 def _build_activity_data():
     """activity ページ用にスケジュール+履歴+health+ジョブキューを集める。"""
-    from db import get_connection, get_health, get_recent_pipeline_runs
+    from core.db import get_connection, get_health, get_recent_pipeline_runs
     conn = get_connection()
     health_map = get_health()  # {component: row}
     health_rows = list(health_map.values())
@@ -304,7 +304,7 @@ def _build_activity_data():
 
     # ジョブキュー stats
     try:
-        from jobs import get_stats
+        from core.scheduler.jobs import get_stats
         job_stats = get_stats()
     except Exception:
         job_stats = {}
@@ -327,7 +327,7 @@ def partial_activity(request: Request, user: str = Depends(check_auth)):
 @app.get("/ab", response_class=HTMLResponse)
 def ab_page(request: Request, user: str = Depends(check_auth)):
     """A/Bテスト一覧。"""
-    from db import get_ab_tests
+    from core.db import get_ab_tests
     tests = get_ab_tests()
     # test_nameごとにグルーピング
     grouped = {}
@@ -343,7 +343,7 @@ def ab_page(request: Request, user: str = Depends(check_auth)):
 @app.get("/cost", response_class=HTMLResponse)
 def cost_page(request: Request, user: str = Depends(check_auth)):
     """LLM使用量・コストページ。"""
-    from db import get_llm_usage_summary
+    from core.db import get_llm_usage_summary
     summary7 = get_llm_usage_summary(days=7)
     summary30 = get_llm_usage_summary(days=30)
     return templates.TemplateResponse(
@@ -357,8 +357,8 @@ def cost_page(request: Request, user: str = Depends(check_auth)):
 def jobs_page(request: Request, user: str = Depends(check_auth)):
     """ジョブキュー管理。"""
     try:
-        from jobs import get_stats
-        from db import get_connection
+        from core.scheduler.jobs import get_stats
+        from core.db import get_connection
         stats = get_stats()
         conn = get_connection()
         recent = conn.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT 30").fetchall()
@@ -382,7 +382,7 @@ def enqueue_job(
     user: str = Depends(check_auth),
 ):
     """手動でジョブをキューに追加する。"""
-    from jobs import enqueue
+    from core.scheduler.jobs import enqueue
     try:
         payload_dict = json.loads(payload) if payload else {}
         jid = enqueue(name, payload_dict, priority=priority)
@@ -398,7 +398,7 @@ def chart_note_growth(user: str = Depends(check_auth)):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from db import get_metrics_history
+    from core.db import get_metrics_history
     from fastapi.responses import StreamingResponse
 
     history = get_metrics_history(days=30)
@@ -433,7 +433,7 @@ def chart_note_growth(user: str = Depends(check_auth)):
 @app.get("/api/summary")
 def api_summary(user: str = Depends(check_auth)):
     """JSON API: サマリー情報。"""
-    from db import get_metrics_summary, get_health
+    from core.db import get_metrics_summary, get_health
     return {
         "summary": get_metrics_summary(),
         "health": get_health(),
@@ -444,14 +444,14 @@ def api_summary(user: str = Depends(check_auth)):
 @app.get("/api/articles")
 def api_articles(user: str = Depends(check_auth)):
     """JSON API: 記事一覧。"""
-    from db import get_all_articles
+    from core.db import get_all_articles
     return {"articles": get_all_articles()}
 
 
 @app.get("/api/tweets")
 def api_tweets(user: str = Depends(check_auth)):
     """JSON API: ツイート一覧。"""
-    from db import get_all_tweets, get_tweet_weekly_summary
+    from core.db import get_all_tweets, get_tweet_weekly_summary
     return {
         "tweets": get_all_tweets(),
         "weekly": get_tweet_weekly_summary(),
@@ -461,7 +461,7 @@ def api_tweets(user: str = Depends(check_auth)):
 @app.post("/api/run-plugin")
 def api_run_plugin(plugin: str = Form(...), user: str = Depends(check_auth)):
     """プラグインを手動実行する。"""
-    from plugin_runner import run_pipeline
+    from core.scheduler.plugin_runner import run_pipeline
     try:
         context = run_pipeline(only=[plugin])
         return {"result": "ok", "summary": context.get("_pipeline_summary", {})}

@@ -9,6 +9,6 @@ class DashboardPlugin(Plugin):
     order = 70
 
     def run(self, context: dict) -> dict:
-        from dashboard import send_dashboard
+        from webapp.dashboard import send_dashboard
         send_dashboard()
         return {}

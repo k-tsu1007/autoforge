@@ -9,5 +9,5 @@ class LiftPlugin(Plugin):
     order = 17  # snapshot(15) → lift(17) → x_analytics(20) → ...
 
     def run(self, context: dict) -> dict:
-        from lift import run as run_lift
+        from core.learning.lift import run as run_lift
         return {"lift_summary": run_lift().get("baseline", {})}

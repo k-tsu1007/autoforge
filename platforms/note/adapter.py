@@ -29,7 +29,7 @@ class NotePlatform:
         Falls back to the existing publish_via_noteclient() helper.
         """
         try:
-            from publish import publish_via_noteclient, record_article  # noqa
+            from platforms.note.publisher import publish_via_noteclient, record_article  # noqa
         except Exception as e:
             return PublishResult(ok=False, error=f"publish import failed: {e}")
 
@@ -57,7 +57,7 @@ class NotePlatform:
     # === metrics ===
     def fetch_metrics(self) -> Optional[MetricsSnapshot]:
         try:
-            from db import get_connection
+            from core.db import get_connection
         except Exception:
             return None
         try:
@@ -78,7 +78,7 @@ class NotePlatform:
     # === policy passthrough ===
     def should_publish_now(self) -> tuple[bool, str]:
         try:
-            from note_posting_policy import should_publish_now
+            from platforms.note.policy import should_publish_now
         except Exception as e:
             return False, f"policy import failed: {e}"
         return should_publish_now()

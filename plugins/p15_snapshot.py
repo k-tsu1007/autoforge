@@ -9,5 +9,5 @@ class SnapshotPlugin(Plugin):
     order = 15  # evaluate(10) → snapshot(15) → x_analytics(20) → ...
 
     def run(self, context: dict) -> dict:
-        from brain import take_snapshot
+        from webapp.brain import take_snapshot
         return {"snapshot": take_snapshot()}

@@ -9,6 +9,6 @@ class MaintenancePlugin(Plugin):
     order = 80
 
     def run(self, context: dict) -> dict:
-        from maintenance import main as maint_main
+        from tools.maintenance import main as maint_main
         maint_main()
         return {}

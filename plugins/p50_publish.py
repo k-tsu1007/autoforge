@@ -15,7 +15,7 @@ class PublishPlugin(Plugin):
         return context.get("generated_count", 0) > 0
 
     def run(self, context: dict) -> dict:
-        from publish import main as pub_main
+        from platforms.note.publisher import main as pub_main
 
         # 1スロット = 1記事公開のみ (--all は付けない)
         # 全件公開したい場合は context.publish_all=True を指定

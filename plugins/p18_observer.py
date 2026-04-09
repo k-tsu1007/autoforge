@@ -9,7 +9,7 @@ class ObserverPlugin(Plugin):
     order = 18
 
     def run(self, context: dict) -> dict:
-        from observer import observe
+        from core.learning.observer import observe
         r = observe()
         return {
             "trend": r.get("trend"),

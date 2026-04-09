@@ -9,6 +9,6 @@ class OptimizePostTimePlugin(Plugin):
     order = 25
 
     def run(self, context: dict) -> dict:
-        from optimize_post_time import run as run_optimize
+        from core.learning.optimize_post_time import run as run_optimize
         result = run_optimize()
         return {"post_time_optimization": result}

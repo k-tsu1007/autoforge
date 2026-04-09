@@ -9,7 +9,7 @@ class HypothesisPlugin(Plugin):
     order = 19
 
     def run(self, context: dict) -> dict:
-        from hypothesis import add_new_hypotheses, evaluate_hypotheses
+        from core.learning.hypothesis import add_new_hypotheses, evaluate_hypotheses
         evaluated = evaluate_hypotheses()
         added = add_new_hypotheses()
         return {"new_hypotheses": added, **evaluated}

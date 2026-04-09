@@ -52,7 +52,7 @@ def main() -> int:
         print(f"[run_daemon] platform load warning: {e}")
 
     # Finally import the legacy daemon and run it
-    import daemon as legacy_daemon
+    import core.scheduler.daemon as legacy_daemon
     if args.once:
         # one-shot morning pipeline for quick verification
         legacy_daemon.job_morning_pipeline()

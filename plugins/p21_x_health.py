@@ -9,7 +9,7 @@ class XHealthPlugin(Plugin):
     order = 21
 
     def run(self, context: dict) -> dict:
-        from x_health_check import run
+        from platforms.x.health import run
         r = run()
         return {
             "ok": r.get("overall_ok"),

@@ -14,5 +14,5 @@ class ForgetPlugin(Plugin):
     def run(self, context: dict) -> dict:
         if datetime.now(JST).weekday() != 6:
             return {"skipped": "not_sunday"}
-        from forget import run
+        from core.learning.forget import run
         return run()

@@ -10,6 +10,6 @@ class EvolvePlugin(Plugin):
     depends_on = ["evaluate", "x_analytics"]
 
     def run(self, context: dict) -> dict:
-        from evolve import evolve
+        from core.learning.evolve import evolve
         evolve()
         return {}

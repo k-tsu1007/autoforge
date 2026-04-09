@@ -9,6 +9,6 @@ class EvaluatePlugin(Plugin):
     order = 10
 
     def run(self, context: dict) -> dict:
-        from evaluate import evaluate_all
+        from core.learning.evaluate import evaluate_all
         evaluate_all()
         return {}

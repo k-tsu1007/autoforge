@@ -9,5 +9,5 @@ class TweetGeneratorPlugin(Plugin):
     order = 22
 
     def run(self, context: dict) -> dict:
-        from tweet_generator import run
+        from platforms.x.tweet_generator import run
         return run()

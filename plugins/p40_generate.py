@@ -45,7 +45,7 @@ class GeneratePlugin(Plugin):
         return False
 
     def run(self, context: dict) -> dict:
-        from generate import generate_article, save_draft, load_strategy, load_program, load_history
+        from platforms.note.generator import generate_article, save_draft, load_strategy, load_program, load_history
 
         strategy = load_strategy()
         program = load_program()

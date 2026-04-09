@@ -29,7 +29,7 @@ class XPlatform:
     def publish(self, content: dict) -> PublishResult:
         """content: {text} or {tweets: [...]} for thread."""
         try:
-            from x_post_local import post_to_x, post_thread
+            from platforms.x.poster import post_to_x, post_thread
         except Exception as e:
             return PublishResult(ok=False, error=f"x_post_local import failed: {e}")
 
@@ -49,7 +49,7 @@ class XPlatform:
     # === metrics ===
     def fetch_metrics(self) -> Optional[MetricsSnapshot]:
         try:
-            from db import get_connection
+            from core.db import get_connection
         except Exception:
             return None
         try:
@@ -73,7 +73,7 @@ class XPlatform:
     # === policy passthrough ===
     def should_post_now(self) -> tuple[bool, str]:
         try:
-            from posting_policy import PostingPolicy
+            from platforms.x.policy import PostingPolicy
         except Exception as e:
             return False, f"policy import failed: {e}"
         return PostingPolicy().should_post_now()

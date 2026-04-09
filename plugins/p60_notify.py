@@ -9,7 +9,7 @@ class NotifyPlugin(Plugin):
     order = 60
 
     def run(self, context: dict) -> dict:
-        from notify import notify_pipeline_complete
+        from core.notify import notify_pipeline_complete
         notify_pipeline_complete(
             article=context.get("last_article"),
             note_url=context.get("last_note_url", ""),

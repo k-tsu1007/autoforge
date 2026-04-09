@@ -9,6 +9,6 @@ class AdvisorPlugin(Plugin):
     order = 27  # x_analytics(20) → optimize_time(25) → advisor(27) → evolve(30)
 
     def run(self, context: dict) -> dict:
-        from advisor import run as advisor_run
+        from core.learning.advisor import run as advisor_run
         recs = advisor_run()
         return {"advisor_recommendations": recs}
