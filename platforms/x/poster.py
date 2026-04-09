@@ -307,10 +307,24 @@ def post_next_from_db(dry_run: bool = False) -> dict:
     from core.db import get_connection, mark_tweet_queue_posted, add_posted_tweet, is_already_posted_today
 
     conn = get_connection()
-    # 優先度: リンク付き > その他。同じ優先度内は新しいID順 (記事公開直後のリンクツイートを最優先)
+    # fail_count / scheduled_at カラムが無いDBにも対応
+    for ddl in (
+        "ALTER TABLE tweet_queue ADD COLUMN fail_count INTEGER DEFAULT 0",
+        "ALTER TABLE tweet_queue ADD COLUMN scheduled_at TEXT",
+    ):
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
+    # 優先度: リンク付き > その他。scheduled_at が未来のものは対象外 (遅延配信)
+    from datetime import datetime, timezone, timedelta
+    now_iso = datetime.now(timezone(timedelta(hours=9))).isoformat()
     rows = conn.execute(
-        "SELECT id, type, text FROM tweet_queue WHERE posted=0 "
-        "ORDER BY CASE WHEN type='リンク付き' THEN 0 ELSE 1 END, id DESC"
+        "SELECT id, type, text FROM tweet_queue "
+        "WHERE posted=0 AND COALESCE(fail_count,0) < 3 "
+        "AND (scheduled_at IS NULL OR scheduled_at <= ?) "
+        "ORDER BY CASE WHEN type='リンク付き' THEN 0 ELSE 1 END, id DESC",
+        (now_iso,),
     ).fetchall()
 
     target = None

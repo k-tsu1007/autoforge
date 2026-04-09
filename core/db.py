@@ -376,11 +376,20 @@ def get_tweet_weekly_summary() -> dict:
 
 # === Tweet Queue ===
 
-def add_to_tweet_queue(tweet_type: str, text: str) -> None:
+def add_to_tweet_queue(tweet_type: str, text: str, scheduled_at: str = None) -> None:
+    """キューにツイートを追加。
+    scheduled_at: ISO形式の文字列 ('2026-04-12T10:00:00+09:00')。
+                  指定すると post_next_from_db がその時刻になるまでスキップする。
+    """
     with transaction() as conn:
+        # 列が無い古いDBにも対応
+        try:
+            conn.execute("ALTER TABLE tweet_queue ADD COLUMN scheduled_at TEXT")
+        except Exception:
+            pass
         conn.execute(
-            "INSERT INTO tweet_queue (type, text) VALUES (?, ?)",
-            (tweet_type, text),
+            "INSERT INTO tweet_queue (type, text, scheduled_at) VALUES (?, ?, ?)",
+            (tweet_type, text, scheduled_at),
         )
 
 

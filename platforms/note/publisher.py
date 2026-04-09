@@ -525,8 +525,16 @@ def main():
                 from platforms.x.thread_generator import generate_thread
                 thread_tweets = generate_thread(last_article, last_note_url)
                 if len(thread_tweets) >= 3:
-                    add_to_tweet_queue("thread", json.dumps(thread_tweets, ensure_ascii=False))
-                    print(f"スレッド({len(thread_tweets)}ツイート)をキューに追加")
+                    # 遅延配信: リンク付きとの重複を避けるため 2日後の朝に投稿
+                    from datetime import datetime, timezone, timedelta
+                    jst = timezone(timedelta(hours=9))
+                    scheduled = (datetime.now(jst) + timedelta(days=2)).replace(hour=9, minute=0, second=0, microsecond=0).isoformat()
+                    add_to_tweet_queue(
+                        "thread",
+                        json.dumps(thread_tweets, ensure_ascii=False),
+                        scheduled_at=scheduled,
+                    )
+                    print(f"スレッド({len(thread_tweets)}ツイート)をキューに追加 (配信予定: {scheduled[:16]})")
             else:
                 print(f"スレッド既に {recent_threads + recent_posted_threads}本ある → 生成スキップ")
         except Exception as e:
