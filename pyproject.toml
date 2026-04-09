@@ -1,7 +1,7 @@
 [project]
-name = "auto-content-engine"
+name = "autoforge"
 version = "0.2.0"
-description = "Self-evolving content generation system inspired by autoresearch"
+description = "AI-driven multi-platform, multi-instance content automation framework"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.40.0",

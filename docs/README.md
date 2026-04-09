@@ -1,62 +1,106 @@
-# auto-content-engine v2 — Multi-Instance Framework
+# autoforge — AI コンテンツ自動化フレームワーク
 
-v1 の全自動 Note/X エンジンを **マルチインスタンス対応** にリファクタしたバージョンです。
-1 つのコードベースから、別アカウント / 別ジャンル / 別プラットフォームを並列で運用できます。
+複数プラットフォーム × 複数インスタンス (ジャンル/アカウント) を並列運用するための AI 駆動オートメーション基盤。
+1 つのコードベースから:
+
+- Note / X / WordPress / Pinterest などへ自動配信
+- インスタンスごとに別ジャンル・別アカウント・別戦略
+- 学習ループ (knowledge / lift / hypothesis / advisor / evolve) で毎日進化
+
+既存の `auto-content-engine` (v1、Note 特化) を汎用化して生まれました。
 
 ---
 
 ## ディレクトリ構造
 
 ```
-auto-content-engine-v2/
-├── core/                        # 汎用レイヤー
-│   ├── instance/                # インスタンス管理 (name, root, config.yaml)
-│   └── paths.py                 # パス解決 (instance に応じて data/cookies を切替)
-├── platforms/                   # プラットフォームアダプタ (差し込み式)
-│   ├── base.py                  # Platform プロトコル + レジストリ
-│   ├── note/                    # Note (実装済)
-│   ├── x/                       # X (実装済)
-│   ├── wordpress/               # スタブ (TODO)
-│   └── pinterest/               # スタブ (TODO)
-├── plugins/                     # パイプラインプラグイン (既存)
-├── tools/                       # CLI エントリポイント
-│   ├── run_daemon.py            # python -m tools.run_daemon --instance NAME
-│   └── run_webapp.py            # python -m tools.run_webapp --instance NAME
-├── instances/                   # インスタンスごとの state
-│   └── fuku_ai_sns/             # 既存アカウントの移行先
-│       ├── config.yaml          # ジャンル/アカウント/目標
-│       ├── data/                # DB, drafts, generated/
-│       ├── cookies/             # session.json, x_session.json
-│       └── logs/
-├── webapp/                      # ダッシュボード (port 8001)
-└── (レガシーの *.py 群はそのまま — 全て core.paths 経由でインスタンスパスを解決)
+autoforge/
+├── core/                    # 汎用エンジン (インスタンス非依存)
+│   ├── instance/            # インスタンス管理 (AC_INSTANCE env var)
+│   ├── paths.py             # パス解決 (active instance の data/cookies に切替)
+│   ├── db.py                # SQLite 層
+│   ├── notify.py            # Discord 通知
+│   ├── slot_utils.py        # 投稿スロット (HH:MM)
+│   ├── llm/                 # Claude CLI / API ラッパー
+│   ├── image/               # Stable Diffusion + サムネイル生成
+│   ├── scheduler/           # daemon, plugin_runner, jobs
+│   └── learning/            # knowledge / lift / hypothesis / observer / advisor / evolve / forget / evaluate
+│
+├── platforms/               # プラットフォームアダプタ (差し込み式)
+│   ├── base.py              # Platform プロトコル + レジストリ
+│   ├── note/                # Note (publisher/magazine/policy/generator/adapter)
+│   ├── x/                   # X (poster/policy/analytics/health/tweet_gen/engage/growth/adapter)
+│   ├── wordpress/           # スタブ
+│   └── pinterest/           # スタブ
+│
+├── instances/               # インスタンスごとの state + 設定
+│   └── fuku_ai_sns/         # 例: 副業×AI×SNS
+│       ├── config.yaml      # ジャンル/アカウント/目標/プラットフォーム有効化
+│       ├── program.md       # 戦略指示書
+│       ├── data/            # DB, drafts, 生成物
+│       ├── cookies/         # Note/X セッション
+│       ├── logs/
+│       ├── plugins/         # インスタンス固有プラグイン (任意)
+│       └── prompts/         # インスタンス固有プロンプト (任意)
+│
+├── plugins/                 # 共有パイプラインプラグイン
+├── tools/                   # CLI エントリ + バッチ
+│   ├── run_daemon.py
+│   ├── run_webapp.py
+│   ├── maintenance.py
+│   ├── backfill_article_bodies.py
+│   └── refresh_x_cookies.py
+├── webapp/                  # ダッシュボード
+│   ├── server.py
+│   ├── brain.py
+│   ├── dashboard.py
+│   └── templates/
+└── docs/
 ```
 
 ---
 
 ## 起動方法
 
-### v1 (レガシー) と **同時並行** で動かす場合
-
-v1 は ~/auto-content-engine/ で port 8000 を使ってる状態を維持。
-v2 は port 8001 で起動。DB・cookies はインスタンスディレクトリ内で完全分離。
+### 既存のインスタンスを動かす
 
 ```bash
-# v2 daemon
-cd ~/auto-content-engine-v2
+cd ~/autoforge
 python -m tools.run_daemon --instance fuku_ai_sns
-
-# v2 webapp (別ターミナル)
-python -m tools.run_webapp --instance fuku_ai_sns
+python -m tools.run_webapp --instance fuku_ai_sns   # 別ターミナル
 # → http://localhost:8001/brain
 ```
 
-### v1 データを v2 にコピー (初回のみ)
+### 新しいインスタンスを追加する
 
-fuku_ai_sns のインスタンスは **空の状態** で作成されてるので、v1 の state を引き継ぐには:
+例: 料理×AI の `cooking_affiliate` を追加する場合
 
 ```bash
-cd ~/auto-content-engine-v2/instances/fuku_ai_sns
+# 1. 雛形をコピー
+cp -r instances/fuku_ai_sns instances/cooking_affiliate
+rm -rf instances/cooking_affiliate/data/*
+rm -rf instances/cooking_affiliate/cookies/*
+rm -rf instances/cooking_affiliate/logs/*
+
+# 2. config.yaml を編集
+#    - instance.name / display_name / webapp_port
+#    - platforms.note.urlname / platforms.x.username
+#    - platforms.wordpress.enabled / 接続情報 (WP を使う場合)
+#    - content.genres / target_reader
+#    - goals
+
+# 3. 認証情報を用意
+#    instances/cooking_affiliate/cookies/ に session.json / x_session.json を配置
+
+# 4. 起動
+python -m tools.run_daemon --instance cooking_affiliate
+python -m tools.run_webapp --instance cooking_affiliate
+```
+
+### 既存の v1 (`auto-content-engine`) データを取り込む (初回のみ)
+
+```bash
+cd ~/autoforge/instances/fuku_ai_sns
 cp ~/auto-content-engine/data/db.sqlite3     data/
 cp ~/auto-content-engine/data/strategy.json  data/
 cp ~/auto-content-engine/data/knowledge.json data/
@@ -66,110 +110,78 @@ cp ~/auto-content-engine/x_session.json       cookies/
 cp ~/auto-content-engine/program.md           .
 ```
 
-v1 側を壊さないよう、**コピーのみ** 行ってください (mv はダメ)。
-
----
-
-## 新しいインスタンスを追加する
-
-例: 料理×AI ジャンルの `sakura_kitchen`
-
-### 1. ディレクトリを作る
-
-```bash
-mkdir -p instances/sakura_kitchen/{data,cookies,logs}
-cp instances/fuku_ai_sns/config.yaml instances/sakura_kitchen/config.yaml
-# config を編集 (genre, account, slots)
-```
-
-### 2. config.yaml を編集
-
-```yaml
-instance:
-  name: sakura_kitchen
-  display_name: "さくら｜AIで毎日ごはん"
-  webapp_port: 8002               # ←別ポートを割り当てる
-platforms:
-  note:
-    enabled: true
-    urlname: "sakura_kitchen"     # ←Note 側のアカウント
-  x:
-    enabled: true
-    username: "sakura_kitchen"    # ←X 側のアカウント
-content:
-  genres:
-    - "料理レシピ"
-    - "AI時短家事"
-  target_reader: "忙しい共働きの30代"
-goals:
-  note_articles_per_day: 3
-```
-
-### 3. cookies を用意
-
-Note と X の認証情報 (`session.json`, `x_session.json`) を `instances/sakura_kitchen/cookies/` に置く。
-
-### 4. 起動
-
-```bash
-python -m tools.run_daemon --instance sakura_kitchen
-python -m tools.run_webapp --instance sakura_kitchen  # port 8002
-```
+v1 を壊さないよう、**コピーのみ** 行ってください。
 
 ---
 
 ## プラットフォームを追加する
 
-例: WordPress
+例: WordPress を実装する場合
 
-1. `platforms/wordpress/adapter.py` を実装 (REST API publish)
-2. `@register_platform("wordpress")` で登録 (既にスタブあり)
-3. `instances/<name>/config.yaml` の `platforms.wordpress.enabled: true` + 接続情報
-4. プラグインから `get_platform("wordpress").publish(content)` で呼べる
+1. `platforms/wordpress/adapter.py` を実装 (`@register_platform("wordpress")` は既に定義済)
+2. `publish(content)` で WordPress REST API を叩く
+3. `instances/<name>/config.yaml` の `platforms.wordpress.enabled: true` + 接続情報 (site_url, user, app_password)
+4. プラグインや外部スクリプトから `get_platform("wordpress").publish(content)` で呼び出し可能
 
-プラットフォームを追加しても **レガシーコードは触らなくて良い** のがこの設計の利点です。
+core/learning などのコア機能は触らずに拡張できます。
 
 ---
 
-## v1 と v2 の違い
+## インスタンス vs 共有: どこに何を置くか
 
-| 項目 | v1 | v2 |
+| 性質 | 場所 |
+|---|---|
+| ジャンル・アカウント・目標 | `instances/<name>/config.yaml` |
+| DB / 認証 / ログ | `instances/<name>/{data,cookies,logs}/` |
+| 戦略指示書 | `instances/<name>/program.md` |
+| インスタンス固有プロンプト | `instances/<name>/prompts/` |
+| インスタンス固有プラグイン | `instances/<name>/plugins/` |
+| 共有のエンジン機能 | `core/` |
+| 共有のプラットフォームアダプタ | `platforms/<platform>/` |
+| 共有のパイプラインプラグイン | `plugins/` |
+
+---
+
+## v1 と並行稼働
+
+両方のデータが完全分離されてるので同一マシンで並行実行可能:
+
+| | port | 場所 |
 |---|---|---|
-| インスタンス数 | 1 | N |
-| ジャンル変更 | コード書き換え | config.yaml 編集 |
-| プラットフォーム追加 | 大掛かり | `@register_platform` で追加 |
-| データ分離 | なし (ROOT 固定) | instances/ 以下で完全分離 |
-| 並列実行 | 不可 | 可 (ポート/パスが別) |
-| config | コード内散在 | instances/<name>/config.yaml |
+| v1 (auto-content-engine) | 8000 | `~/auto-content-engine/` |
+| v2 (autoforge) | 8001 | `~/autoforge/` |
+
+autoforge が安定したら v1 を停止、アーカイブ。
 
 ---
 
 ## よくある質問
 
-### Q. v1 を完全に移行するまで v2 に乗り換えなくていい?
+### Q. インスタンス名はどう決める?
 
-はい。v1 と v2 は **データが完全分離** されてるので並走できます。本番は v1 で回しつつ、v2 で新ジャンル・新プラットフォームを試せます。
+A. 英小文字 + アンダースコア推奨。`config.yaml` の `instance.name` とディレクトリ名は一致させる。
 
-### Q. 既存の plugins/ はそのまま動く?
+### Q. 別インスタンスで同じプラットフォームを使える?
 
-動きます。plugin_runner がインスタンスを意識する必要はなく、各プラグインが読む strategy.json/knowledge.json/DB は `core.paths` 経由でインスタンスパスに解決されます。
+A. 使えます。それぞれ別の `cookies/x_session.json` を持たせるだけ。アカウントも別々。
 
-### Q. daemon と webapp は別プロセス?
+### Q. Claude Max 契約は複数インスタンスで共有される?
 
-はい。`run_daemon.py` と `run_webapp.py` を別ターミナルで起動してください。両方同じインスタンスで動きます。
+A. 共有されます (Windows 1 台なので)。リクエスト頻度が集中すると 529 overloaded になるため、全インスタンスの時刻スロットを分散させてください。
 
-### Q. どのインスタンスが動いてるか知りたい
+### Q. GPU (Stable Diffusion) は?
 
-```bash
-python -c "from core.instance import list_instances, get_active_instance; print(list_instances()); print(get_active_instance().name)"
-```
+A. 同じく 1 枚の GPU を全インスタンスで共有。現状ロック無し。将来は REST API 化してキューで捌く予定。
 
 ---
 
-## 未実装 / TODO
+## TODO / 未実装
 
-- WordPress adapter (REST API 実装)
-- Pinterest adapter (API v5 + 画像 batch)
-- instance 間のメトリクス比較ダッシュボード
-- config.yaml のスキーマ検証 (pydantic)
-- `tools/new_instance.py` でインスタンス雛形生成
+- [ ] WordPress アダプタ実装 (REST API)
+- [ ] Pinterest アダプタ実装 (API v5)
+- [ ] インスタンス別プラグインプロファイル (config.yaml で実行プラグインを指定)
+- [ ] インスタンス別プロンプト (`instances/<name>/prompts/` の読み込み)
+- [ ] アフィリエイトサブシステム (ASP クライアント / リンクインジェクタ / クリック計測)
+- [ ] クロスインスタンスダッシュボード
+- [ ] `tools/new_instance.py` 雛形生成
+- [ ] Stable Diffusion の REST API 化

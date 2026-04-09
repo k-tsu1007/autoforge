@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent  # auto-content-engine-v2/
+REPO_ROOT = Path(__file__).resolve().parent.parent  # autoforge/
 
 
 def _try_instance():
