@@ -31,7 +31,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent.parent.parent  # autoforge/ (repo root)
 JST = timezone(timedelta(hours=9))
 
 
@@ -215,7 +215,12 @@ def _update_x_health(status: str, note: str = ""):
     except Exception:
         pass
     try:
-        health_path = ROOT / "data" / "health.json"
+        try:
+            from core.paths import data_dir
+            health_path = data_dir() / "health.json"
+        except Exception:
+            health_path = ROOT / "data" / "health.json"
+        health_path.parent.mkdir(parents=True, exist_ok=True)
         health = {}
         if health_path.exists():
             health = json.loads(health_path.read_text(encoding="utf-8"))

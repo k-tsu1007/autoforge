@@ -1,4 +1,4 @@
 @echo off
-REM 統合デーモン — APSchedulerで全ジョブを管理
+REM 統合デーモン — autoforge v2
 cd /d "%~dp0\.."
-python daemon.py >> logs\daemon.log 2>&1
+python -m tools.run_daemon --instance fuku_ai_sns >> logs\daemon.log 2>&1

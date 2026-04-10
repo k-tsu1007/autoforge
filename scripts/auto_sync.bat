@@ -6,7 +6,7 @@ REM まずpullで最新化
 git pull --rebase 2>nul
 
 REM health.jsonに変更があればpush
-git add data/health.json data/tweet_posted.json 2>nul
+git add instances\fuku_ai_sns\data\health.json 2>nul
 git diff --cached --quiet
 if errorlevel 1 (
     git commit -m "auto: health update" 2>nul
