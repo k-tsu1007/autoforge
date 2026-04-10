@@ -213,6 +213,20 @@ def activity_page(request: Request, user: str = Depends(check_auth)):
     return templates.TemplateResponse(request=request, name="activity.html", context={})
 
 
+@app.get("/instances", response_class=HTMLResponse)
+def instances_page(request: Request, user: str = Depends(check_auth)):
+    """全インスタンスの集約サマリー (read-only)。"""
+    from webapp.multi import collect_all_instances
+    from core.instance import get_active_instance
+    instances = collect_all_instances()
+    active = get_active_instance().name
+    return templates.TemplateResponse(
+        request=request,
+        name="instances.html",
+        context={"instances": instances, "active": active},
+    )
+
+
 # === スケジューラ定義（daemon.py と同期） ===
 SCHEDULER_JOBS = [
     {"id": "morning_pipeline",  "name": "朝の準備 (学習+方針決定)", "schedule": "毎日 06:00", "desc": "evaluate→snapshot→lift→observer→hypothesis→x_analytics→tweet_generator→engage→optimize_post_time→advisor→evolve"},

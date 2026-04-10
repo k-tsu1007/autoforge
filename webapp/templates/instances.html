@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}インスタンス一覧{% endblock %}
+{% block content %}
+<h2>🛰 全インスタンス ({{ instances|length }}件)</h2>
+<p style="color:#71767b; margin-bottom:1rem;">各インスタンスの DB を直接読み出した read-only サマリーです。詳細は各 instance の専用ダッシュボード (port 別) で確認してください。</p>
+
+<style>
+.inst-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+.inst-card {
+    background: #16181c;
+    border: 1px solid #2f3336;
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+}
+.inst-card.active {
+    border-color: #1d9bf0;
+    box-shadow: 0 0 0 1px #1d9bf0 inset;
+}
+.inst-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.2rem;
+}
+.inst-name .badge {
+    display: inline-block;
+    background: #1d9bf0;
+    color: #fff;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+}
+.inst-desc {
+    color: #71767b;
+    font-size: 0.82rem;
+    margin-bottom: 0.6rem;
+}
+.inst-platforms {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+}
+.inst-platforms span {
+    background: #0f1419;
+    border: 1px solid #2f3336;
+    color: #1d9bf0;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+}
+.inst-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 1rem;
+    font-size: 0.85rem;
+    margin-top: 0.6rem;
+}
+.inst-metrics .k { color: #71767b; }
+.inst-metrics .v { color: #fff; text-align: right; font-variant-numeric: tabular-nums; }
+.inst-link {
+    display: inline-block;
+    margin-top: 0.7rem;
+    color: #1d9bf0;
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+.inst-link:hover { text-decoration: underline; }
+.inst-error {
+    color: #f4212e;
+    font-size: 0.78rem;
+    margin-top: 0.5rem;
+}
+</style>
+
+<div class="inst-grid">
+{% for inst in instances %}
+<div class="inst-card {% if inst.name == active %}active{% endif %}">
+    <div class="inst-name">
+        {{ inst.display_name }}
+        {% if inst.name == active %}<span class="badge">running here</span>{% endif %}
+    </div>
+    <div class="inst-desc">{{ inst.description }}</div>
+
+    {% if inst.platforms %}
+    <div class="inst-platforms">
+        {% for p in inst.platforms %}<span>{{ p }}</span>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="inst-metrics">
+        <span class="k">記事 (累計 / 今日)</span>
+        <span class="v">{{ inst.articles_total }} / {{ inst.articles_today }}</span>
+
+        <span class="k">平均スキ / PV</span>
+        <span class="v">{{ inst.get('avg_likes', '—') }} / {{ inst.get('avg_views', '—') }}</span>
+
+        <span class="k">X 投稿 (今日 / 待機)</span>
+        <span class="v">{{ inst.tweets_today_posted }} / {{ inst.tweets_queue_unposted }}</span>
+
+        <span class="k">いいね/RT (今日)</span>
+        <span class="v">{{ inst.growth_actions_today }}</span>
+
+        {% if inst.advisor %}
+        <span class="k">advisor X目標</span>
+        <span class="v">{{ inst.advisor.single_daily_target or '—' }}</span>
+        <span class="k">advisor Note目標</span>
+        <span class="v">{{ inst.advisor.note_daily_target or '—' }}</span>
+        {% endif %}
+
+        {% if inst.goal %}
+        <span class="k">月収目標</span>
+        <span class="v">¥{{ inst.goal.monthly_revenue_jpy or '—' }}</span>
+        {% endif %}
+
+        {% if inst.last_pipeline_at %}
+        <span class="k">最終パイプライン</span>
+        <span class="v">{{ inst.last_pipeline_at[:16] }}</span>
+        {% endif %}
+    </div>
+
+    {% if inst.advisor and inst.advisor.reasoning %}
+    <div style="color:#71767b; font-size:0.75rem; margin-top:0.5rem; border-top:1px solid #2f3336; padding-top:0.5rem;">
+        🤖 {{ inst.advisor.reasoning }}
+    </div>
+    {% endif %}
+
+    {% if inst.webapp_port %}
+    <a class="inst-link" href="http://{{ request.url.hostname }}:{{ inst.webapp_port }}/brain" target="_blank">→ 専用ダッシュボード (port {{ inst.webapp_port }})</a>
+    {% endif %}
+
+    {% if inst.errors %}
+    <div class="inst-error">⚠ {{ inst.errors|join(' / ') }}</div>
+    {% endif %}
+</div>
+{% endfor %}
+</div>
+
+<p style="margin-top:1.5rem; color:#71767b; font-size:0.78rem;">
+新しいインスタンスを追加するには <code>instances/&lt;name&gt;/config.yaml</code> を作成し、別ポートで <code>python -m tools.run_daemon --instance &lt;name&gt;</code> と <code>tools.run_webapp</code> を起動してください。
+</p>
+{% endblock %}
