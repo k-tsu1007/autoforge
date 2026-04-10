@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% block title %}インスタンス一覧{% endblock %}
+{% block title %}インスタンス選択{% endblock %}
 {% block content %}
-<h2>🛰 全インスタンス ({{ instances|length }}件)</h2>
-<p style="color:#71767b; margin-bottom:1rem;">各インスタンスの DB を直接読み出した read-only サマリーです。詳細は各 instance の専用ダッシュボード (port 別) で確認してください。</p>
+<h2>🛰 パイプラインを選択</h2>
+<p style="color:#71767b; margin-bottom:1rem;">運用中の自動化パイプライン (インスタンス) を選んで詳細を見ます。<br>
+このページからリンクで各パイプラインの専用ダッシュボードに遷移できます。</p>
 
 <style>
 .inst-grid {
@@ -133,7 +134,9 @@
     {% endif %}
 
     {% if inst.webapp_port %}
-    <a class="inst-link" href="http://{{ request.url.hostname }}:{{ inst.webapp_port }}/brain" target="_blank">→ 専用ダッシュボード (port {{ inst.webapp_port }})</a>
+    <a class="inst-link" href="http://{{ request.url.hostname }}:{{ inst.webapp_port }}/brain">
+        → このパイプラインを開く (port {{ inst.webapp_port }})
+    </a>
     {% endif %}
 
     {% if inst.errors %}

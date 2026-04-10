@@ -68,6 +68,19 @@ def _fromjson(value):
 
 templates.env.filters["fromjson"] = _fromjson
 
+
+def _active_instance_name() -> str:
+    """全テンプレートで参照する現在のインスタンス名。"""
+    try:
+        from core.instance import get_active_instance
+        return get_active_instance().name
+    except Exception:
+        return os.environ.get("AC_INSTANCE", "")
+
+
+# Jinja のグローバルに instance_name を入れて、全テンプレート共通で使えるようにする
+templates.env.globals["instance_name"] = _active_instance_name()
+
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -94,8 +107,8 @@ def check_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
 
 @app.get("/")
 def root_redirect(user: str = Depends(check_auth)):
-    """ルートは Brain (状態) に飛ばす。"""
-    return RedirectResponse(url="/brain", status_code=307)
+    """ルートはインスタンス選択ページに飛ばす。"""
+    return RedirectResponse(url="/instances", status_code=307)
 
 
 @app.get("/articles", response_class=HTMLResponse)
