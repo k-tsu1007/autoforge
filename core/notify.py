@@ -7,10 +7,31 @@ from pathlib import Path
 
 import requests
 
-ROOT = Path(__file__).parent
-from core.paths import history_path as _hp; HISTORY_JSON = _hp()
-from core.paths import strategy_path as _sp; STRATEGY_JSON = _sp()
-TODO_MD = ROOT / "TODO.md"
+ROOT = Path(__file__).parent.parent  # repo root
+
+
+def _history_json():
+    try:
+        from core.paths import history_path
+        return history_path()
+    except Exception:
+        return ROOT / "data" / "history.json"
+
+
+def _strategy_json():
+    try:
+        from core.paths import strategy_path
+        return strategy_path()
+    except Exception:
+        return ROOT / "data" / "strategy.json"
+
+
+def _data_dir():
+    try:
+        from core.paths import data_dir
+        return data_dir()
+    except Exception:
+        return ROOT / "data"
 
 JST = timezone(timedelta(hours=9))
 
@@ -43,10 +64,12 @@ def send_discord(content: str = "", embeds: list = None):
 
 def notify_pipeline_complete(article: dict = None, note_url: str = "", tweet_drafts: list = None):
     """パイプライン完了通知を送信する。"""
-    history = json.loads(HISTORY_JSON.read_text(encoding="utf-8"))
-    strategy = json.loads(STRATEGY_JSON.read_text(encoding="utf-8"))
+    history_file = _history_json()
+    strategy_file = _strategy_json()
+    history = json.loads(history_file.read_text(encoding="utf-8")) if history_file.exists() else {}
+    strategy = json.loads(strategy_file.read_text(encoding="utf-8")) if strategy_file.exists() else {}
     summary = history.get("metrics_summary", {})
-    phase = strategy.get("publishing_params", {}).get("phase", "unknown")
+    phase = strategy.get("publishing_params", {}).get("phase", "trust_building")
 
     embeds = []
 
@@ -90,7 +113,7 @@ def notify_pipeline_complete(article: dict = None, note_url: str = "", tweet_dra
                 normalized_drafts.append({"type": "ツイート", "text": d})
 
         try:
-            queue_path = ROOT / "data" / "tweet_queue.json"
+            queue_path = _data_dir() / "tweet_queue.json"
             queue = json.loads(queue_path.read_text(encoding="utf-8")) if queue_path.exists() else []
             try:
                 from core.db import add_to_tweet_queue
