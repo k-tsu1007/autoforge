@@ -316,7 +316,7 @@ def job_growth_agent():
         return  # 深夜帯はスキップ
     log("🌱 成長エージェント開始 (1件)")
     try:
-        from agents.growth_agent import run_once
+        from platforms.x.growth import run_once
         result = run_once(max_per_call=1)
         log(f"🌱 成長エージェント完了: {result}")
     except Exception as e:
@@ -332,7 +332,7 @@ def job_engage_afternoon():
         return
     log("💬 engage 開始 (1件)")
     try:
-        from agents.engage_agent import run
+        from platforms.x.engage import run
         result = run(max_quote_per_call=1, max_reply_per_call=1)
         log(f"💬 engage 完了: {result}")
     except Exception as e:
