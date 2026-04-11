@@ -283,10 +283,39 @@ def call_claude_json(
     max_tokens: int = 8192,
     temperature: float = 0.8,
 ) -> dict:
-    """JSON形式のレスポンスをパースして返す。"""
+    """JSON形式のレスポンスをパースして返す。
+
+    パース失敗時: json_repair → リトライ の順でフォールバックする。
+    """
     text = call_claude(prompt, model, system, max_tokens, temperature)
     json_text = _extract_json(text)
-    return json.loads(json_text)
+
+    # 1. 直接パース（ほとんどのケースはここで通る）
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError as first_err:
+        pass
+
+    # 2. json_repair で自動修復（LLMが生成する軽微な構文ミスをカバー）
+    try:
+        import json_repair
+        repaired = json_repair.loads(json_text)
+        if isinstance(repaired, dict):
+            print(f"  [claude_json] json_repair で修復成功")
+            return repaired
+    except Exception:
+        pass
+
+    # 3. 最終手段: プロンプトに注意を追加してリトライ1回
+    print(f"  [claude_json] JSONパース失敗 ({first_err}) — リトライ")
+    retry_prompt = (
+        prompt
+        + "\n\n【重要】必ず有効なJSONのみを出力してください。"
+        + "文字列内の改行は \\n、ダブルクォートは \\\" にエスケープしてください。"
+    )
+    text2 = call_claude(retry_prompt, model, system, max_tokens, temperature)
+    json_text2 = _extract_json(text2)
+    return json.loads(json_text2)
 
 
 if __name__ == "__main__":
