@@ -133,57 +133,29 @@ def post_to_x(text: str) -> bool:
             page.keyboard.type(text, delay=20)
             page.wait_for_timeout(2000)
 
-            # テキスト入力確認
-            try:
-                typed_text = textarea.inner_text().strip()
-                print(f"  入力確認: {typed_text[:40]!r}")
-            except Exception as e:
-                print(f"  入力確認失敗: {e}")
-
-            # 投稿ボタンの状態確認
+            # 投稿ボタンクリック
+            # 注: オーバーレイが常にボタンを覆うため force=True が必要
             btn = page.locator('button[data-testid="tweetButton"]').first
-            try:
-                btn_count = btn.count()
-                btn_disabled = btn.is_disabled() if btn_count > 0 else None
-                print(f"  tweetButton count={btn_count} disabled={btn_disabled}")
-            except Exception as e:
-                print(f"  ボタン状態確認失敗: {e}")
-
-            # 投稿ボタンクリック (オーバーレイ対策で複数手段を試す)
             posted_ok = False
             try:
-                btn.click(timeout=8000)
+                btn.click(force=True, timeout=5000)
                 posted_ok = True
-                print("  ✓ 通常クリック成功")
             except Exception as e:
-                print(f"  通常クリック失敗: {e}")
+                print(f"  forceクリック失敗: {e}")
             if not posted_ok:
-                try:
-                    # force click でオーバーレイ無視
-                    btn.click(force=True, timeout=5000)
-                    posted_ok = True
-                    print("  ✓ forceクリック成功")
-                except Exception as e:
-                    print(f"  forceクリック失敗: {e}")
-            if not posted_ok:
-                # Ctrl+Enter のキーボードショートカット
                 try:
                     textarea.press("ControlOrMeta+Enter")
                     posted_ok = True
-                    print("  ✓ Ctrl+Enter成功")
                 except Exception as e:
                     print(f"  Ctrl+Enter失敗: {e}")
             if not posted_ok:
                 try:
-                    # JavaScript クリック
                     page.evaluate("document.querySelector('button[data-testid=\"tweetButton\"]').click()")
                     posted_ok = True
-                    print("  ✓ JSクリック成功")
                 except Exception as e:
                     print(f"  JSクリック失敗: {e}")
             if not posted_ok:
                 print("❌ 投稿ボタンのクリックに全て失敗")
-                # スクリーンショット保存
                 try:
                     ss_path = str(Path(__file__).parent.parent.parent / "logs" / "x_post_fail.png")
                     page.screenshot(path=ss_path)
@@ -193,30 +165,19 @@ def post_to_x(text: str) -> bool:
                 browser.close()
                 return False
 
-            # クリック直後のダイアログ/モーダル確認
+            # クリック直後のダイアログ/モーダル確認（投稿確認ダイアログ）
             page.wait_for_timeout(3000)
             try:
                 dialog = page.locator('[role="dialog"]').first
                 if dialog.count() > 0:
                     dialog_text = dialog.inner_text().strip()
-                    print(f"  ダイアログ検出: {dialog_text[:100]!r}")
-                    # ダイアログの確認ボタンを押す
+                    print(f"  ダイアログ: {dialog_text[:80]!r}")
                     confirm_btn = dialog.locator('button').last
                     if confirm_btn.count() > 0:
                         confirm_btn.click()
-                        print("  ダイアログ確認ボタンクリック")
                         page.wait_for_timeout(3000)
             except Exception as e:
                 print(f"  ダイアログ確認失敗: {e}")
-
-            # トーストメッセージ確認
-            try:
-                toast = page.locator('[data-testid="toast"]').first
-                if toast.count() > 0:
-                    toast_text = toast.inner_text().strip()
-                    print(f"  トースト: {toast_text!r}")
-            except Exception:
-                pass
 
             page.wait_for_timeout(7000)
 
@@ -361,10 +322,27 @@ def post_thread(tweets: list[str]) -> str | bool:
                 page.keyboard.type(body, delay=20)
                 page.wait_for_timeout(1000)
 
-            # スレッドまとめて投稿
+            # スレッドまとめて投稿（オーバーレイ対策で force=True）
             send_btn = page.locator('button[data-testid="tweetButton"]').first
-            send_btn.click()
-            page.wait_for_timeout(8000)
+            try:
+                send_btn.click(force=True, timeout=5000)
+            except Exception:
+                try:
+                    send_btn.click(timeout=5000)
+                except Exception as e:
+                    print(f"  スレッド投稿ボタンクリック失敗: {e}")
+            page.wait_for_timeout(3000)
+            # ダイアログが出た場合は確認ボタンを押す
+            try:
+                dialog = page.locator('[role="dialog"]').first
+                if dialog.count() > 0:
+                    confirm_btn = dialog.locator('button').last
+                    if confirm_btn.count() > 0:
+                        confirm_btn.click()
+                        page.wait_for_timeout(3000)
+            except Exception:
+                pass
+            page.wait_for_timeout(5000)
 
             # プロフィールから先頭ツイートのURL取得
             tweet_url = ""
