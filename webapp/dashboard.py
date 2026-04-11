@@ -195,6 +195,88 @@ def generate_x_chart() -> str:
     return chart_path
 
 
+def _tweet_queue_summary() -> str:
+    """tweet_queue テーブルから未投稿件数をtype別に取得。"""
+    try:
+        from core.db import get_connection
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT type, COUNT(*) as n FROM tweet_queue WHERE posted=0 GROUP BY type"
+        ).fetchall()
+        if not rows:
+            return "  (キュー空)"
+        parts = []
+        for r in rows:
+            parts.append(f"  {r['type']}: {r['n']}件")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"  (取得失敗: {e})"
+
+
+def _today_activity_summary() -> str:
+    """今日の投稿・いいね実績をDBから取得。"""
+    try:
+        from core.db import get_connection
+        from datetime import date
+        conn = get_connection()
+        today = date.today().isoformat()
+
+        # 今日投稿したツイート数
+        posted = conn.execute(
+            "SELECT COUNT(*) as n FROM tweet_queue WHERE posted=1 AND date(updated_at) = ?",
+            (today,),
+        ).fetchone()
+        tweet_count = (posted["n"] if posted else 0)
+
+        # 今日のいいね数
+        likes = conn.execute(
+            "SELECT COUNT(*) as n FROM growth_actions WHERE action_type='like' AND date(created_at) = ? AND success=1",
+            (today,),
+        ).fetchone()
+        like_count = (likes["n"] if likes else 0)
+
+        # 今日のNote投稿数
+        notes = conn.execute(
+            "SELECT COUNT(*) as n FROM pipeline_runs WHERE date(started_at) = ? AND last_article != ''",
+            (today,),
+        ).fetchone()
+        note_count = (notes["n"] if notes else 0)
+
+        return f"  Xツイート: {tweet_count}件 / いいね: {like_count}件 / Note: {note_count}本"
+    except Exception as e:
+        return f"  (取得失敗: {e})"
+
+
+def _lift_summary() -> str:
+    """lift分析結果から勝ち/負けパラメータをテキスト化。"""
+    try:
+        from core.learning.lift import get_winning_values, get_losing_values, load_lifts
+        lifts = load_lifts()
+        baseline = lifts.get("baseline", {})
+        if not baseline:
+            return "  (データ不足)"
+
+        winners = get_winning_values(top_n=2)
+        losers = get_losing_values(threshold=0.7)
+
+        lines = [f"  基準: 平均スキ {baseline.get('avg_likes', 0)} / 平均PV {baseline.get('avg_views', 0)} ({baseline.get('n', 0)}記事)"]
+
+        if winners:
+            lines.append("  🏆 効いている:")
+            for param, vals in winners.items():
+                lines.append(f"    [{param}] {', '.join(str(v) for v in vals)}")
+        if losers:
+            lines.append("  💀 効いていない:")
+            for param, vals in losers.items():
+                lines.append(f"    [{param}] {', '.join(str(v) for v in vals)}")
+        if not winners and not losers:
+            lines.append("  (まだ判断できるデータなし)")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"  (取得失敗: {e})"
+
+
 def generate_strategy_summary() -> str:
     """現在の戦略サマリーをテキストで生成する。"""
     strategy = json.loads(STRATEGY_JSON.read_text(encoding="utf-8"))
@@ -219,13 +301,21 @@ def generate_strategy_summary() -> str:
         for i, a in enumerate(top_pv)
     )
 
-    text = f"""📋 **現在の戦略サマリー**
+    text = f"""📋 **本日のダッシュボード** {datetime.now(JST).strftime('%Y-%m-%d')}
 ━━━━━━━━━━━━━━━
-**フェーズ**: {pub.get('phase', '?')}
-**総記事数**: {summary.get('total_articles', 0)}
-**総PV**: {summary.get('total_views', 0)}
-**総スキ**: {summary.get('total_likes', 0)}
-**平均PV**: {summary.get('avg_views_per_article', 0)}
+**📅 今日の実績**:
+{_today_activity_summary()}
+
+**🐦 Xキュー残数**:
+{_tweet_queue_summary()}
+
+**💡 lift分析（何が効いているか）**:
+{_lift_summary()}
+
+**📝 Note サマリー**:
+  フェーズ: {pub.get('phase', '?')}
+  総記事数: {summary.get('total_articles', 0)} / 総PV: {summary.get('total_views', 0)} / 総スキ: {summary.get('total_likes', 0)}
+  平均PV: {summary.get('avg_views_per_article', 0)}
 
 **ジャンル別記事数**:
 {genre_text}
@@ -243,10 +333,7 @@ def generate_strategy_summary() -> str:
         if ws:
             text += f"""
 **X週次サマリー**:
-  ツイート数: {ws.get('tweet_count', 0)}
-  総いいね: {ws.get('total_likes', 0)}
-  総インプレッション: {ws.get('total_impressions', 0)}
-  平均いいね: {ws.get('avg_likes', 0)}"""
+  ツイート数: {ws.get('tweet_count', 0)} / 総いいね: {ws.get('total_likes', 0)} / 総imp: {ws.get('total_impressions', 0)} / 平均いいね: {ws.get('avg_likes', 0)}"""
 
     return text
 
