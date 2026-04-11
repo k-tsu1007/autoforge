@@ -33,6 +33,7 @@ if sys.platform == "win32":
 
 ROOT = Path(__file__).resolve().parent.parent.parent  # autoforge/ (repo root)
 JST = timezone(timedelta(hours=9))
+_scheduler = None  # グレースフルシャットダウン用（job_heartbeat から参照）
 
 
 # === .env 自動読み込み ===
@@ -287,7 +288,25 @@ def job_x_post_check():
 
 
 def job_heartbeat():
-    """1分ごとのヘルスハートビート。"""
+    """1分ごとのヘルスハートビート。restart.flag があれば安全に終了する。"""
+    # グレースフルリスタート: auto_sync.bat がフラグを置いたら自分で終了
+    try:
+        from core.paths import data_dir
+        flag = data_dir() / "restart.flag"
+    except Exception:
+        flag = ROOT / "data" / "restart.flag"
+    if flag.exists():
+        try:
+            flag.unlink()
+        except Exception:
+            pass
+        log("🔄 restart.flag 検知 — グレースフルシャットダウン（Task Schedulerが再起動）")
+        if _scheduler is not None:
+            _scheduler.shutdown(wait=False)  # BlockingScheduler.start() が戻る → プロセス終了
+        else:
+            import os as _os
+            _os._exit(0)
+        return
     try:
         from core.db import update_health
         update_health(
@@ -374,7 +393,9 @@ def main():
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 
+    global _scheduler
     scheduler = BlockingScheduler(timezone=JST)
+    _scheduler = scheduler
 
     # 1a. 朝のパイプライン: 毎日06:00（分析・最適化・advisor・evolve）
     scheduler.add_job(
