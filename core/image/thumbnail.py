@@ -265,9 +265,10 @@ def generate_thumbnail(title: str, genre: str = "", tags: list[str] = None,
         except Exception as e:
             print(f"アイコン合成失敗: {e}")
 
-    # タイトル: 左60%エリアに大きく黒文字
+    # タイトル: SDアイコンがある場合は左60%、ない場合は全幅を使う
     text_left = 60
-    text_right = icon_x - 30
+    has_icon = sd_icon_path and Path(sd_icon_path).exists()
+    text_right = (icon_x - 30) if has_icon else (WIDTH - 80)
     max_text_width = text_right - text_left
 
     # フォントサイズ自動調整 — 全行が縦に収まるまで縮小

@@ -80,40 +80,43 @@ def _get_noteclient(email: str, password: str, user_urlname: str):
     """NoteClient2を初期化し、認証済みの状態で返す。"""
     from NoteClient2 import NoteClient2
 
+    # 環境変数からセッション復元を試みる
+    _restore_session_from_env()
+
+    # session_file にインスタンス固有のパスを渡す
+    # → publish() 内の auth.prepare() が正しいセッションを読む
     client = NoteClient2(
         email=email,
         password=password,
         user_urlname=user_urlname,
+        session_file=str(SESSION_JSON),
     )
 
-    # 環境変数からセッション復元を試みる
-    _restore_session_from_env()
+    # NoteClient2 は eyecatch を 1920x1080 で送るが Note は 1280:670 比率のみ受け付ける
+    # → upload_eyecatch をモンキーパッチして正しいサイズに上書き
+    import types
+    def _fixed_upload_eyecatch(self_img, http, headers, note_id, file_path):
+        if not file_path or not Path(file_path).exists():
+            return {"ok": False, "error": {"type": "FileNotFound", "path": file_path}}
+        try:
+            with open(file_path, "rb") as f:
+                resp = http.post(
+                    "https://note.com/api/v1/image_upload/note_eyecatch",
+                    headers=headers,
+                    files={"file": ("blob", f, "image/png")},
+                    data={"note_id": note_id, "width": 1280, "height": 670},
+                )
+            if not resp.get("ok"):
+                return {"ok": False, "error": {"type": "EyecatchUploadFailed", "detail": resp.get("text")}}
+            body = resp.get("json") or {}
+            if "error" in body:
+                return {"ok": False, "error": {"type": "EyecatchApiError", "detail": body["error"]}}
+            print(f"アイキャッチアップロード成功: {body.get('data', {}).get('url', '')}")
+            return {"ok": True, "data": {"uploaded": True}}
+        except Exception as e:
+            return {"ok": False, "error": {"type": type(e).__name__, "message": str(e)}}
 
-    # session.json があればそれを使う（Playwright不要）
-    if SESSION_JSON.exists():
-        print("session.json からセッションを読み込み中...")
-        session = json.loads(SESSION_JSON.read_text(encoding="utf-8"))
-        cookies = session.get("cookies", {})
-        client.auth.cookies = cookies
-        client.cookies = cookies
-        client.http.set_cookies(cookies)
-
-        # セッションの有効性を確認
-        valid = client.auth.validate_session(client.http)
-        if valid.get("ok"):
-            print("セッション有効。")
-            return client
-        else:
-            print("セッション期限切れ。再ログインが必要です。")
-
-    # ローカルでPlaywrightログイン
-    print("Noteにログイン中（Playwright）...")
-    cookies = _login_note(email, password)
-    client.auth.cookies = cookies
-    client.cookies = cookies
-    client.http.set_cookies(cookies)
-    client.auth.save_session()
-    print("ログイン成功。session.jsonを保存しました。")
+    client.images.upload_eyecatch = types.MethodType(_fixed_upload_eyecatch, client.images)
 
     return client
 
@@ -210,17 +213,12 @@ def publish_via_noteclient(article: dict) -> dict:
         result = client.publish(
             title=article["title"],
             md_file_path=md_path,
+            eyecatch_path=eyecatch_path,  # モンキーパッチ済み(1280x670)で送信
             hashtags=hashtags,
             price=price,
             magazine_key=magazine_keys,
             is_publish=is_publish,
         )
-
-        # アイキャッチを後付けでアップロード（NoteClient2の内部処理では紐付かないため）
-        if eyecatch_path and result.get("ok"):
-            import json as _json
-            session_cookies = _json.loads(SESSION_JSON.read_text(encoding="utf-8")).get("cookies", {})
-            _upload_eyecatch(session_cookies, result["data"].get("note_id"), eyecatch_path)
 
         print(f"NoteClient2 結果: {result}")
 
@@ -327,7 +325,8 @@ def generate_tweet_drafts(article: dict, note_url: str) -> list:
     """記事のツイート文案を3パターン生成する（Ollama優先、失敗時Claudeフォールバック）。"""
     try:
         from core.llm.wrapper import call_llm_json
-        strategy = json.loads((ROOT / "data" / "strategy.json").read_text(encoding="utf-8"))
+        from core.paths import strategy_path as _stp
+        strategy = json.loads(_stp().read_text(encoding="utf-8"))
         tweet_params = strategy.get("content_params", {}).get("tweet_params", {})
 
         tone = tweet_params.get("tone", "親しみやすく、押し売り感なし")
