@@ -15,23 +15,31 @@ class PublishPlugin(Plugin):
         return context.get("generated_count", 0) > 0
 
     def run(self, context: dict) -> dict:
-        from platforms.note.publisher import main as pub_main
+        from core.content_platform import get_content_platform
+        platform = get_content_platform()
 
-        # 1スロット = 1記事公開のみ (--all は付けない)
-        # 全件公開したい場合は context.publish_all=True を指定
-        if context.get("publish_all"):
-            if "--all" not in sys.argv:
-                sys.argv.append("--all")
+        if platform == "wordpress":
+            from platforms.wordpress.publisher import main as pub_main
         else:
-            if "--all" in sys.argv:
-                sys.argv.remove("--all")
+            from platforms.note.publisher import main as pub_main
+
+            # Note のみ: --all フラグ制御
+            if context.get("publish_all"):
+                if "--all" not in sys.argv:
+                    sys.argv.append("--all")
+            else:
+                if "--all" in sys.argv:
+                    sys.argv.remove("--all")
+
+        print(f"[{platform}] 記事投稿開始")
         result = pub_main()
 
         if result and isinstance(result, tuple):
-            last_article, last_note_url, last_tweet_drafts = result
+            last_article, last_url, last_tweet_drafts = result
             return {
                 "last_article": last_article,
-                "last_note_url": last_note_url,
+                "last_note_url": last_url if platform == "note" else "",
+                "last_wp_url": last_url if platform == "wordpress" else "",
                 "last_tweet_drafts": last_tweet_drafts,
             }
         return {}

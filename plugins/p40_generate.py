@@ -45,24 +45,31 @@ class GeneratePlugin(Plugin):
         return False
 
     def run(self, context: dict) -> dict:
-        from platforms.note.generator import generate_article, save_draft, load_strategy, load_program, load_history
+        from core.content_platform import get_content_platform
+        platform = get_content_platform()
+
+        if platform == "wordpress":
+            from platforms.wordpress.generator import generate_article, save_draft, load_strategy, load_history, load_program
+        else:
+            from platforms.note.generator import generate_article, save_draft, load_strategy, load_program, load_history
 
         strategy = load_strategy()
         program = load_program()
         history = load_history()
         pub = strategy.get("publishing_params", {})
 
-        # 1スロットあたり1記事のみ生成 (1日合計は note_posting_policy で制御される)
-        # コンテキストから batch モードが指定されてる場合のみ複数生成
         batch = int(context.get("generate_batch", 1))
         paid_today = self._should_publish_paid_today(strategy)
 
-        print(f"今日の生成予定: {batch}本 (paid_today={paid_today})")
+        print(f"[{platform}] 今日の生成予定: {batch}本 (paid_today={paid_today})")
 
         generated_count = 0
         for i in range(batch):
-            free_only = not (paid_today and i == 0)
-            article = generate_article(strategy, program, history, free_only=free_only)
+            if platform == "wordpress":
+                article = generate_article(strategy, program, history)
+            else:
+                free_only = not (paid_today and i == 0)
+                article = generate_article(strategy, program, history, free_only=free_only)
             save_draft(article)
             history.setdefault("articles", []).append({"title": article["title"]})
             generated_count += 1

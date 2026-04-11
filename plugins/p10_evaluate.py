@@ -9,6 +9,12 @@ class EvaluatePlugin(Plugin):
     order = 10
 
     def run(self, context: dict) -> dict:
-        from core.learning.evaluate import evaluate_all
-        evaluate_all()
+        from core.content_platform import get_content_platform
+        platform = get_content_platform()
+
+        if platform == "note":
+            from core.learning.evaluate import evaluate_all
+            evaluate_all()
+        else:
+            print(f"evaluate: {platform} プラットフォームはスキップ（Note専用）")
         return {}
