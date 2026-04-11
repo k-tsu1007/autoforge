@@ -20,6 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 from core.paths import history_path as _hp; HISTORY_JSON = _hp()
 from core.paths import note_session_path as _nsp; SESSION_JSON = _nsp()
+from core.paths import drafts_dir as _dd
+from core.paths import published_dir as _pd
+from core.paths import ready_to_publish_dir as _rtpd
 
 JST = timezone(timedelta(hours=9))
 
@@ -230,8 +233,9 @@ def publish_via_noteclient(article: dict) -> dict:
             note_url = data.get("public_url") or result.get("note_url") or ""
             # 最終フォールバック: note_key から組み立てる
             if not note_url and data.get("note_key"):
-                urlname = os.environ.get("NOTE_URLNAME", "ai_fuku07")
-                note_url = f"https://note.com/{urlname}/n/{data['note_key']}"
+                urlname = os.environ.get("NOTE_URLNAME", "")
+                if urlname:
+                    note_url = f"https://note.com/{urlname}/n/{data['note_key']}"
 
         return {
             "note_id": f"nc2_{datetime.now(JST).strftime('%Y%m%d_%H%M%S')}",
@@ -251,7 +255,7 @@ def publish_via_noteclient(article: dict) -> dict:
 
 def save_locally(article: dict) -> dict:
     """Markdownファイルとして保存する（フォールバック）。"""
-    output_dir = ROOT / "data" / "ready_to_publish"
+    output_dir = _rtpd()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(JST).strftime("%Y%m%d_%H%M%S")
@@ -446,7 +450,7 @@ def generate_tweet_drafts(article: dict, note_url: str) -> list:
 
 def main():
     """下書きを投稿する。--all で全下書きを一括投稿。"""
-    drafts_dir = ROOT / "data" / "drafts"
+    drafts_dir = _dd()
     if not drafts_dir.exists():
         print("下書きがありません。先に generate.py を実行してください。")
         sys.exit(1)
@@ -461,7 +465,7 @@ def main():
     else:
         targets = [draft_files[-1]]  # 最新1件
 
-    published_dir = ROOT / "data" / "published"
+    published_dir = _pd()
     published_dir.mkdir(parents=True, exist_ok=True)
 
     last_article = None
@@ -483,7 +487,8 @@ def main():
             if not note_url and isinstance(result, dict):
                 note_key = result.get("data", {}).get("note_key", "") if "data" in result else ""
                 if note_key:
-                    note_url = f"https://note.com/ai_fuku07/n/{note_key}"
+                    urlname = os.environ.get("NOTE_URLNAME", "")
+                    note_url = f"https://note.com/{urlname}/n/{note_key}" if urlname else ""
             last_note_url = note_url
 
         if i < len(targets) - 1:

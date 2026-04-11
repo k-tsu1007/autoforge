@@ -19,7 +19,7 @@ ROOT = Path(__file__).parent
 from core.paths import program_md_path as _pmp; PROGRAM_MD = _pmp()
 from core.paths import strategy_path as _sp; STRATEGY_JSON = _sp()
 from core.paths import history_path as _hp; HISTORY_JSON = _hp()
-OUTPUT_DIR = ROOT / "data" / "drafts"
+from core.paths import drafts_dir as _dd; OUTPUT_DIR = _dd()
 
 
 def load_strategy() -> dict:

@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 
 ROOT = Path(__file__).parent
-TWEET_HISTORY_JSON = ROOT / "data" / "tweet_history.json"
+from core.paths import tweet_history_path as _thp; TWEET_HISTORY_JSON = _thp()
 
 JST = timezone(timedelta(hours=9))
 

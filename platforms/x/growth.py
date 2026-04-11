@@ -33,7 +33,7 @@ if _env_path.exists():
         if _k and _k not in os.environ:
             os.environ[_k] = _v
 
-STRATEGY_JSON = ROOT / "data" / "strategy.json"
+from core.paths import strategy_path as _sp; STRATEGY_JSON = _sp()
 JST = timezone(timedelta(hours=9))
 
 DEFAULT_GROWTH = {
@@ -122,7 +122,7 @@ def should_skip(tweet: dict, skip_keywords: list[str]) -> str | None:
         if kw in text:
             return f"skip keyword: {kw}"
     # 自分のツイートはスキップ
-    my_user = os.environ.get("X_USERNAME", "fuku_ai07")
+    my_user = os.environ.get("X_USERNAME", "")
     if tweet.get("user", "").lower() == my_user.lower():
         return "own tweet"
     return None

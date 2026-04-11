@@ -20,7 +20,7 @@ if sys.platform == "win32":
         pass
 
 ROOT = Path(__file__).resolve().parent
-CACHE_FILE = ROOT / "data" / "magazines.json"
+from core.paths import magazines_path as _mp; CACHE_FILE = _mp()
 JST = timezone(timedelta(hours=9))
 CACHE_TTL_HOURS = 6
 
@@ -34,7 +34,7 @@ def fetch_my_magazines(urlname: str | None = None, force: bool = False) -> list[
     [{key, name, description}, ...]
     """
     if urlname is None:
-        urlname = os.environ.get("NOTE_URLNAME", "ai_fuku07")
+        urlname = os.environ.get("NOTE_URLNAME", "")
 
     # キャッシュ
     if not force and CACHE_FILE.exists():

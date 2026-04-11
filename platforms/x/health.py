@@ -19,7 +19,7 @@ if sys.platform == "win32":
 
 ROOT = Path(__file__).resolve().parent
 JST = timezone(timedelta(hours=9))
-HEALTH_JSON = ROOT / "data" / "x_health.json"
+from core.paths import x_health_path as _xhp; HEALTH_JSON = _xhp()
 from core.paths import x_session_path as _xsp; X_SESSION_JSON = _xsp()
 
 IMP_DROP_THRESHOLD = 0.5  # 直近7日 imp が前週の50%未満ならアラート
@@ -37,7 +37,7 @@ def check_cookie_alive() -> dict:
 
     try:
         cookies = json.loads(X_SESSION_JSON.read_text(encoding="utf-8"))
-        username = os.environ.get("X_USERNAME", "fuku_ai07")
+        username = os.environ.get("X_USERNAME", "")
         with sync_playwright() as p:
             b = p.webkit.launch(headless=True)
             ctx = b.new_context()

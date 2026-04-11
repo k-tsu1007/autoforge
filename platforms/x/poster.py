@@ -31,8 +31,8 @@ if sys.platform == "win32":
 
 ROOT = Path(__file__).parent
 from core.paths import strategy_path as _sp; STRATEGY_JSON = _sp()
-QUEUE_JSON = ROOT / "data" / "tweet_queue.json"
-POSTED_JSON = ROOT / "data" / "tweet_posted.json"
+from core.paths import tweet_queue_path as _tqp; QUEUE_JSON = _tqp()
+from core.paths import tweet_posted_path as _tpp; POSTED_JSON = _tpp()
 
 JST = timezone(timedelta(hours=9))
 
@@ -170,7 +170,7 @@ def post_to_x(text: str) -> bool:
             tweet_url = ""
             verified = False
             try:
-                username = os.environ.get("X_USERNAME", "fuku_ai07")
+                username = os.environ.get("X_USERNAME", "")
                 page.goto(f"https://x.com/{username}")
                 page.wait_for_timeout(5000)
                 first_article = page.locator("article").first
@@ -276,7 +276,7 @@ def post_thread(tweets: list[str]) -> str | bool:
             # プロフィールから先頭ツイートのURL取得
             tweet_url = ""
             try:
-                username = os.environ.get("X_USERNAME", "fuku_ai07")
+                username = os.environ.get("X_USERNAME", "")
                 page.goto(f"https://x.com/{username}")
                 page.wait_for_timeout(4000)
                 first_link = page.locator('article a[href*="/status/"]').first

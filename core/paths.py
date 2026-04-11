@@ -131,3 +131,45 @@ def published_dir() -> Path:
     if inst:
         return inst.data_dir / "published"
     return REPO_ROOT / "data" / "published"
+
+
+def ready_to_publish_dir() -> Path:
+    inst = _try_instance()
+    if inst:
+        return inst.data_dir / "ready_to_publish"
+    return REPO_ROOT / "data" / "ready_to_publish"
+
+
+def tweet_queue_path() -> Path:
+    inst = _try_instance()
+    if inst:
+        return inst.data_dir / "tweet_queue.json"
+    return REPO_ROOT / "data" / "tweet_queue.json"
+
+
+def tweet_posted_path() -> Path:
+    inst = _try_instance()
+    if inst:
+        return inst.data_dir / "tweet_posted.json"
+    return REPO_ROOT / "data" / "tweet_posted.json"
+
+
+def x_health_path() -> Path:
+    inst = _try_instance()
+    if inst:
+        return inst.data_dir / "x_health.json"
+    return REPO_ROOT / "data" / "x_health.json"
+
+
+def tweet_history_path() -> Path:
+    inst = _try_instance()
+    if inst:
+        return inst.data_dir / "tweet_history.json"
+    return REPO_ROOT / "data" / "tweet_history.json"
+
+
+def magazines_path() -> Path:
+    inst = _try_instance()
+    if inst:
+        return inst.data_dir / "magazines.json"
+    return REPO_ROOT / "data" / "magazines.json"
