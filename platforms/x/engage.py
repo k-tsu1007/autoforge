@@ -205,7 +205,7 @@ def _notify(action_type: str, url: str, text: str) -> None:
 
 
 def run(max_quote_per_call: int = 1, max_reply_per_call: int = 1, enforce_slots: bool = True) -> dict:
-    from agents.x_actions import search_tweets, quote_tweet, reply_tweet
+    from platforms.x.actions import search_tweets, quote_tweet, reply_tweet
 
     q_need, r_need = _targets()
     q_need = min(q_need, max_quote_per_call)

@@ -162,7 +162,7 @@ def run_once(dry_run: bool = False, max_per_call: int = None, enforce_slots: boo
 
     log(f"本日の残り like 枠: {remaining}件")
 
-    from agents.x_actions import search_tweets, like_tweet
+    from platforms.x.actions import search_tweets, like_tweet
 
     keywords = cfg.get("search_keywords") or []
     if not keywords:
