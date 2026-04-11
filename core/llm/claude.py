@@ -294,28 +294,41 @@ def call_claude_json(
     try:
         return json.loads(json_text)
     except json.JSONDecodeError as first_err:
-        pass
+        print(f"  [claude_json] parse失敗: {first_err} / 先頭300: {json_text[:300]!r}")
 
     # 2. json_repair で自動修復（LLMが生成する軽微な構文ミスをカバー）
     try:
         import json_repair
-        repaired = json_repair.loads(json_text)
+        # repair() で文字列として修復 → loads() でパース
+        repaired_str = json_repair.repair(json_text)
+        repaired = json.loads(repaired_str)
         if isinstance(repaired, dict):
             print(f"  [claude_json] json_repair で修復成功")
             return repaired
-    except Exception:
-        pass
+        print(f"  [claude_json] json_repair が dict を返さなかった: {type(repaired)}")
+    except Exception as repair_err:
+        print(f"  [claude_json] json_repair 失敗: {repair_err}")
 
     # 3. 最終手段: プロンプトに注意を追加してリトライ1回
-    print(f"  [claude_json] JSONパース失敗 ({first_err}) — リトライ")
+    print(f"  [claude_json] リトライ実行中…")
     retry_prompt = (
         prompt
         + "\n\n【重要】必ず有効なJSONのみを出力してください。"
         + "文字列内の改行は \\n、ダブルクォートは \\\" にエスケープしてください。"
+        + "絶対にJSON以外のテキストを含めないでください。"
     )
     text2 = call_claude(retry_prompt, model, system, max_tokens, temperature)
     json_text2 = _extract_json(text2)
-    return json.loads(json_text2)
+    try:
+        return json.loads(json_text2)
+    except json.JSONDecodeError:
+        # リトライも失敗した場合は json_repair で最後の試み
+        import json_repair as _jr
+        repaired2 = json.loads(_jr.repair(json_text2))
+        if isinstance(repaired2, dict):
+            print(f"  [claude_json] リトライ後 json_repair で修復成功")
+            return repaired2
+        raise
 
 
 if __name__ == "__main__":
