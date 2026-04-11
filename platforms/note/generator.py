@@ -90,7 +90,12 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     existing_titles = all_titles[-10:]
     existing_context = ""
     if existing_titles:
-        existing_context = "\n## 直近の記事タイトル（同じ型・テーマの繰り返しを避ける）\n" + "\n".join(f"- {t}" for t in existing_titles)
+        existing_context = (
+            "\n## 直近の記事タイトル（同じ型・テーマの繰り返しを避ける）\n"
+            + "\n".join(f"- {t}" for t in existing_titles)
+            + "\n\n**重要**: 上記タイトルの「形式」（「〇〇な人の△つの特徴」「〇〇する3つの方法」など）を分析し、"
+            "同じ形式を連続させないこと。形式のバリエーションを確認してから新タイトルを決めること。\n"
+        )
 
     topic_instruction = ""
     if topic_hint:
@@ -156,6 +161,18 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 - 信頼を失う行為として記録されます
 """
 
+    # タイトル形式ガイド（多様性確保のため両パスで共通使用）
+    title_format_guide = """- タイトルは30文字以内（スマホで途切れない長さ）
+- 以下の形式からバランスよく選ぶこと（直近タイトルと同じ形式を2回以上連続させない）:
+    How-to型:    「〇〇する方法」「〇〇のやり方」「〇〇ステップ」
+    Why型:       「なぜ〇〇か」「〇〇がうまくいかない理由」
+    比較型:      「〇〇と〇〇の違い」「〇〇 vs 〇〇」
+    解説型:      「〇〇とは何か」「〇〇の仕組みを整理する」
+    誤解解消型:  「〇〇のよくある誤解」「〇〇する前に知っておくこと」
+    提案・ツール型:「〇〇に使えるテンプレート」「〇〇チェックリスト」「〇〇の始め方」
+    リスト型:    「△つの〇〇」「〇〇のN個のポイント」←多用禁止、直近で使用済みなら避ける
+- 直近タイトルの形式を確認し、まだ使っていない形式を積極的に選ぶこと"""
+
     if free_only:
         output_format = """{
   "title": "記事タイトル",
@@ -167,7 +184,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         content_instruction = f"""## 制約
 - これは無料記事です。paid_contentは空文字にしてください
 - free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
-- タイトルは30文字以内に収める（スマホで途切れない長さ）。「◯◯の方法」「◯◯する3つのコツ」のような簡潔な形を優先する
+{title_format_guide}
 - 合計文字数は約{params['target_length_chars']}文字
 - 読者がすぐ実践できる具体的な内容にする
 - 記事末尾に「もっと詳しく知りたい方はプロフィールから有料記事もチェックしてください」という導線を自然に入れる
@@ -187,7 +204,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 {anti_fabrication}
 - 無料部分は全体の約{int(params['free_ratio'] * 100)}%
 - free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
-- タイトルは30文字以内に収める（スマホで途切れない長さ）。「◯◯の方法」「◯◯する3つのコツ」のような簡潔な形を優先する
+{title_format_guide}
 - 合計文字数は約{params['target_length_chars']}文字
 - 有料部分には実践的なテンプレート・具体例・コード例を含める
 - タグは{json.dumps(params['tags_main'], ensure_ascii=False)}から最低1つ + 記事固有のタグ
