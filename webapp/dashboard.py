@@ -15,7 +15,7 @@ import requests
 
 ROOT = Path(__file__).parent
 from core.paths import history_path as _hp; HISTORY_JSON = _hp()
-TWEET_HISTORY_JSON = ROOT / "data" / "tweet_history.json"
+from core.paths import tweet_history_path as _thp; TWEET_HISTORY_JSON = _thp()
 from core.paths import strategy_path as _sp; STRATEGY_JSON = _sp()
 from core.paths import program_md_path as _pmp; PROGRAM_MD = _pmp()
 CHART_DIR = ROOT / "data" / "charts"

@@ -32,32 +32,32 @@ JST = timezone(timedelta(hours=9))
 
 # === スキーマ追加 ===
 
-JOBS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    payload TEXT,
-    priority INTEGER DEFAULT 5,
-    status TEXT DEFAULT 'pending',
-    retry_count INTEGER DEFAULT 0,
-    max_retries INTEGER DEFAULT 3,
-    error TEXT,
-    created_at TEXT DEFAULT (datetime('now', '+9 hours')),
-    started_at TEXT,
-    completed_at TEXT,
-    scheduled_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_status_priority ON jobs(status, priority DESC);
-CREATE INDEX IF NOT EXISTS idx_jobs_scheduled ON jobs(scheduled_at);
-"""
+_JOBS_DDL = [
+    """CREATE TABLE IF NOT EXISTS jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        payload TEXT,
+        priority INTEGER DEFAULT 5,
+        status TEXT DEFAULT 'pending',
+        retry_count INTEGER DEFAULT 0,
+        max_retries INTEGER DEFAULT 3,
+        error TEXT,
+        created_at TEXT DEFAULT (datetime('now', '+9 hours')),
+        started_at TEXT,
+        completed_at TEXT,
+        scheduled_at TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_status_priority ON jobs(status, priority DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_scheduled ON jobs(scheduled_at)",
+]
 
 
 def init_jobs_table():
     """jobsテーブルを作成する。"""
     from core.db import get_connection
     conn = get_connection()
-    conn.executescript(JOBS_SCHEMA)
+    for ddl in _JOBS_DDL:
+        conn.execute(ddl)
     conn.commit()
 
 
