@@ -1,26 +1,25 @@
 """統合デーモン — APSchedulerで全タスクを管理する。
 
 このデーモン1つで以下を実行:
-- 毎日18:00: 日次パイプライン（プラグイン全部実行）
-- 5分ごと: X投稿チェック
+- 毎日06:00: 朝のパイプライン (config.yaml: pipelines.morning)
+- 10分ごと: コンテンツ投稿チェック (config.yaml: pipelines.content_post)
+- 毎日22:00: 夜のまとめ (config.yaml: pipelines.evening)
+- platforms.*.enabled のプラットフォーム別ジョブ (platforms/<name>/jobs.py)
 - 1分ごと: ヘルスハートビート
-- 毎日04:00: メンテナンス（バックアップ等）
 - 毎日06:00: ジョブキューのクリーンアップ
 
 別プロセスで動かすもの:
-- admin (Streamlit)
-- auto-sync (git pull、cron/Task Scheduler）
+- webapp (Streamlit/Flask)
+- auto-sync (git pull、cron/Task Scheduler)
 
 使い方:
-    python daemon.py            # 通常起動（フォアグラウンド）
+    python -m tools.run_daemon --instance fuku_ai_sns
     python daemon.py --once     # 1回チェックして終了
 """
 
-import json
 import os
 import platform
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -61,13 +60,23 @@ def log(msg: str):
 
 # === ジョブ定義 ===
 
-def _run_pipeline_subset(label: str, only: list[str]):
-    """指定プラグインだけを実行する共通ラッパー。"""
+def _run_pipeline_subset(label: str, only: list[str] = None, group: str = None):
+    """指定プラグインだけを実行する共通ラッパー。
+
+    Args:
+        label: ログ用のラベル
+        only: 実行するプラグイン名リスト（直接指定）
+        group: config.yaml の pipelines グループ名（only より優先）
+    """
     log(f"📦 {label} 開始")
     try:
-        from core.scheduler.plugin_runner import run_pipeline
         from core.db import record_pipeline_run, update_health
-        context = run_pipeline(only=only)
+        if group is not None:
+            from core.scheduler.plugin_runner import run_pipeline_group
+            context = run_pipeline_group(group)
+        else:
+            from core.scheduler.plugin_runner import run_pipeline
+            context = run_pipeline(only=only)
         summary = context.get("_pipeline_summary", {})
         failed = summary.get("failed", [])
         record_pipeline_run(
@@ -107,39 +116,41 @@ def _run_pipeline_subset(label: str, only: list[str]):
 
 def job_morning_pipeline():
     """朝の準備: 分析・最適化・advisor・evolve（generate/publishは含まない）。"""
-    _run_pipeline_subset("morning_pipeline", only=[
-        "evaluate", "snapshot", "lift", "observer", "hypothesis",
-        "x_analytics", "x_health", "tweet_generator", "engage",
-        "optimize_post_time", "advisor", "evolve"
-    ])
+    _run_pipeline_subset("morning_pipeline", group="morning")
 
 
 def job_evening_pipeline():
     """夜のまとめ: notify・dashboard・maintenance。"""
-    _run_pipeline_subset("evening_pipeline", only=[
-        "notify", "dashboard", "forget", "maintenance"
-    ])
+    _run_pipeline_subset("evening_pipeline", group="evening")
 
 
-def job_note_post_check():
-    """Note 時刻別投稿チェック — advisor の note_post_slots を見て生成→即投稿。"""
+def job_content_post_check():
+    """コンテンツ投稿チェック — advisor のスロットを見て generate → publish を実行。"""
     try:
-        from platforms.note.policy import should_publish_now
-        ok, reason = should_publish_now()
+        from core.content_platform import get_content_platform
+        platform = get_content_platform()
+
+        if platform == "note":
+            from platforms.note.policy import should_publish_now
+            ok, reason = should_publish_now()
+        else:
+            ok, reason = True, "policy-less platform"
+
         if not ok:
-            return  # ログを汚さない
-        log(f"📝 Note投稿時刻 ({reason}) — 生成→投稿")
-        ctx = _run_pipeline_subset("note_just_in_time", only=["generate", "publish"])
+            return
+
+        log(f"📝 コンテンツ投稿時刻 ({reason}) — 生成→投稿")
+        ctx = _run_pipeline_subset("content_post", group="content_post")
         if ctx and ctx.get("last_article"):
             from core.notify import send_discord
             try:
                 title = (ctx.get("last_article") or {}).get("title", "")
-                url = ctx.get("last_note_url", "")
-                send_discord(content=f"📝 Note公開:\n**{title}**\n{url}")
+                url = ctx.get("last_note_url", "") or ctx.get("last_wp_url", "")
+                send_discord(content=f"📝 コンテンツ公開:\n**{title}**\n{url}")
             except Exception:
                 pass
     except Exception as e:
-        log(f"❌ note_post_check エラー: {e}")
+        log(f"❌ content_post_check エラー: {e}")
 
 
 def job_daily_pipeline():
@@ -202,96 +213,7 @@ def job_daily_pipeline():
             pass
 
 
-def _update_x_health(status: str, note: str = ""):
-    """X デーモンのヘルスを DB と health.json 両方に書き込む。"""
-    try:
-        from core.db import update_health as db_update_health
-        db_update_health(
-            "x_daemon",
-            status,
-            note=note,
-            host=platform.node(),
-            platform=platform.system(),
-        )
-    except Exception:
-        pass
-    try:
-        try:
-            from core.paths import data_dir
-            health_path = data_dir() / "health.json"
-        except Exception:
-            health_path = ROOT / "data" / "health.json"
-        health_path.parent.mkdir(parents=True, exist_ok=True)
-        health = {}
-        if health_path.exists():
-            health = json.loads(health_path.read_text(encoding="utf-8"))
-        health["x_daemon"] = {
-            "status": status,
-            "note": note,
-            "last_heartbeat": datetime.now(JST).isoformat(),
-            "host": platform.node(),
-            "platform": platform.system(),
-        }
-        health_path.write_text(json.dumps(health, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def job_x_post_check():
-    """X投稿チェック。posting_policy が「今投稿すべき」と判断したら投稿する。"""
-    try:
-        from platforms.x.poster import post_next_from_db
-        from platforms.x.policy import PostingPolicy
-
-        policy = PostingPolicy()
-        ok, reason = policy.should_post_now()
-        if not ok:
-            _update_x_health("alive", reason[:80])
-            return
-
-        slot = f"h{datetime.now(JST).hour}"
-        log(f"🐦 投稿OK ({reason}): 実行")
-        result = post_next_from_db()
-
-        if result["posted"]:
-            tweet_url = result.get("url", "")
-            log(f"✅ 投稿成功 (slot={slot}) {tweet_url}")
-            _update_x_health("alive", f"slot={slot} (posted)")
-            try:
-                from core.notify import send_discord
-                if tweet_url:
-                    send_discord(content=f"🐦 X投稿 → {tweet_url}")
-                else:
-                    send_discord(content=f"🐦 X投稿しました (slot={slot})")
-            except Exception as e:
-                log(f"  Discord通知失敗: {e}")
-        else:
-            reason = result.get("reason", "unknown")
-            if reason in ("no target",):
-                # キューが空の場合はツイート生成を試みる
-                log(f"  対象なし: {reason} → キュー補充を試みる")
-                _update_x_health("alive", f"slot={slot} ({reason})")
-                try:
-                    from platforms.x.tweet_generator import run as _tg_run
-                    _tg_run({})
-                    log("  ツイートキュー補充完了")
-                except Exception as e:
-                    log(f"  キュー補充失敗: {e}")
-            else:
-                log(f"❌ 投稿失敗: {reason}")
-                _update_x_health("error", reason)
-                try:
-                    from core.notify import send_discord
-                    send_discord(embeds=[{
-                        "title": "❌ X投稿失敗",
-                        "description": result.get("text", "")[:500],
-                        "color": 15158332,
-                        "footer": {"text": f"slot={slot} reason={reason}"},
-                    }])
-                except Exception:
-                    pass
-    except Exception as e:
-        log(f"❌ X投稿チェックエラー: {e}")
+# X 固有ジョブは platforms/x/jobs.py に移動しました。
 
 
 def job_heartbeat():
@@ -340,35 +262,6 @@ def job_jobs_queue():
         log(f"❌ ジョブキュー処理エラー: {e}")
 
 
-def job_growth_agent():
-    """成長エージェント — 1回1いいねまで。1日合計は advisor 連動。"""
-    now = datetime.now(JST)
-    if now.hour < 8 or now.hour > 22:
-        return  # 深夜帯はスキップ
-    log("🌱 成長エージェント開始 (1件)")
-    try:
-        from platforms.x.growth import run_once
-        result = run_once(max_per_call=1)
-        log(f"🌱 成長エージェント完了: {result}")
-    except Exception as e:
-        log(f"❌ 成長エージェントエラー: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def job_engage_afternoon():
-    """engage — 1回1引用 or 1リプまで。1日合計は advisor 連動。"""
-    now = datetime.now(JST)
-    if now.hour < 8 or now.hour > 22:
-        return
-    log("💬 engage 開始 (1件)")
-    try:
-        from platforms.x.engage import run
-        result = run(max_quote_per_call=1, max_reply_per_call=1)
-        log(f"💬 engage 完了: {result}")
-    except Exception as e:
-        log(f"❌ engage エラー: {e}")
-
 
 def job_cleanup_jobs():
     """古いジョブを削除する（毎日6時）。"""
@@ -392,7 +285,11 @@ def main():
     if once:
         log("一回モード: 全ジョブを順次実行")
         job_heartbeat()
-        job_x_post_check()
+        try:
+            from platforms.x.jobs import job_x_post_check
+            job_x_post_check()
+        except Exception as e:
+            log(f"  x_post_check スキップ: {e}")
         job_jobs_queue()
         return
 
@@ -414,12 +311,12 @@ def main():
         coalesce=True,
     )
 
-    # 1b. Note投稿チェック: 10分ごと（advisor の note_post_slots に従い generate+publish）
+    # 1b. コンテンツ投稿チェック: 10分ごと（advisor スロットに従い generate+publish）
     scheduler.add_job(
-        job_note_post_check,
+        job_content_post_check,
         IntervalTrigger(minutes=10),
-        id="note_post_check",
-        name="Note Post Check",
+        id="content_post_check",
+        name="Content Post Check",
         max_instances=1,
         coalesce=True,
         next_run_time=datetime.now(JST) + timedelta(seconds=60),
@@ -435,15 +332,23 @@ def main():
         coalesce=True,
     )
 
-    # 2. X投稿チェック: 5分ごと
-    scheduler.add_job(
-        job_x_post_check,
-        IntervalTrigger(minutes=5),
-        id="x_post_check",
-        name="X Post Check",
-        max_instances=1,
-        coalesce=True,
-    )
+    # 2. プラットフォーム別ジョブ — config.yaml の platforms で enabled なものだけ登録
+    import importlib
+    from core.instance import get_active_instance
+    inst = get_active_instance()
+    platforms_cfg = inst.config.get("platforms", {})
+    for platform_name, platform_cfg in platforms_cfg.items():
+        if not (isinstance(platform_cfg, dict) and platform_cfg.get("enabled")):
+            continue
+        try:
+            mod = importlib.import_module(f"platforms.{platform_name}.jobs")
+            if hasattr(mod, "register_jobs"):
+                mod.register_jobs(scheduler, JST, inst)
+                log(f"  [{platform_name}] ジョブ登録済み")
+        except ModuleNotFoundError:
+            pass  # jobs.py がないプラットフォームはスキップ (note, wordpress, pinterest etc.)
+        except Exception as e:
+            log(f"  [{platform_name}] ジョブ登録失敗: {e}")
 
     # 3. ヘルスハートビート: 1分ごと
     scheduler.add_job(
@@ -463,26 +368,6 @@ def main():
         name="Job Queue Worker",
         max_instances=1,
         coalesce=True,
-    )
-
-    # 5b. 成長エージェント: 毎日15:00
-    scheduler.add_job(
-        job_growth_agent,
-        IntervalTrigger(minutes=10),
-        id="growth_agent",
-        name="Growth Agent (slot-driven, 10min check)",
-        max_instances=1,
-        coalesce=True,
-        next_run_time=datetime.now(JST) + timedelta(seconds=30),
-    )
-    scheduler.add_job(
-        job_engage_afternoon,
-        IntervalTrigger(minutes=10),
-        id="engage_afternoon",
-        name="Engage Agent (slot-driven, 10min check)",
-        max_instances=1,
-        coalesce=True,
-        next_run_time=datetime.now(JST) + timedelta(seconds=45),
     )
 
     # 5. ジョブ古い削除: 毎日6時

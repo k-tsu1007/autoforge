@@ -37,6 +37,11 @@ platforms:
     enabled: false
     business_account: false
 
+  youtube:
+    enabled: false
+    channel_id: ""
+    # 動画生成・アップロードは platforms/youtube/ に実装予定
+
 # コンテンツ戦略 (旧 strategy.json content_params 相当)
 content:
   genres:
@@ -60,6 +65,31 @@ goals:
   x_likes_per_day: 20
   monthly_revenue_jpy: 10000
   target_date: "2026-07-07"
+
+# パイプライングループ定義 (daemon.py が参照する)
+# X投稿・growth・engageは直接スケジュールされるためここには含めない
+pipelines:
+  morning:
+    - evaluate
+    - snapshot
+    - lift
+    - observer
+    - hypothesis
+    - x_analytics
+    - x_health
+    - tweet_generator
+    - engage
+    - optimize_post_time
+    - advisor
+    - evolve
+  content_post:
+    - generate
+    - publish
+  evening:
+    - notify
+    - dashboard
+    - forget
+    - maintenance
 
 # 環境変数 (Daemon 起動時に注入される)
 env:

@@ -141,6 +141,25 @@ def run_pipeline(context: dict = None, only: list = None, skip: list = None) -> 
     return context
 
 
+def run_pipeline_group(group_name: str, context: dict = None) -> dict:
+    """config.yaml の pipelines.<group_name> に従いプラグインを実行する。
+
+    Args:
+        group_name: config.yaml の pipelines セクションのキー (例: "morning", "content_post")
+        context: 初期コンテキスト
+    """
+    from core.instance import get_active_instance
+    inst = get_active_instance()
+    group = inst.get(f"pipelines.{group_name}")
+    if group is None:
+        raise ValueError(
+            f"パイプライングループ '{group_name}' が config.yaml の pipelines セクションに見つかりません"
+        )
+    if not isinstance(group, list):
+        raise ValueError(f"pipelines.{group_name} はリストである必要があります")
+    return run_pipeline(context=context, only=group)
+
+
 if __name__ == "__main__":
     import sys as _sys
     args = _sys.argv[1:]
