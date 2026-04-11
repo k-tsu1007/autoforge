@@ -223,9 +223,15 @@ def transaction():
     conn = get_connection()
     try:
         yield conn
-        conn.commit()
+        try:
+            conn.commit()
+        except Exception:
+            pass  # Python 3.12+: "no transaction is active" when nothing to commit
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise
 
 
