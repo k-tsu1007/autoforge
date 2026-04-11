@@ -167,6 +167,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         content_instruction = f"""## 制約
 - これは無料記事です。paid_contentは空文字にしてください
 - free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
+- タイトルは30文字以内に収める（スマホで途切れない長さ）。「◯◯の方法」「◯◯する3つのコツ」のような簡潔な形を優先する
 - 合計文字数は約{params['target_length_chars']}文字
 - 読者がすぐ実践できる具体的な内容にする
 - 記事末尾に「もっと詳しく知りたい方はプロフィールから有料記事もチェックしてください」という導線を自然に入れる
@@ -186,6 +187,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 {anti_fabrication}
 - 無料部分は全体の約{int(params['free_ratio'] * 100)}%
 - free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
+- タイトルは30文字以内に収める（スマホで途切れない長さ）。「◯◯の方法」「◯◯する3つのコツ」のような簡潔な形を優先する
 - 合計文字数は約{params['target_length_chars']}文字
 - 有料部分には実践的なテンプレート・具体例・コード例を含める
 - タグは{json.dumps(params['tags_main'], ensure_ascii=False)}から最低1つ + 記事固有のタグ
