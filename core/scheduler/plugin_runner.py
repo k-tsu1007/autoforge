@@ -15,7 +15,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent.parent.parent  # autoforge/ (repo root)
 
 # .env を読み込み（環境変数として設定）
 def _load_env():
