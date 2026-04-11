@@ -268,8 +268,15 @@ def job_x_post_check():
         else:
             reason = result.get("reason", "unknown")
             if reason in ("no target",):
-                log(f"  対象なし: {reason}")
+                # キューが空の場合はツイート生成を試みる
+                log(f"  対象なし: {reason} → キュー補充を試みる")
                 _update_x_health("alive", f"slot={slot} ({reason})")
+                try:
+                    from platforms.x.tweet_generator import run as _tg_run
+                    _tg_run({})
+                    log("  ツイートキュー補充完了")
+                except Exception as e:
+                    log(f"  キュー補充失敗: {e}")
             else:
                 log(f"❌ 投稿失敗: {reason}")
                 _update_x_health("error", reason)

@@ -154,6 +154,10 @@ def post_to_x(text: str) -> bool:
                     posted_ok = True
                 except Exception:
                     pass
+            if not posted_ok:
+                print("❌ 投稿ボタンのクリックに全て失敗")
+                browser.close()
+                return False
             page.wait_for_timeout(5000)
 
             # 投稿成功検証: textareaが空になっていれば成功
@@ -169,24 +173,29 @@ def post_to_x(text: str) -> bool:
             # 投稿後、プロフィールに移動して最新ツイートのURLを取得
             tweet_url = ""
             verified = False
-            try:
-                username = os.environ.get("X_USERNAME", "")
-                page.goto(f"https://x.com/{username}")
-                page.wait_for_timeout(5000)
-                first_article = page.locator("article").first
-                if first_article.count() > 0:
-                    inner = first_article.inner_text()
-                    # 最新ツイートに本文の冒頭が含まれているか検証
-                    head = text.replace("\n", " ")[:30]
-                    if head and head in inner:
-                        verified = True
-                        first_link = first_article.locator('a[href*="/status/"]').first
-                        if first_link.count() > 0:
-                            href = first_link.get_attribute("href")
-                            if href:
-                                tweet_url = f"https://x.com{href}" if href.startswith("/") else href
-            except Exception as e:
-                print(f"  URL取得失敗: {e}")
+            username = os.environ.get("X_USERNAME", "")
+            if not username:
+                # X_USERNAME 未設定: textarea が空になった時点で成功とみなす
+                verified = True
+                print("  X_USERNAME 未設定のため profile 検証スキップ")
+            else:
+                try:
+                    page.goto(f"https://x.com/{username}")
+                    page.wait_for_timeout(5000)
+                    first_article = page.locator("article").first
+                    if first_article.count() > 0:
+                        inner = first_article.inner_text()
+                        # 最新ツイートに本文の冒頭が含まれているか検証
+                        head = text.replace("\n", " ")[:30]
+                        if head and head in inner:
+                            verified = True
+                            first_link = first_article.locator('a[href*="/status/"]').first
+                            if first_link.count() > 0:
+                                href = first_link.get_attribute("href")
+                                if href:
+                                    tweet_url = f"https://x.com{href}" if href.startswith("/") else href
+                except Exception as e:
+                    print(f"  URL取得失敗: {e}")
             if not verified:
                 print(f"❌ 投稿検証失敗: プロフィールに本文が見つかりません")
                 browser.close()
@@ -277,13 +286,14 @@ def post_thread(tweets: list[str]) -> str | bool:
             tweet_url = ""
             try:
                 username = os.environ.get("X_USERNAME", "")
-                page.goto(f"https://x.com/{username}")
-                page.wait_for_timeout(4000)
-                first_link = page.locator('article a[href*="/status/"]').first
-                if first_link.count() > 0:
-                    href = first_link.get_attribute("href")
-                    if href:
-                        tweet_url = f"https://x.com{href}" if href.startswith("/") else href
+                if username:
+                    page.goto(f"https://x.com/{username}")
+                    page.wait_for_timeout(4000)
+                    first_link = page.locator('article a[href*="/status/"]').first
+                    if first_link.count() > 0:
+                        href = first_link.get_attribute("href")
+                        if href:
+                            tweet_url = f"https://x.com{href}" if href.startswith("/") else href
             except Exception as e:
                 print(f"  URL取得失敗: {e}")
 
