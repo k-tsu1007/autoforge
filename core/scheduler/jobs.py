@@ -58,7 +58,10 @@ def init_jobs_table():
     conn = get_connection()
     for ddl in _JOBS_DDL:
         conn.execute(ddl)
-    conn.commit()
+    try:
+        conn.commit()
+    except Exception:
+        pass
 
 
 def enqueue(name: str, payload: dict = None, priority: int = 5,
@@ -76,20 +79,19 @@ def enqueue(name: str, payload: dict = None, priority: int = 5,
         ジョブID
     """
     init_jobs_table()
-    from core.db import get_connection
+    from core.db import transaction
 
-    conn = get_connection()
-    cursor = conn.execute("""
-        INSERT INTO jobs (name, payload, priority, max_retries, scheduled_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (
-        name,
-        json.dumps(payload or {}, ensure_ascii=False),
-        priority,
-        max_retries,
-        scheduled_at,
-    ))
-    conn.commit()
+    with transaction() as conn:
+        cursor = conn.execute("""
+            INSERT INTO jobs (name, payload, priority, max_retries, scheduled_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            name,
+            json.dumps(payload or {}, ensure_ascii=False),
+            priority,
+            max_retries,
+            scheduled_at,
+        ))
     return cursor.lastrowid
 
 
@@ -111,14 +113,13 @@ def get_pending_jobs(limit: int = 10) -> list:
 
 
 def update_job(job_id: int, **fields) -> None:
-    from core.db import get_connection
+    from core.db import transaction
     if not fields:
         return
     sets = ", ".join(f"{k} = ?" for k in fields.keys())
     values = list(fields.values()) + [job_id]
-    conn = get_connection()
-    conn.execute(f"UPDATE jobs SET {sets} WHERE id = ?", values)
-    conn.commit()
+    with transaction() as conn:
+        conn.execute(f"UPDATE jobs SET {sets} WHERE id = ?", values)
 
 
 def run_job(job: dict) -> None:
@@ -195,14 +196,13 @@ def get_stats() -> dict:
 def cleanup_old_jobs(days: int = 7) -> int:
     """N日以上前の done/failed ジョブを削除する。"""
     init_jobs_table()
-    from core.db import get_connection
+    from core.db import transaction
     cutoff = (datetime.now(JST) - timedelta(days=days)).isoformat()
-    conn = get_connection()
-    cursor = conn.execute("""
-        DELETE FROM jobs
-        WHERE status IN ('done', 'failed') AND completed_at < ?
-    """, (cutoff,))
-    conn.commit()
+    with transaction() as conn:
+        cursor = conn.execute("""
+            DELETE FROM jobs
+            WHERE status IN ('done', 'failed') AND completed_at < ?
+        """, (cutoff,))
     return cursor.rowcount
 
 

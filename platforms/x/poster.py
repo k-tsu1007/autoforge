@@ -105,7 +105,7 @@ def post_to_x(text: str) -> bool:
 
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=False)
+            browser = p.webkit.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -158,7 +158,16 @@ def post_to_x(text: str) -> bool:
                 print("❌ 投稿ボタンのクリックに全て失敗")
                 browser.close()
                 return False
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(8000)
+
+            # Twitter のエラーメッセージを確認
+            try:
+                err_el = page.locator('[data-testid="toast"]').first
+                if err_el.count() > 0:
+                    err_msg = err_el.inner_text().strip()
+                    print(f"  Twitter エラートースト: {err_msg!r}")
+            except Exception:
+                pass
 
             # 投稿成功検証: textareaが空になっていれば成功
             try:
@@ -242,7 +251,7 @@ def post_thread(tweets: list[str]) -> str | bool:
 
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=False)
+            browser = p.webkit.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -314,7 +323,7 @@ def post_next_from_db(dry_run: bool = False) -> dict:
     JSON 同期や git pull に依存せず、SQLite を唯一の真実とする。
     Returns: {"posted": bool, "tweet_id": int|None, "url": str, "text": str}
     """
-    from core.db import get_connection, mark_tweet_queue_posted, add_posted_tweet, is_already_posted_today
+    from core.db import get_connection, mark_tweet_queue_posted, add_posted_tweet, is_already_posted_today, increment_tweet_fail_count
 
     conn = get_connection()
     # fail_count / scheduled_at カラムが無いDBにも対応
@@ -372,6 +381,7 @@ def post_next_from_db(dry_run: bool = False) -> dict:
         add_posted_tweet(target["text"])
         return {"posted": True, "tweet_id": target["id"], "url": tweet_url, "text": target["text"]}
 
+    increment_tweet_fail_count(target["id"])
     return {"posted": False, "reason": "post failed", "tweet_id": target["id"], "url": "", "text": target["text"]}
 
 

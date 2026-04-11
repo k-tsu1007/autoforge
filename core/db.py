@@ -423,6 +423,15 @@ def is_already_posted_today(text: str) -> bool:
     return row is not None
 
 
+def increment_tweet_fail_count(queue_id: int) -> None:
+    """ツイート投稿失敗時に fail_count をインクリメントする。"""
+    with transaction() as conn:
+        conn.execute(
+            "UPDATE tweet_queue SET fail_count = COALESCE(fail_count, 0) + 1 WHERE id = ?",
+            (queue_id,),
+        )
+
+
 # === Growth Actions ===
 
 def record_growth_action(
