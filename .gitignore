@@ -3,6 +3,7 @@ __pycache__/
 .env
 .venv/
 .claude/
+instances/*/.env
 instances/*/data/db.sqlite3
 instances/*/data/drafts/
 instances/*/data/published/

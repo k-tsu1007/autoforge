@@ -38,13 +38,22 @@ ssh windows-pc "cd C:/Users/Tsubasa/autoforge && python <test_script>.py"
 以下のファイルは `.gitignore` 対象なので、変更時は scp で手動同期する：
 
 ```bash
-# .env
-scp /Users/k-tsubasa/autoforge/.env windows-pc:C:/Users/Tsubasa/autoforge/.env
+# インスタンス固有の認証情報（NOTE_PASSWORD, X_API_KEY など）
+scp instances/fuku_ai_sns/.env \
+    windows-pc:C:/Users/Tsubasa/autoforge/instances/fuku_ai_sns/.env
+
+# グローバル .env（USE_CLAUDE_CLI など共通設定）
+scp .env windows-pc:C:/Users/Tsubasa/autoforge/.env
 
 # session.json（Note ログインセッション）
 scp instances/fuku_ai_sns/cookies/session.json \
     windows-pc:C:/Users/Tsubasa/autoforge/instances/fuku_ai_sns/cookies/session.json
 ```
+
+> **認証情報の構造**
+> - `instances/<name>/.env` — インスタンス固有の認証情報（最優先で読み込まれる）
+> - `.env` — 全インスタンス共通の設定（`USE_CLAUDE_CLI` など）
+> - 新しいインスタンスを追加する場合は `instances/<name>/.env` に認証情報を記載する
 
 ### デーモン操作
 
