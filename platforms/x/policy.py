@@ -226,14 +226,24 @@ class PostingPolicy:
         if now is None:
             now = datetime.now(JST)
 
-        # 緊急優先: リンク付きツイートが未投稿で残ってるならスロット外でも投稿
+        # 優先: リンク付きツイートが未投稿で残ってるならスロット外でも投稿
+        # ただし fail_count>=3 のものは除外し、連投ガードも適用する
         try:
             from core.db import get_connection
             link_pending = get_connection().execute(
-                "SELECT COUNT(*) FROM tweet_queue WHERE posted=0 AND type='リンク付き'"
+                "SELECT COUNT(*) FROM tweet_queue "
+                "WHERE posted=0 AND type='リンク付き' AND COALESCE(fail_count,0) < 3"
             ).fetchone()[0]
             if link_pending > 0:
-                # link 投稿は min_gap 対象外 (重要投稿の鮮度優先)
+                # 連投ガード: 直近投稿から min_gap_minutes 未満なら待機
+                if self.posted_today:
+                    last_post = self.posted_today[-1]
+                    gap_min = (now - last_post).total_seconds() / 60
+                    if gap_min < self.min_gap_minutes:
+                        return False, (
+                            f"link tweet 待機中だが連投ガード中 "
+                            f"(last={last_post.strftime('%H:%M')}, gap={self.min_gap_minutes}min)"
+                        )
                 return True, f"link tweet 待機中 ({link_pending}件) — スロット無視で投稿"
         except Exception:
             pass
