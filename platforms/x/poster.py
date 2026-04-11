@@ -105,7 +105,7 @@ def post_to_x(text: str) -> bool:
 
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.webkit.launch(headless=False)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -158,26 +158,33 @@ def post_to_x(text: str) -> bool:
                 print("❌ 投稿ボタンのクリックに全て失敗")
                 browser.close()
                 return False
-            page.wait_for_timeout(8000)
+            page.wait_for_timeout(10000)
 
-            # Twitter のエラーメッセージを確認
-            try:
-                err_el = page.locator('[data-testid="toast"]').first
-                if err_el.count() > 0:
-                    err_msg = err_el.inner_text().strip()
-                    print(f"  Twitter エラートースト: {err_msg!r}")
-            except Exception:
-                pass
+            # ページURL変化で成功判定（compose/post を離れたら成功）
+            current_url = page.url
+            print(f"  投稿後URL: {current_url}")
+            if "compose/post" not in current_url:
+                print("  ✅ ページがコンポーズから離れた → 投稿成功とみなす")
+                # success判定して続行
+            else:
+                # Twitter のエラーメッセージを確認
+                try:
+                    err_el = page.locator('[data-testid="toast"]').first
+                    if err_el.count() > 0:
+                        err_msg = err_el.inner_text().strip()
+                        print(f"  Twitter エラートースト: {err_msg!r}")
+                except Exception:
+                    pass
 
-            # 投稿成功検証: textareaが空になっていれば成功
-            try:
-                still_text = page.locator('div[data-testid="tweetTextarea_0"]').first.inner_text().strip()
-            except Exception:
-                still_text = ""
-            if still_text and text[:20] in still_text:
-                print(f"❌ 投稿失敗: textareaに本文が残っています")
-                browser.close()
-                return False
+                # 投稿成功検証: textareaが空になっていれば成功
+                try:
+                    still_text = page.locator('div[data-testid="tweetTextarea_0"]').first.inner_text().strip()
+                except Exception:
+                    still_text = ""
+                if still_text and text[:20] in still_text:
+                    print(f"❌ 投稿失敗: textareaに本文が残っています (url={current_url})")
+                    browser.close()
+                    return False
 
             # 投稿後、プロフィールに移動して最新ツイートのURLを取得
             tweet_url = ""
@@ -251,7 +258,7 @@ def post_thread(tweets: list[str]) -> str | bool:
 
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.webkit.launch(headless=False)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
