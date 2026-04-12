@@ -37,5 +37,5 @@ dups = conn.execute("""
 print(f"残り記事数: {total}")
 print(f"タイトル重複チェック: {len(dups)}件" + (" ← 残っています" if dups else " (なし ✅)"))
 for d in dups:
-    title_safe = d['title'].encode('utf-8', errors='replace').decode('utf-8')
+    title_safe = d['title'].encode('ascii', errors='replace').decode('ascii')
     print(f"  [{d['cnt']}] {title_safe}")
