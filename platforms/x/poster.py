@@ -172,6 +172,11 @@ def post_to_x(text: str) -> bool:
                 if dialog.count() > 0:
                     dialog_text = dialog.inner_text().strip()
                     print(f"  ダイアログ: {dialog_text[:80]!r}")
+                    # 重複エラー → すでにX上に存在するので投稿済み扱いで終了
+                    if "already said" in dialog_text.lower() or "already said" in dialog_text:
+                        print("  ⚠️ 重複ツイート検出 (You already said that) → 投稿済みとしてスキップ")
+                        browser.close()
+                        return "DUPLICATE"
                     confirm_btn = dialog.locator('button').last
                     if confirm_btn.count() > 0:
                         confirm_btn.click()
@@ -425,6 +430,13 @@ def post_next_from_db(dry_run: bool = False) -> dict:
             return {"posted": False, "reason": f"thread parse: {e}", "tweet_id": target["id"], "url": "", "text": target["text"]}
     else:
         result = post_to_x(target["text"])
+
+    # 重複エラー → X上には存在するのでDBも投稿済みにして終了
+    if result == "DUPLICATE":
+        mark_tweet_queue_posted(target["id"])
+        add_posted_tweet(target["text"])
+        print(f"  ⚠️ 重複のため投稿済みマーク: id={target['id']}")
+        return {"posted": False, "reason": "duplicate", "tweet_id": target["id"], "url": "", "text": target["text"]}
 
     success = bool(result)
     tweet_url = result if isinstance(result, str) else ""
