@@ -37,7 +37,7 @@ SEARCH_KEYWORDS = [
     "生成AI",
 ]
 
-LOGIN_URL = "https://www.a8.net/a8v2/asLogin.f4d"
+LOGIN_URL = "https://www.a8.net/"
 SEARCH_URL = "https://www.a8.net/a8v2/asSearch.f4d"
 
 
@@ -55,15 +55,27 @@ def _find_input(page, *selectors):
 
 def login(page, email: str, password: str):
     print(f"ログイン中: {email}")
-    page.goto(LOGIN_URL)
-    page.wait_for_load_state("domcontentloaded")
-    time.sleep(2)
-
-    # ログインページのスクリーンショットを保存（デバッグ用）
     ss_path = ROOT / "data" / "a8_login_page.png"
     ss_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # トップページからログインリンクを探す
+    page.goto(LOGIN_URL)
+    page.wait_for_load_state("networkidle")
+    time.sleep(2)
+
+    # ログインリンクをクリック（トップページにある場合）
+    login_link = page.locator('a:has-text("ログイン"), a[href*="login"], a[href*="Login"]').first
+    try:
+        if login_link.is_visible(timeout=3000):
+            login_link.click()
+            page.wait_for_load_state("networkidle")
+            time.sleep(2)
+    except Exception:
+        pass
+
+    # ログインページのスクリーンショットを保存（デバッグ用）
     page.screenshot(path=str(ss_path))
-    print(f"  ログインページのスクリーンショット保存: {ss_path}")
+    print(f"  ログインページのスクリーンショット保存: {ss_path} (URL: {page.url})")
 
     # ページ内の全inputを列挙してデバッグ
     inputs = page.locator("input").all()
