@@ -120,8 +120,22 @@ def evaluate_all():
 
     # SQLite に保存（正データ）
     try:
-        from core.db import upsert_article, take_metrics_snapshot
+        from core.db import get_connection, upsert_article, take_metrics_snapshot, transaction
+        conn = get_connection()
         for a in new_articles:
+            # note_url が一致する nc2_/local_ 行があれば note_id を数値IDに更新してマージ
+            if a.get("note_id") and a.get("note_url"):
+                existing = conn.execute(
+                    "SELECT note_id FROM articles WHERE note_url = ? AND note_id != ?",
+                    (a["note_url"], a["note_id"])
+                ).fetchone()
+                if existing and (existing["note_id"].startswith("nc2_") or existing["note_id"].startswith("local_")):
+                    with transaction() as c:
+                        c.execute(
+                            "UPDATE articles SET note_id = ? WHERE note_id = ?",
+                            (a["note_id"], existing["note_id"])
+                        )
+                    print(f"  マージ: {existing['note_id']} → {a['note_id']} ({a.get('title','')[:30]})")
             upsert_article(a)
         # 日次スナップショット
         phase = ""

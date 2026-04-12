@@ -237,8 +237,10 @@ def publish_via_noteclient(article: dict) -> dict:
                 if urlname:
                     note_url = f"https://note.com/{urlname}/n/{data['note_key']}"
 
+        # note.com API が返す数値IDを使う（evaluate.py の upsert と一致させるため）
+        note_id_from_api = str(data.get("id", "")) if isinstance(result, dict) and result.get("data") else ""
         return {
-            "note_id": f"nc2_{datetime.now(JST).strftime('%Y%m%d_%H%M%S')}",
+            "note_id": note_id_from_api or f"nc2_{datetime.now(JST).strftime('%Y%m%d_%H%M%S')}",
             "note_url": note_url,
             "status": status,
             "published_at": datetime.now(JST).isoformat(),
