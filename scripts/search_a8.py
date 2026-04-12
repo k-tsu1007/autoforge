@@ -38,7 +38,7 @@ SEARCH_KEYWORDS = [
 ]
 
 LOGIN_URL = "https://www.a8.net/"
-SEARCH_URL = "https://www.a8.net/a8v2/asSearch.f4d"
+SEARCH_URL = "https://pub.a8.net/a8v2/asSearch.f4d"
 
 
 def _find_input(page, *selectors):
@@ -233,7 +233,7 @@ def take_screenshot_and_get_text(page, keyword: str) -> str:
     """ページ全体のテキストを取得（最終フォールバック）"""
     import urllib.parse
     encoded = urllib.parse.quote(keyword)
-    url = f"https://www.a8.net/a8v2/asSearch.f4d?keyword={encoded}"
+    url = f"https://pub.a8.net/a8v2/asSearch.f4d?keyword={encoded}"
     page.goto(url)
     page.wait_for_load_state("domcontentloaded")
     time.sleep(3)
@@ -297,13 +297,21 @@ def main():
     with open(output_path, "w", encoding="utf-8") as f:
         for keyword, text in all_results.items():
             header = f"\n{'='*60}\n【{keyword}】\n{'='*60}\n"
-            print(header)
-            print(text[:1000])
+            _safe_print(header)
+            _safe_print(text[:1000])
             f.write(header)
             f.write(text)
 
     print(f"\n全結果を保存しました: {output_path}")
     print("スクリーンショットは data/ フォルダに保存されています。")
+
+
+def _safe_print(text: str):
+    """Windows cp932 対応の安全な出力"""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("cp932", errors="replace").decode("cp932"))
 
 
 if __name__ == "__main__":
