@@ -133,11 +133,32 @@ def login(page, email: str, password: str):
     # ログイン後スクリーンショット
     page.screenshot(path=str(ROOT / "data" / "a8_after_login.png"))
 
+    page.wait_for_load_state("networkidle")
+    time.sleep(3)
+
     # ログイン後スクリーンショット（成否確認）
-    page.screenshot(path=str(ROOT / "data" / "a8_after_login.png"))
+    page.screenshot(path=str(ROOT / "data" / "a8_after_login.png"), full_page=True)
     print(f"  ログイン後URL: {page.url}")
 
-    # ログイン失敗判定（A8.netはトップページに戻ってエラー表示）
+    # ナビゲーションのリンクを全列挙（検索URLを特定するため）
+    links = page.locator("a").all()
+    print(f"  ページ内リンク数: {len(links)}")
+    search_url = None
+    for link in links[:50]:
+        try:
+            href = link.get_attribute("href") or ""
+            text = link.inner_text().strip()[:30]
+            if href:
+                print(f"    リンク: {text!r} → {href}")
+            if "search" in href.lower() or "program" in href.lower() or "プログラム" in text or "検索" in text:
+                search_url = href
+        except Exception:
+            pass
+
+    if search_url:
+        print(f"  検索URL候補: {search_url}")
+
+    # ログイン失敗判定
     error_msg = page.locator('.error, .alert, [class*="error"]').first
     try:
         if error_msg.is_visible(timeout=2000):
@@ -147,6 +168,7 @@ def login(page, email: str, password: str):
             raise
 
     print(f"ログイン成功: {page.url}")
+    return search_url
 
 
 def search_programs(page, keyword: str) -> list[dict]:
@@ -268,7 +290,15 @@ def main():
         page = context.new_page()
 
         try:
-            login(page, email, password)
+            found_search_url = login(page, email, password)
+
+            # 検索URLが見つかった場合はそれを使用
+            global SEARCH_URL
+            if found_search_url:
+                if found_search_url.startswith("http"):
+                    SEARCH_URL = found_search_url
+                elif found_search_url.startswith("/"):
+                    SEARCH_URL = f"https://pub.a8.net{found_search_url}"
 
             all_results = {}
 
