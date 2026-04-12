@@ -1,0 +1,105 @@
+# ==========================================================================
+# Instance: ai_bento
+# ==========================================================================
+# Genre  : AIツール比較 × スクール・副業アフィリエイト
+# Persona: AI弁当 — 使えるAIを毎日詰め合わせる会社員ケンタ
+# サイト  : https://ai-bento.com (WordPress)
+# 起動    : python -m tools.run_daemon --instance ai_bento
+# ==========================================================================
+
+instance:
+  name: ai_bento
+  display_name: "ケンタ｜AI弁当"
+  description: "AIツールを毎日検証・比較する会社員。副業でAIスキルを活かす方法を発信中。"
+  webapp_port: 8002
+  timezone: "Asia/Tokyo"
+
+platforms:
+  note:
+    enabled: false
+    urlname: ""
+
+  x:
+    enabled: true
+    username: ""           # Xアカウント作成後に設定
+    monetization_eligible: false
+
+  wordpress:
+    enabled: true
+    site_url: "https://ai-bento.com"
+    # 認証情報は .env に記載
+    # WP_USERNAME / WP_APP_PASSWORD
+
+  pinterest:
+    enabled: false
+
+  youtube:
+    enabled: false
+
+content:
+  genres:
+    - "AIツール比較・レビュー"
+    - "AIスクール・学習ガイド"
+    - "WordPressブログ・副業の始め方"
+  voice: "検証報告型・比較整理型（実体験捏造禁止・アフィリエイト開示必須）"
+  target_reader: "AIを使って副業・スキルアップしたい20〜35歳の会社員"
+  target_length_chars: 3000
+  banned_phrases:
+    - "私が試した結果○円稼げた"
+    - "○ヶ月で月収○万円"
+    - "絶対に稼げる"
+
+affiliates:
+  - name: "Winスクール"
+    url: ""                # A8.net提携後に設定
+    unit_price: 10000
+    contexts: ["スクール", "AI学習", "プログラミング", "副業", "スキルアップ"]
+    cta: "無料カウンセリングを受けてみる（Winスクール）"
+
+  - name: "エックスサーバー"
+    url: ""                # A8.net提携後に設定
+    unit_price: 5000
+    contexts: ["WordPress", "ブログ", "サーバー", "ブログ開設"]
+    cta: "エックスサーバーでWordPressを始める"
+
+  - name: "ConoHa AI Canvas"
+    url: ""                # A8.net提携後に設定
+    unit_price: 2000
+    contexts: ["AI画像生成", "画像AI", "デザイン"]
+    cta: "ConoHa AI Canvasを無料で試す"
+
+goals:
+  wp_articles_per_day: 2
+  x_posts_per_day: 20
+  x_quotes_per_day: 3
+  x_replies_per_day: 5
+  x_likes_per_day: 20
+  monthly_revenue_jpy: 50000
+  target_date: "2026-07-12"
+
+pipelines:
+  morning:
+    - evaluate
+    - snapshot
+    - lift
+    - observer
+    - hypothesis
+    - x_analytics
+    - x_health
+    - tweet_generator
+    - engage
+    - optimize_post_time
+    - advisor
+    - evolve
+  content_post:
+    - generate
+    - publish
+  evening:
+    - notify
+    - dashboard
+    - forget
+    - maintenance
+
+env:
+  USE_CLAUDE_CLI: "1"
+  CONTENT_PLATFORM: "wordpress"
