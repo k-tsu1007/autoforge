@@ -38,7 +38,8 @@ SEARCH_KEYWORDS = [
 ]
 
 LOGIN_URL = "https://www.a8.net/"
-SEARCH_URL = "https://pub.a8.net/a8v2/asSearch.f4d"
+SEARCH_URL = "https://pub.a8.net/a8v2/media/searchAction/keyword.do"
+BASE_URL = "https://pub.a8.net"
 
 
 def _find_input(page, *selectors):
@@ -252,22 +253,23 @@ def search_with_url_params(page, keyword: str) -> list[dict]:
 
 
 def take_screenshot_and_get_text(page, keyword: str) -> str:
-    """ページ全体のテキストを取得（最終フォールバック）"""
+    """A8.net キーワード検索でプログラム一覧を取得"""
     import urllib.parse
     encoded = urllib.parse.quote(keyword)
-    url = f"https://pub.a8.net/a8v2/asSearch.f4d?keyword={encoded}"
+    url = f"{SEARCH_URL}?action=search&viewType=0&keyword={encoded}&sortColumn=commission&sortOrder=desc"
     page.goto(url)
-    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle")
     time.sleep(3)
 
     # スクリーンショット保存
-    screenshot_path = ROOT / "data" / f"a8_search_{keyword}.png"
+    safe_keyword = keyword.replace("/", "_").replace("\\", "_")
+    screenshot_path = ROOT / "data" / f"a8_search_{safe_keyword}.png"
     screenshot_path.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(screenshot_path), full_page=True)
     print(f"  スクリーンショット保存: {screenshot_path}")
 
     # テキスト取得
-    return page.inner_text("body")[:3000]
+    return page.inner_text("body")[:5000]
 
 
 def main():
