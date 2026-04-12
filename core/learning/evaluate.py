@@ -123,12 +123,21 @@ def evaluate_all():
         from core.db import get_connection, upsert_article, take_metrics_snapshot, transaction
         conn = get_connection()
         for a in new_articles:
-            # note_url が一致する nc2_/local_ 行があれば note_id を数値IDに更新してマージ
-            if a.get("note_id") and a.get("note_url"):
-                existing = conn.execute(
-                    "SELECT note_id FROM articles WHERE note_url = ? AND note_id != ?",
-                    (a["note_url"], a["note_id"])
-                ).fetchone()
+            # nc2_/local_ 行があれば note_id を数値IDに更新してマージ
+            # 優先: note_url 一致。次: title 一致（note_url が空だった古い行用）
+            if a.get("note_id"):
+                existing = None
+                if a.get("note_url"):
+                    existing = conn.execute(
+                        "SELECT note_id FROM articles WHERE note_url = ? AND note_id != ?",
+                        (a["note_url"], a["note_id"])
+                    ).fetchone()
+                if not existing and a.get("title"):
+                    existing = conn.execute(
+                        "SELECT note_id FROM articles WHERE title = ? AND note_id != ?"
+                        " AND (note_url IS NULL OR note_url = '')",
+                        (a["title"], a["note_id"])
+                    ).fetchone()
                 if existing and (existing["note_id"].startswith("nc2_") or existing["note_id"].startswith("local_")):
                     with transaction() as c:
                         c.execute(
