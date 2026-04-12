@@ -82,6 +82,7 @@ pipelines:
     - optimize_post_time
     - advisor
     - evolve
+    - seo_keywords
   content_post:
     - generate
     - publish

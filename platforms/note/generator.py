@@ -101,6 +101,19 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     if topic_hint:
         topic_instruction = f"\n## トピック指定\n以下のトピックで記事を書いてください: {topic_hint}\n"
 
+    # SEOモード: Googleサジェストから次のキーワードを取得
+    seo_keyword = None
+    if seo_mode:
+        try:
+            from core.seo_keywords import get_next
+            seo_keyword = get_next()
+            if seo_keyword:
+                print(f"SEOキーワード: {seo_keyword}")
+            else:
+                print("未使用キーワードなし。汎用SEO記事を生成します。")
+        except Exception as e:
+            print(f"キーワード取得失敗: {e}")
+
     # Knowledge: 確証された知見のみを読み込む (累積汚染を防ぐ)
     learning_hint = ""
     try:
@@ -187,7 +200,13 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
             '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
             '"paid_content": ""'
         )
-        seo_title_guide = """- タイトルは「読者が検索しそうなキーワード」を含める（例: 「副業 始め方」「ChatGPT 使い方 仕事」「note 収益化 初心者」）
+        if seo_keyword:
+            seo_title_guide = f"""- ターゲットキーワード: 「{seo_keyword}」
+- タイトルにこのキーワード（またはその自然な変形）を必ず含める
+- タイトルは40文字以内
+- 読者が「{seo_keyword}」で検索したときに求めている内容を満たす記事にする"""
+        else:
+            seo_title_guide = """- タイトルは「読者が検索しそうなキーワード」を含める（例: 「副業 始め方」「ChatGPT 使い方 仕事」「note 収益化 初心者」）
 - タイトルは40文字以内
 - 検索意図を満たす具体的な内容にする"""
         content_instruction = f"""## 制約（SEO集客記事モード）
@@ -317,6 +336,14 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         from datetime import datetime, timezone, timedelta
         jst = timezone(timedelta(hours=9))
         article["title"] = f"{article['title']}（{datetime.now(jst).strftime('%m/%d')}更新版）"
+
+    # SEOキーワードを使用済みにする
+    if seo_keyword:
+        try:
+            from core.seo_keywords import mark_used
+            mark_used(seo_keyword, article.get("title", ""))
+        except Exception:
+            pass
 
     # 実験記事なら hypothesis に紐づける
     if experiment_id:
