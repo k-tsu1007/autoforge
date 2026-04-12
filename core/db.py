@@ -189,6 +189,17 @@ CREATE TABLE IF NOT EXISTS kpi_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_kpi_snapshots_date ON kpi_snapshots(date);
+
+CREATE TABLE IF NOT EXISTS mention_reply_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mention_url TEXT UNIQUE,
+    mention_text TEXT,
+    mention_author TEXT,
+    reply_text TEXT,
+    send_after TEXT,
+    sent INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', '+9 hours'))
+);
 """
 
 

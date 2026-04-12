@@ -137,6 +137,31 @@ def job_x_engage():
         _log(f"❌ engage エラー: {e}")
 
 
+def job_mention_scan():
+    """メンションスキャン — 新しいメンションにいいね＆返信キューに積む。"""
+    now = datetime.now(JST)
+    if now.hour < 8 or now.hour > 22:
+        return
+    _log("📥 メンションスキャン開始")
+    try:
+        from platforms.x.mention_reply import run_scan
+        result = run_scan()
+        _log(f"📥 メンションスキャン完了: {result}")
+    except Exception as e:
+        _log(f"❌ メンションスキャンエラー: {e}")
+
+
+def job_mention_send():
+    """メンション返信送信 — キューの遅延送信を処理する。"""
+    try:
+        from platforms.x.mention_reply import run_send
+        result = run_send()
+        if result.get("sent", 0) > 0:
+            _log(f"💬 メンション返信送信: {result}")
+    except Exception as e:
+        _log(f"❌ メンション返信送信エラー: {e}")
+
+
 def register_jobs(scheduler, jst, inst=None):
     """APScheduler に X 関連ジョブを登録する。"""
     from apscheduler.triggers.interval import IntervalTrigger
@@ -168,4 +193,22 @@ def register_jobs(scheduler, jst, inst=None):
         max_instances=1,
         coalesce=True,
         next_run_time=now + timedelta(seconds=45),
+    )
+    scheduler.add_job(
+        job_mention_scan,
+        IntervalTrigger(hours=3),
+        id="x_mention_scan",
+        name="X: Mention Scan",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=now + timedelta(minutes=2),
+    )
+    scheduler.add_job(
+        job_mention_send,
+        IntervalTrigger(minutes=30),
+        id="x_mention_send",
+        name="X: Mention Send",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=now + timedelta(minutes=3),
     )
