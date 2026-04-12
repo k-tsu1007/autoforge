@@ -79,8 +79,8 @@ def _detect_fabrication(article: dict) -> str | None:
     return None
 
 
-def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "") -> dict:
-    """Claudeで記事を生成する。"""
+def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False) -> dict:
+    """Claudeで記事を生成する。seo_mode=True のときは完全無料・SEO最適化記事を生成する。"""
     params = strategy["content_params"]
     gen_params = strategy["generation_params"]
     top_context = build_top_articles_context(history)
@@ -173,14 +173,39 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     リスト型:    「△つの〇〇」「〇〇のN個のポイント」←多用禁止、直近で使用済みなら避ける
 - 直近タイトルの形式を確認し、まだ使っていない形式を積極的に選ぶこと"""
 
-    if free_only:
-        output_format = """{
+    output_format_base = """{
   "title": "記事タイトル",
   "genre": "ジャンル名",
   "tags": ["タグ1", "タグ2", "タグ3"],
-  "free_content": "記事本文（Markdown。タイトルは含めない）",
-  "paid_content": ""
+  "free_content": "本文（Markdown。タイトルは含めない）",
+  "paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"
 }"""
+
+    if seo_mode:
+        # 完全無料・SEO最適化の集客記事
+        output_format = output_format_base.replace(
+            '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
+            '"paid_content": ""'
+        )
+        seo_title_guide = """- タイトルは「読者が検索しそうなキーワード」を含める（例: 「副業 始め方」「ChatGPT 使い方 仕事」「note 収益化 初心者」）
+- タイトルは40文字以内
+- 検索意図を満たす具体的な内容にする"""
+        content_instruction = f"""## 制約（SEO集客記事モード）
+{anti_fabrication}
+- これは完全無料記事。paid_contentは必ず空文字
+- free_contentにタイトル（# 見出し）を含めないこと
+{seo_title_guide}
+- 合計文字数は約3500文字（SEOは文字数が重要）
+- 読者がこの記事1本で悩みを解決できる完結した内容にする
+- 末尾に「このアカウントでは〇〇について定期的に発信しています」とフォロー誘導を自然に入れる
+- タグは検索されやすいワードを優先: {json.dumps(params['tags_main'], ensure_ascii=False)}
+- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）
+"""
+    elif free_only:
+        output_format = output_format_base.replace(
+            '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
+            '"paid_content": ""'
+        )
         content_instruction = f"""## 制約
 - これは無料記事です。paid_contentは空文字にしてください
 - free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
@@ -189,26 +214,31 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 - 読者がすぐ実践できる具体的な内容にする
 - 記事末尾に「もっと詳しく知りたい方はプロフィールから有料記事もチェックしてください」という導線を自然に入れる
 - タグは{json.dumps(params['tags_main'], ensure_ascii=False)}から最低1つ + 記事固有のタグ
-- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）は使わないこと。Noteでは表として表示されずテキストが崩れる。代わりに箇条書きや「項目 → 説明」の形式を使う
+- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）
 {anti_fabrication}
 """
     else:
-        output_format = """{
-  "title": "記事タイトル",
-  "genre": "ジャンル名",
-  "tags": ["タグ1", "タグ2", "タグ3"],
-  "free_content": "無料部分の本文（Markdown。タイトルは含めない）",
-  "paid_content": "有料部分の本文（Markdown）"
-}"""
+        output_format = output_format_base.replace(
+            '"free_content": "本文（Markdown。タイトルは含めない）"',
+            '"free_content": "無料部分の本文（Markdown。タイトルは含めない）"'
+        ).replace(
+            '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
+            '"paid_content": "有料部分の本文（Markdown）"'
+        )
         content_instruction = f"""## 制約
 {anti_fabrication}
 - 無料部分は全体の約{int(params['free_ratio'] * 100)}%
 - free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
 {title_format_guide}
 - 合計文字数は約{params['target_length_chars']}文字
-- 有料部分には実践的なテンプレート・具体例・コード例を含める
+- 【有料パートの必須要件】以下のいずれかを必ず含める（「説明の続き」だけにしない）:
+    1. そのまま使えるテンプレート（穴埋め形式など）
+    2. 実際に使えるプロンプト文（ChatGPT用など）
+    3. チェックリスト（10項目以上）
+    4. 具体的なケーススタディ（数値ではなく状況の具体性）
+  → 読者が「これのためだけに買う価値がある」と感じる密度にすること
 - タグは{json.dumps(params['tags_main'], ensure_ascii=False)}から最低1つ + 記事固有のタグ
-- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）は使わないこと。Noteでは表として表示されずテキストが崩れる。代わりに箇条書きや「項目 → 説明」の形式を使う
+- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）
 """
 
     # 記事フォーマットを毎回ローテーション（単調化防止）
@@ -331,13 +361,14 @@ def main():
     # --batch N で複数記事を一括生成
     batch_count = 1
     free_only = "--free" in sys.argv
+    seo_mode = "--seo" in sys.argv
     for i, arg in enumerate(sys.argv):
         if arg == "--batch" and i + 1 < len(sys.argv):
             batch_count = int(sys.argv[i + 1])
 
     for i in range(batch_count):
         print(f"\n--- 記事 {i + 1}/{batch_count} を生成中... ---")
-        article = generate_article(strategy, program, history, free_only=free_only)
+        article = generate_article(strategy, program, history, free_only=free_only, seo_mode=seo_mode)
         save_draft(article)
 
         # history に仮登録（重複回避のため）
