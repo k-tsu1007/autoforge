@@ -11,7 +11,7 @@ tweets = conn.execute(
 ).fetchall()
 
 for t in tweets:
-    text = (t["text"] or "").encode("utf-8", "replace").decode("utf-8")
+    text = (t["text"] or "").encode("ascii", "replace").decode("ascii")
     print(f"[likes={t['likes']} imp={t['impressions']} {t['created_at'][:10]}]")
     print(text[:200])
     print()
