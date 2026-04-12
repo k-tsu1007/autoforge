@@ -90,45 +90,39 @@ def login(page, email: str, password: str):
         except Exception:
             pass
 
-    # メールアドレス入力（複数セレクタを試みる）
+    # ログインID入力（A8.netはname="login"）
     email_input = _find_input(
         page,
+        'input[name="login"]',
+        'input[id="asLoginId"]',
         'input[name="login_id"]',
         'input[name="email"]',
-        'input[name="mail"]',
         'input[type="email"]',
-        'input[id="login_id"]',
-        'input[id="email"]',
-        'input[placeholder*="メール"]',
-        'input[placeholder*="mail"]',
-        'input[placeholder*="Mail"]',
     )
     if not email_input:
-        raise RuntimeError("メールアドレス入力欄が見つかりません。スクリーンショットを確認してください。")
+        raise RuntimeError("ログインID入力欄が見つかりません。スクリーンショットを確認してください。")
     email_input.fill(email)
     time.sleep(0.3)
 
-    # パスワード入力
+    # パスワード入力（A8.netはname="passwd"）
     pass_input = _find_input(
         page,
-        'input[name="login_password"]',
+        'input[name="passwd"]',
         'input[name="password"]',
         'input[type="password"]',
-        'input[id="login_password"]',
-        'input[id="password"]',
     )
     if not pass_input:
         raise RuntimeError("パスワード入力欄が見つかりません。スクリーンショットを確認してください。")
     pass_input.fill(password)
     time.sleep(0.3)
 
-    # ログインボタンクリック
+    # ログインボタンクリック（A8.netはname="login_as_btn"）
     submit = _find_input(
         page,
+        'input[name="login_as_btn"]',
         'input[type="submit"]',
         'button[type="submit"]',
         'button:has-text("ログイン")',
-        'input[value*="ログイン"]',
     )
     if not submit:
         raise RuntimeError("ログインボタンが見つかりません。スクリーンショットを確認してください。")
@@ -139,8 +133,18 @@ def login(page, email: str, password: str):
     # ログイン後スクリーンショット
     page.screenshot(path=str(ROOT / "data" / "a8_after_login.png"))
 
-    if "login" in page.url.lower() or "Login" in page.url:
-        raise RuntimeError("ログイン失敗。メールアドレス・パスワードを確認してください。")
+    # ログイン後スクリーンショット（成否確認）
+    page.screenshot(path=str(ROOT / "data" / "a8_after_login.png"))
+    print(f"  ログイン後URL: {page.url}")
+
+    # ログイン失敗判定（A8.netはトップページに戻ってエラー表示）
+    error_msg = page.locator('.error, .alert, [class*="error"]').first
+    try:
+        if error_msg.is_visible(timeout=2000):
+            raise RuntimeError(f"ログイン失敗: {error_msg.inner_text()}")
+    except Exception as e:
+        if "ログイン失敗" in str(e):
+            raise
 
     print(f"ログイン成功: {page.url}")
 
