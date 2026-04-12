@@ -371,8 +371,17 @@ def generate_tweet_drafts(article: dict, note_url: str) -> list:
             text = text.strip().strip('"').strip("'").strip("「").strip("」")
             return text.strip()
 
-        # 記事連動は link 1本のみ。バリエーションは tweet_generator (単発) が担う
-        chosen = ["link"]
+        # 記事連動: link 1本 + advisor推奨パターンから2本（計3本）
+        # リンク付き1本で誘導 + ティーザー2本で興味喚起
+        try:
+            from core.learning.advisor import get_advice
+            adv_patterns = get_advice().get("tweet_draft_patterns") or []
+            extras = [p for p in adv_patterns if p != "link"][:2]
+        except Exception:
+            extras = ["experiment", "question"]
+        if len(extras) < 2:
+            extras = (extras + ["experiment", "question"])[:2]
+        chosen = ["link"] + extras
         print(f"  ツイートパターン: {chosen}")
 
         PATTERN_PROMPTS = {

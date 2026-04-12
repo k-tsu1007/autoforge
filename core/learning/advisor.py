@@ -70,6 +70,34 @@ def _to_jst(iso_ts: str):
         return None
 
 
+def _title_pattern_analysis(titles: list[str]) -> str:
+    """直近記事タイトルの構造パターンを分析し、偏りを検出。"""
+    import re
+    patterns = {}
+    for t in titles:
+        if re.search(r"\d+つの|N個の|\d+個の|\d+選", t):
+            key = "リスト型(Nつの〇〇)"
+        elif "共通点" in t or "特徴" in t or "原因" in t:
+            key = "共通点/特徴型"
+        elif "方法" in t or "やり方" in t or "始め方" in t:
+            key = "How-to型"
+        elif "なぜ" in t or "理由" in t:
+            key = "Why型"
+        elif "違い" in t or "vs" in t.lower():
+            key = "比較型"
+        else:
+            key = "その他"
+        patterns[key] = patterns.get(key, 0) + 1
+    if not patterns:
+        return "タイトルデータなし"
+    top = sorted(patterns.items(), key=lambda x: -x[1])
+    result = ", ".join(f"{k}:{v}本" for k, v in top)
+    overused = [k for k, v in top if v >= 3]
+    if overused:
+        result += f" ⚠️ 偏り: {', '.join(overused)}が多すぎる"
+    return result
+
+
 def collect_stats() -> dict:
     """Claude に渡す統計データを集める。"""
     from core.db import get_connection
@@ -132,6 +160,7 @@ def collect_stats() -> dict:
         "recent_article_titles": recent_titles,
         "active_genres": genres,
         "lift_summary": _lift_summary(),
+        "title_patterns_note": _title_pattern_analysis(recent_titles),
     }
 
 
@@ -196,8 +225,11 @@ def ask_claude(stats: dict) -> dict:
 - queue_total が少ない（< 5）→ キュー補充は瞬時にできるので投稿頻度は維持。むしろ補充トリガーとして扱う
 - article_avg_likes が低い（< 1）→ SNS連投より Note本数を増やして当たり待ち + lift学習を加速（AIなので質は本数に依存しない）
 - 時刻別データが揃ってる時刻は活用、不足してる時刻は様子見
-- lift_summary に勝ち値(winners)・負け値(losers)が出てたら、それを尊重した判断をする
-  例: genre winners に「SNS運用」が出てたら growth_search_keywords にも反映、tweet_draft_patterns 選定にも反映
+- lift_summary に勝ち値(winners)・負け値(losers)が出てたら、**必ず**具体的にパラメータに反映すること（「考慮しました」だけの空回答は禁止）
+  - winners のジャンル/パターン → growth_search_keywords, tweet_draft_patterns に優先採用
+  - losers のジャンル/パターン → 明示的に避ける（キーワード入れ替え、パターン除外）
+  - 例: genre losers に「SNS運用」が出たら、growth_search_keywords を「AI 活用」「副業 始めたい」等に入れ替え
+- recent_article_titles を見て、タイトル構造が偏っていたら reasoning で指摘する（同じテンプレが3回以上 → 要改善）
 
 【出力】
 JSONのみ。前後に説明文は一切不要。

@@ -128,10 +128,10 @@ def job_x_engage():
     now = datetime.now(JST)
     if now.hour < 8 or now.hour > 22:
         return
-    _log("💬 engage 開始 (1件)")
+    _log("💬 engage 開始")
     try:
         from platforms.x.engage import run
-        result = run(max_quote_per_call=1, max_reply_per_call=1)
+        result = run(max_quote_per_call=1, max_reply_per_call=2)
         _log(f"💬 engage 完了: {result}")
     except Exception as e:
         _log(f"❌ engage エラー: {e}")

@@ -61,7 +61,7 @@ goals:
   note_articles_per_day: 4
   x_posts_per_day: 20
   x_quotes_per_day: 4
-  x_replies_per_day: 8
+  x_replies_per_day: 12
   x_likes_per_day: 20
   monthly_revenue_jpy: 10000
   target_date: "2026-07-07"
