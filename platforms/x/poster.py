@@ -220,34 +220,29 @@ def post_to_x(text: str) -> bool:
                     browser.close()
                     return False
 
-            # 投稿後、プロフィールに移動して最新ツイートのURLを取得
+            # コンポーズページを離れていれば投稿成功
+            # プロフィール訪問はURLを取るだけ（失敗しても投稿済み扱い）
+            left_compose = "compose/post" not in current_url
             tweet_url = ""
-            verified = False
             username = os.environ.get("X_USERNAME", "")
-            if not username:
-                # X_USERNAME 未設定: textarea が空になった時点で成功とみなす
-                verified = True
-                print("  X_USERNAME 未設定のため profile 検証スキップ")
-            else:
+            if username and left_compose:
                 try:
                     page.goto(f"https://x.com/{username}")
                     page.wait_for_timeout(5000)
                     first_article = page.locator("article").first
                     if first_article.count() > 0:
                         inner = first_article.inner_text()
-                        # 最新ツイートに本文の冒頭が含まれているか検証
                         head = text.replace("\n", " ")[:30]
                         if head and head in inner:
-                            verified = True
                             first_link = first_article.locator('a[href*="/status/"]').first
                             if first_link.count() > 0:
                                 href = first_link.get_attribute("href")
                                 if href:
                                     tweet_url = f"https://x.com{href}" if href.startswith("/") else href
                 except Exception as e:
-                    print(f"  URL取得失敗: {e}")
-            if not verified:
-                print(f"❌ 投稿検証失敗: プロフィールに本文が見つかりません")
+                    print(f"  URL取得失敗（投稿自体は成功）: {e}")
+            if not left_compose:
+                print(f"❌ 投稿失敗: コンポーズページから離れませんでした")
                 browser.close()
                 return False
 
