@@ -41,29 +41,96 @@ LOGIN_URL = "https://www.a8.net/a8v2/asLogin.f4d"
 SEARCH_URL = "https://www.a8.net/a8v2/asSearch.f4d"
 
 
+def _find_input(page, *selectors):
+    """複数セレクタを順番に試して最初に見つかった要素を返す。"""
+    for sel in selectors:
+        try:
+            el = page.locator(sel).first
+            if el.count() > 0 and el.is_visible(timeout=2000):
+                return el
+        except Exception:
+            continue
+    return None
+
+
 def login(page, email: str, password: str):
     print(f"ログイン中: {email}")
     page.goto(LOGIN_URL)
     page.wait_for_load_state("domcontentloaded")
     time.sleep(2)
 
-    # メールアドレス入力
-    page.locator('input[name="login_id"]').fill(email)
+    # ログインページのスクリーンショットを保存（デバッグ用）
+    ss_path = ROOT / "data" / "a8_login_page.png"
+    ss_path.parent.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(ss_path))
+    print(f"  ログインページのスクリーンショット保存: {ss_path}")
+
+    # ページ内の全inputを列挙してデバッグ
+    inputs = page.locator("input").all()
+    print(f"  input要素数: {len(inputs)}")
+    for inp in inputs:
+        try:
+            name = inp.get_attribute("name") or ""
+            id_ = inp.get_attribute("id") or ""
+            type_ = inp.get_attribute("type") or ""
+            placeholder = inp.get_attribute("placeholder") or ""
+            print(f"    input: name={name!r} id={id_!r} type={type_!r} placeholder={placeholder!r}")
+        except Exception:
+            pass
+
+    # メールアドレス入力（複数セレクタを試みる）
+    email_input = _find_input(
+        page,
+        'input[name="login_id"]',
+        'input[name="email"]',
+        'input[name="mail"]',
+        'input[type="email"]',
+        'input[id="login_id"]',
+        'input[id="email"]',
+        'input[placeholder*="メール"]',
+        'input[placeholder*="mail"]',
+        'input[placeholder*="Mail"]',
+    )
+    if not email_input:
+        raise RuntimeError("メールアドレス入力欄が見つかりません。スクリーンショットを確認してください。")
+    email_input.fill(email)
     time.sleep(0.3)
 
     # パスワード入力
-    page.locator('input[name="login_password"]').fill(password)
+    pass_input = _find_input(
+        page,
+        'input[name="login_password"]',
+        'input[name="password"]',
+        'input[type="password"]',
+        'input[id="login_password"]',
+        'input[id="password"]',
+    )
+    if not pass_input:
+        raise RuntimeError("パスワード入力欄が見つかりません。スクリーンショットを確認してください。")
+    pass_input.fill(password)
     time.sleep(0.3)
 
     # ログインボタンクリック
-    page.locator('input[type="submit"]').click()
+    submit = _find_input(
+        page,
+        'input[type="submit"]',
+        'button[type="submit"]',
+        'button:has-text("ログイン")',
+        'input[value*="ログイン"]',
+    )
+    if not submit:
+        raise RuntimeError("ログインボタンが見つかりません。スクリーンショットを確認してください。")
+    submit.click()
     page.wait_for_load_state("domcontentloaded")
     time.sleep(3)
 
-    if "login" in page.url.lower():
+    # ログイン後スクリーンショット
+    page.screenshot(path=str(ROOT / "data" / "a8_after_login.png"))
+
+    if "login" in page.url.lower() or "Login" in page.url:
         raise RuntimeError("ログイン失敗。メールアドレス・パスワードを確認してください。")
 
-    print("ログイン成功")
+    print(f"ログイン成功: {page.url}")
 
 
 def search_programs(page, keyword: str) -> list[dict]:
