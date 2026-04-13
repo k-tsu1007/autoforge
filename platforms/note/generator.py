@@ -142,56 +142,42 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     except Exception:
         pass
 
-    # 【最重要・絶対不可侵】捏造禁止ルール
-    anti_fabrication = """
+    # インスタンスのプロンプトファイルから戦略固有部分を読み込む
+    _ext_prompt = ""
+    try:
+        from core.paths import load_prompt
+        _ext_prompt = load_prompt("article_generator.txt")
+    except Exception:
+        pass
+
+    if _ext_prompt:
+        # 外部ファイルからセクションを抽出
+        import re as _re
+        def _extract_section(text, heading):
+            pattern = rf"^## {_re.escape(heading)}.*?\n(.*?)(?=\n## |\Z)"
+            m = _re.search(pattern, text, _re.DOTALL | _re.MULTILINE)
+            return m.group(1).strip() if m else ""
+
+        _reader_profile = _extract_section(_ext_prompt, "読者像")
+        anti_fabrication = "\n## 【絶対不可侵】捏造の絶対禁止\n" + _extract_section(_ext_prompt, "【絶対不可侵】捏造の絶対禁止")
+        anti_fabrication += "\n\n【違反した場合】\n- 記事は即座に破棄され、Noteにも投稿されません\n- 信頼を失う行為として記録されます\n"
+        title_format_guide = _extract_section(_ext_prompt, "タイトル形式ガイド")
+        _style_rules = _extract_section(_ext_prompt, "文体・トーンのルール（重要）")
+    else:
+        _reader_profile = ""
+        _style_rules = ""
+        anti_fabrication = ""
+        title_format_guide = ""
+
+    # フォールバック: ファイルがない場合の最小定義
+    if not anti_fabrication:
+        anti_fabrication = """
 ## 【絶対不可侵】捏造の絶対禁止
-このアカウントは実績ゼロの新規アカウントです。以下は全て**嘘**になり、ユーザーを欺き、Note規約違反かつ景品表示法違反の可能性があります。違反した記事は全て破棄されます。
-
-【絶対に書いてはいけないこと】
-- ❌ 「フォロワーが◯人増えた」「◯ヶ月で◯人になった」などの数値実績
-- ❌ 「平均いいね数が◯から◯になった」などの数値変化
-- ❌ 「私が試した結果」「私が経験した」などの架空の実体験
-- ❌ 「3ヶ月続けた」「半年続けた」などの架空の期間
-- ❌ 「収益◯円稼げた」「月収◯円」などの収益実績
-- ❌ 「◯◯派です。あなたは？」のような架空の体験を前提にした問いかけ
-- ❌ 「以前は◯件だったが今は◯件」のような前後比較
-
-【書いて良いこと】
-- ✅ 「一般的にこう言われている」(出典明示なら可、ただし不確実)
-- ✅ 「こういう仕組みがある」(事実ベース)
-- ✅ 「これを試したい人へ」(読者目線)
-- ✅ 「以下の手順を提案する」(中立的)
-- ✅ 「もし◯◯ならどう対応するか」(仮定形)
-
-【スタイルの基本】
-- 主語を「私」にして体験を語る → 禁止
-- 「読者がやると効果が出る方法」を解説 → 推奨
-- 一般論・観察・調査の整理として書く → 推奨
-- 「実体験」「実証済み」「効果あり」などの断定 → 禁止 (実績がないため)
-
-【違反した場合】
-- 記事は即座に破棄され、Noteにも投稿されません
-- 信頼を失う行為として記録されます
+- 数値実績・架空の実体験・収益実績は全て禁止
+- 一般論・読者目線・仮定形で書くこと
 """
-
-    # タイトル形式ガイド（多様性確保のため両パスで共通使用）
-    title_format_guide = """- タイトルは30文字以内（スマホで途切れない長さ）
-- 以下の形式から選ぶ:
-    How-to型:    「〇〇する方法」「〇〇のやり方」
-    Why型:       「なぜ〇〇か」「〇〇がうまくいかない理由」
-    比較型:      「〇〇と〇〇の違い」「〇〇 vs 〇〇」
-    解説型:      「〇〇とは何か」「〇〇の仕組みを整理する」
-    誤解解消型:  「〇〇のよくある誤解」「〇〇する前に知っておくこと」
-    提案・ツール型:「〇〇に使えるテンプレート」「〇〇チェックリスト」
-    リスト型:    「△つの〇〇」「〇〇のN個のポイント」
-    物語型:      「〇〇してみた結果」「〇〇を1週間試した話」
-    疑問型:      「〇〇は本当に必要か？」「〇〇で損する人の特徴」
-
-【タイトル多様性ルール（重要）】
-- 直近5記事のタイトルを確認し、同じ構造・同じ語尾パターンの記事は作らない
-- 「〇〇な人のN個の共通点/特徴/原因」のような1つのテンプレを繰り返し使うのは厳禁
-- 構造だけでなく、切り口・主語・角度も変える（プラットフォーム名を変えただけはNG）
-- 例: 直近に「Xで〇〇な人の3つの共通点」があるなら、次は「ChatGPTで〇〇する方法」「なぜ〇〇は続かないのか」など全く違う形式にする"""
+    if not title_format_guide:
+        title_format_guide = "- タイトルは30文字以内。直近5記事と同じ構造にしない"
 
     output_format_base = """{
   "title": "記事タイトル",
@@ -292,13 +278,22 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 {chosen_format_guide}
 """
 
+    reader_section = f"""【このアカウントの読者像】
+{_reader_profile}""" if _reader_profile else """【このアカウントの読者像】
+本業をしながらAI・SNS・noteで副収入を試している20〜30代。
+完璧主義で最初の一歩が踏み出せない人、忙しくて時間がない人。"""
+
+    style_section = f"""## 文体・トーンのルール（重要）
+{_style_rules}""" if _style_rules else """## 文体・トーンのルール（重要）
+- 「〜しましょう」「〜することが大切です」の教訓・説教口調禁止
+- 冒頭の読者悩み代弁は1文に絞る
+- 記事全体を通じて「一緒に考えている」感を出す
+- 同じ構成（悩み代弁→N個のポイント→有料リード）を繰り返さない"""
+
     system_prompt = f"""あなたはNote(note.com)向けの記事ライターです。
 以下の戦略指示書に従って、読者に価値のある記事を1本生成してください。
 
-【このアカウントの読者像】
-本業をしながらAI・SNS・noteで副収入を試している20〜30代。
-完璧主義で最初の一歩が踏み出せない人、忙しくて時間がない人。
-「綺麗にまとまった解説記事」より「自分と同じ目線で書かれた記事」に共感する。
+{reader_section}
 
 {program}
 
@@ -309,12 +304,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 {experiment_hint}
 {format_instruction}
 
-## 文体・トーンのルール（重要）
-- 「〜しましょう」「〜することが大切です」の教訓・説教口調禁止
-- 冒頭の読者悩み代弁は1文に絞る（長い問いかけ段落を作らない）
-- 記事全体を通じて「一緒に考えている」感を出す
-- 完璧な答えより「こういう視点もある」「こう試したい」という提示型にする
-- 同じ構成（悩み代弁→N個のポイント→有料リード）を繰り返さない
+{style_section}
 
 ## 出力フォーマット（厳守）
 以下のJSON形式で出力してください。それ以外のテキストは含めないでください。
