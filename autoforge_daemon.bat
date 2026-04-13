@@ -1,5 +1,6 @@
 @echo off
 set PYTHONUNBUFFERED=1
+set PATH=C:\Users\Tsubasa\AppData\Local\Programs\Python\Python311;C:\Users\Tsubasa\AppData\Local\Programs\Python\Python311\Scripts;%PATH%
 cd /d C:\Users\Tsubasa\autoforge
 
 :loop

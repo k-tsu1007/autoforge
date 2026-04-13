@@ -1,6 +1,6 @@
 @echo off
 REM watchdog.bat — 5分ごとに実行。fuku_ai_sns daemon/webapp が落ちていたら再起動する
-REM schtasks /Create /TN autoforge-watchdog /TR "C:\Users\Tsubasa\autoforge\watchdog.bat" /SC MINUTE /MO 5 /F
+set PATH=C:\Users\Tsubasa\AppData\Local\Programs\Python\Python311;C:\Users\Tsubasa\AppData\Local\Programs\Python\Python311\Scripts;%PATH%
 
 cd /d C:\Users\Tsubasa\autoforge
 
