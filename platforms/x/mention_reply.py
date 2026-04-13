@@ -60,8 +60,9 @@ def _load_cookies():
     return None
 
 
-def _already_processed(mention_url: str) -> bool:
-    """mention_reply_queue または growth_actions に処理済みか確認。"""
+def _already_processed(mention_url: str, author: str = "") -> bool:
+    """mention_reply_queue または growth_actions に処理済みか確認。
+    同一著者に対して直近24時間以内にメンション返信していたらスキップ。"""
     try:
         from core.db import get_connection
         conn = get_connection()
@@ -71,21 +72,26 @@ def _already_processed(mention_url: str) -> bool:
         ).fetchone()
         if row:
             return True
-        # growth_actionsに同URL（いいね or リプライ済み）
+        # growth_actionsに同URL
         row = conn.execute(
-            "SELECT id FROM growth_actions WHERE target_url = ? AND action_type IN ('mention_like', 'mention_reply')",
+            "SELECT id FROM growth_actions WHERE target_url = ?",
             (mention_url,)
         ).fetchone()
         if row:
             return True
-        # 通常のreply/quote_tweetとしても処理済みならスキップ
-        row = conn.execute(
-            "SELECT id FROM growth_actions WHERE target_url = ? AND action_type IN ('reply', 'quote_tweet')",
-            (mention_url,)
-        ).fetchone()
-        return bool(row)
+        # 同一著者に対して直近24時間以内にメンション返信済みならスキップ
+        # （同じ人との会話スレッドに何度も返信しない）
+        if author:
+            row = conn.execute(
+                "SELECT id FROM growth_actions WHERE target_user = ? AND action_type = 'mention_reply' "
+                "AND executed_at >= datetime('now', '+9 hours', '-24 hours')",
+                (author,)
+            ).fetchone()
+            if row:
+                return True
     except Exception:
-        return False
+        pass
+    return False
 
 
 def _record_like(mention_url: str, mention_text: str, author: str) -> None:
@@ -259,15 +265,6 @@ def run_scan() -> dict:
                         continue
                     mention_url = f"https://x.com{href}" if href.startswith("/") else href
 
-                    if _already_processed(mention_url):
-                        continue
-
-                    # テキスト取得
-                    text_el = article.locator('[data-testid="tweetText"]').first
-                    mention_text = text_el.inner_text() if text_el.count() > 0 else ""
-                    if not mention_text:
-                        continue
-
                     # 著者取得（User-Name要素の全テキストから@usernameを抽出）
                     user_el = article.locator('[data-testid="User-Name"]').first
                     author_full = user_el.inner_text() if user_el.count() > 0 else ""
@@ -278,6 +275,16 @@ def run_scan() -> dict:
                         continue
                     # URLにも自分のユーザー名が含まれていたらスキップ
                     if f"/{my_user}/" in mention_url.lower():
+                        continue
+
+                    # 処理済み or 同一著者に直近24時間以内にリプライ済みならスキップ
+                    if _already_processed(mention_url, author=author):
+                        continue
+
+                    # テキスト取得
+                    text_el = article.locator('[data-testid="tweetText"]').first
+                    mention_text = text_el.inner_text() if text_el.count() > 0 else ""
+                    if not mention_text:
                         continue
 
                     print(f"  処理: @{author} — {mention_text[:50]}")
