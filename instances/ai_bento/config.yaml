@@ -21,7 +21,7 @@ platforms:
 
   x:
     enabled: true
-    username: ""           # Xアカウント作成後に設定
+    username: "ai_bento"
     monetization_eligible: false
 
   wordpress:

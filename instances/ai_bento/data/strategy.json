@@ -1,0 +1,32 @@
+{
+  "publishing_params": {
+    "phase": "trust_building",
+    "wp_daily_count": 2
+  },
+  "content_params": {
+    "target_length_chars": 3000,
+    "tags_main": [
+      "AIツール",
+      "副業",
+      "ChatGPT",
+      "生成AI",
+      "WordPress",
+      "ブログ",
+      "AIスクール"
+    ]
+  },
+  "generation_params": {
+    "model": "claude-opus-4-5",
+    "max_tokens": 4096,
+    "temperature": 0.8
+  },
+  "advisor": {
+    "wp_daily_target": 2,
+    "wp_post_slots": ["10:00", "19:00"],
+    "x_daily_target": 10,
+    "x_post_slots": [
+      "07:30", "09:00", "11:00", "13:00", "15:00",
+      "17:00", "19:30", "21:00", "22:30", "23:30"
+    ]
+  }
+}
