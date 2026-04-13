@@ -130,6 +130,7 @@ def try_direct_login(session_path: Path) -> bool:
             page.wait_for_selector("input[autocomplete='username']", timeout=30000)
             page.fill("input[autocomplete='username']", email)
             page.keyboard.press("Enter")
+            page.wait_for_timeout(3000)
 
             # ユーザー名確認ステップ（出る場合）
             try:
@@ -138,11 +139,24 @@ def try_direct_login(session_path: Path) -> bool:
                     print("  ユーザー名確認ステップ...")
                     inp.fill(username or email.split("@")[0])
                     page.keyboard.press("Enter")
+                    page.wait_for_timeout(3000)
             except PwTimeout:
                 pass
 
-            # パスワード欄が出るまで待つ
-            page.wait_for_selector("input[name='password']", timeout=20000)
+            # パスワード欄が出るまで待つ（タイムアウト伸ばす）
+            try:
+                page.wait_for_selector("input[name='password']", timeout=30000)
+            except PwTimeout:
+                # スクリーンショットで状態確認
+                _inst = os.environ.get("AC_INSTANCE", "default")
+                snap = ROOT / "instances" / _inst / "data" / "login_debug.png"
+                snap.parent.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(snap))
+                print(f"  パスワード欄が見つかりません。スクリーンショット保存: {snap}")
+                print(f"  現在URL: {page.url}")
+                browser.close()
+                return False
+
             page.fill("input[name='password']", password)
             page.keyboard.press("Enter")
             page.wait_for_timeout(5000)
