@@ -113,7 +113,15 @@ def try_direct_login(session_path: Path) -> bool:
         return False
 
     with sync_playwright() as p:
-        browser = p.webkit.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -121,6 +129,12 @@ def try_direct_login(session_path: Path) -> bool:
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 800},
+        )
+        # bot検知回避: webdriverプロパティを隠す
+        context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+            "Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});"
+            "window.chrome = {runtime: {}};"
         )
         page = context.new_page()
 
