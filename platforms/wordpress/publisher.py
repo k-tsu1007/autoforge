@@ -111,6 +111,41 @@ def markdown_to_html(md: str) -> str:
     return "\n".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
 
 
+def upload_media(site_url: str, auth: tuple, image_path: str, title: str = "") -> int | None:
+    """画像をWordPressメディアライブラリにアップロードしてIDを返す。"""
+    import requests
+
+    image_path = Path(image_path)
+    if not image_path.exists():
+        print(f"  画像ファイルが見つかりません: {image_path}")
+        return None
+
+    mime = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{image_path.name}"',
+        "Content-Type": mime,
+    }
+    try:
+        with open(image_path, "rb") as f:
+            r = requests.post(
+                f"{site_url}/wp-json/wp/v2/media",
+                headers=headers,
+                data=f,
+                auth=auth,
+                timeout=30,
+            )
+        if r.status_code in (200, 201):
+            media_id = r.json().get("id")
+            print(f"  メディアアップロード成功: ID={media_id}")
+            return media_id
+        else:
+            print(f"  メディアアップロード失敗: {r.status_code} {r.text[:200]}")
+            return None
+    except Exception as e:
+        print(f"  メディアアップロードエラー: {e}")
+        return None
+
+
 def publish_article(article: dict) -> str | None:
     """WordPress REST API で記事を投稿する。
 
@@ -125,6 +160,21 @@ def publish_article(article: dict) -> str | None:
         return None
 
     auth = (username, app_password)
+
+    # サムネイル生成 → メディアアップロード
+    featured_media_id = None
+    try:
+        from core.image.thumbnail import generate_thumbnail
+        print("サムネイル生成中...")
+        thumb_path = generate_thumbnail(
+            title=article["title"],
+            genre=article.get("genre", ""),
+            tags=article.get("tags", []),
+            use_sd=False,  # VPS環境ではSD無効、Pillowのみ使用
+        )
+        featured_media_id = upload_media(site_url, auth, thumb_path, article["title"])
+    except Exception as e:
+        print(f"サムネイル処理失敗（スキップ）: {e}")
 
     # Markdown → HTML
     content_md = article.get("content", article.get("free_content", ""))
@@ -142,6 +192,8 @@ def publish_article(article: dict) -> str | None:
         "tags": tag_ids,
         "categories": cat_ids if cat_ids else [],
     }
+    if featured_media_id:
+        payload["featured_media"] = featured_media_id
 
     try:
         r = requests.post(
