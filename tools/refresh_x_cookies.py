@@ -139,7 +139,7 @@ def try_direct_login(session_path: Path) -> bool:
             if not email_sel:
                 raise Exception("メール入力欄が見つかりません")
             page.click(email_sel)
-            page.fill(email_sel, email)
+            page.keyboard.type(email, delay=50)
             page.keyboard.press("Enter")
             page.wait_for_timeout(3000)
 
@@ -148,7 +148,8 @@ def try_direct_login(session_path: Path) -> bool:
                 inp = page.locator("input[data-testid='ocfEnterTextTextInput']")
                 if inp.is_visible(timeout=5000):
                     print("  ユーザー名確認ステップ...")
-                    inp.fill(username or email.split("@")[0])
+                    inp.click()
+                    page.keyboard.type(username or email.split("@")[0], delay=50)
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(3000)
             except PwTimeout:
@@ -168,7 +169,8 @@ def try_direct_login(session_path: Path) -> bool:
                 browser.close()
                 return False
 
-            page.fill("input[name='password']", password)
+            page.click("input[name='password']")
+            page.keyboard.type(password, delay=50)
             page.keyboard.press("Enter")
             page.wait_for_timeout(5000)
 
