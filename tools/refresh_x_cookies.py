@@ -142,13 +142,28 @@ def try_direct_login(session_path: Path) -> bool:
                     [sel, value],
                 )
 
-            # メール入力欄を待つ
+            # ログインフォーム表示待ち
             page.wait_for_selector("input", timeout=20000)
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(1500)
+
+            # デバッグ: メール入力前のスクリーンショット
+            _inst0 = os.environ.get("AC_INSTANCE", "default")
+            _snap0 = ROOT / "instances" / _inst0 / "data" / "login_step1.png"
+            _snap0.parent.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(_snap0))
+            print(f"  step1 screenshot: {_snap0} / URL: {page.url}")
 
             react_fill("input", email)
-            page.wait_for_timeout(500)
-            page.keyboard.press("Enter")
+            page.wait_for_timeout(1000)
+
+            # デバッグ: メール入力後のスクリーンショット
+            page.screenshot(path=str(ROOT / "instances" / _inst0 / "data" / "login_step2.png"))
+
+            # 「次へ」ボタンをクリック（Enterの代わり）
+            try:
+                page.click("button[data-testid='LoginForm_Login_Button'], button:has-text('次へ'), div[data-testid='LoginForm_Login_Button']", timeout=5000)
+            except PwTimeout:
+                page.keyboard.press("Enter")
             page.wait_for_timeout(3000)
 
             # ユーザー名確認ステップ（出る場合）
