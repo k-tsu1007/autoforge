@@ -124,6 +124,47 @@ def job_evening_pipeline():
     _run_pipeline_subset("evening_pipeline", group="evening")
 
 
+def _wp_should_publish_now() -> tuple[bool, str]:
+    """WordPress 用スロット＋日次上限チェック。"""
+    try:
+        from core.paths import strategy_path
+        import json as _json
+        strategy = _json.loads(strategy_path().read_text(encoding="utf-8"))
+    except Exception:
+        strategy = {}
+
+    now = datetime.now(JST)
+    today_str = now.strftime("%Y-%m-%d")
+
+    adv = strategy.get("advisor") or {}
+    daily_limit = adv.get("wp_daily_target") or adv.get("wp_articles_per_day") or 2
+
+    # 日次上限チェック
+    try:
+        from core.db import get_connection
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT COUNT(*) FROM articles WHERE substr(COALESCE(published_at,''),1,10)=?",
+            (today_str,),
+        ).fetchone()
+        published_today = row[0] if row else 0
+    except Exception:
+        published_today = 0
+
+    if published_today >= daily_limit:
+        return False, f"本日の投稿上限到達 ({published_today}/{daily_limit})"
+
+    # スロットチェック
+    slots = adv.get("wp_post_slots") or ["10:00", "19:00"]
+
+    from core.slot_utils import is_now_in_slots
+    matched = is_now_in_slots(now, slots, window_min=10)
+    if not matched:
+        return False, f"WP投稿スロット外 (now={now.strftime('%H:%M')})"
+
+    return True, f"WP投稿スロット ({matched}), 本日 {published_today}/{daily_limit} 本"
+
+
 def job_content_post_check():
     """コンテンツ投稿チェック — advisor のスロットを見て generate → publish を実行。"""
     try:
@@ -133,6 +174,8 @@ def job_content_post_check():
         if platform == "note":
             from platforms.note.policy import should_publish_now
             ok, reason = should_publish_now()
+        elif platform == "wordpress":
+            ok, reason = _wp_should_publish_now()
         else:
             ok, reason = True, "policy-less platform"
 
