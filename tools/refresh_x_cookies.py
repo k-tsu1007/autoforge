@@ -114,12 +114,9 @@ def try_direct_login(session_path: Path) -> bool:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
             ],
         )
         context = browser.new_context(
