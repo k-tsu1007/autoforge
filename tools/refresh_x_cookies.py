@@ -118,27 +118,27 @@ def try_direct_login(session_path: Path) -> bool:
         page = context.new_page()
 
         try:
-            page.goto("https://x.com/i/flow/login", timeout=30000)
-            page.wait_for_timeout(2000)
-
+            page.goto("https://x.com/i/flow/login", timeout=60000)
+            # メール入力欄が出るまで待つ
+            page.wait_for_selector("input[autocomplete='username']", timeout=30000)
             page.fill("input[autocomplete='username']", email)
             page.keyboard.press("Enter")
-            page.wait_for_timeout(2000)
 
             # ユーザー名確認ステップ（出る場合）
             try:
                 inp = page.locator("input[data-testid='ocfEnterTextTextInput']")
-                if inp.is_visible(timeout=3000):
+                if inp.is_visible(timeout=5000):
                     print("  ユーザー名確認ステップ...")
                     inp.fill(username or email.split("@")[0])
                     page.keyboard.press("Enter")
-                    page.wait_for_timeout(2000)
             except PwTimeout:
                 pass
 
+            # パスワード欄が出るまで待つ
+            page.wait_for_selector("input[name='password']", timeout=20000)
             page.fill("input[name='password']", password)
             page.keyboard.press("Enter")
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(5000)
 
             cookies = context.cookies("https://x.com")
             has_auth = any(c["name"] == "auth_token" for c in cookies)
