@@ -65,13 +65,22 @@ def _already_processed(mention_url: str) -> bool:
     try:
         from core.db import get_connection
         conn = get_connection()
+        # キュー内に同URL
         row = conn.execute(
             "SELECT id FROM mention_reply_queue WHERE mention_url = ?", (mention_url,)
         ).fetchone()
         if row:
             return True
+        # growth_actionsに同URL（いいね or リプライ済み）
         row = conn.execute(
             "SELECT id FROM growth_actions WHERE target_url = ? AND action_type IN ('mention_like', 'mention_reply')",
+            (mention_url,)
+        ).fetchone()
+        if row:
+            return True
+        # 通常のreply/quote_tweetとしても処理済みならスキップ
+        row = conn.execute(
+            "SELECT id FROM growth_actions WHERE target_url = ? AND action_type IN ('reply', 'quote_tweet')",
             (mention_url,)
         ).fetchone()
         return bool(row)
@@ -223,11 +232,29 @@ def run_scan() -> dict:
             articles = page.locator("article").all()
             print(f"メンション取得: {len(articles)}件")
 
+            my_user = os.environ.get("X_USERNAME", "fuku_ai07").lower()
+
             for article in articles[:MAX_SCAN_PER_RUN]:
                 try:
                     # ツイートURLを取得
-                    time_link = article.locator("time").locator("..").first
-                    href = time_link.get_attribute("href") if time_link.count() > 0 else None
+                    time_link = article.locator("time").first
+                    if time_link.count() == 0:
+                        continue
+
+                    # 24時間以上前のメンションはスキップ
+                    time_dt = time_link.get_attribute("datetime") or ""
+                    if time_dt:
+                        try:
+                            from datetime import datetime, timezone
+                            tweet_time = datetime.fromisoformat(time_dt.replace("Z", "+00:00"))
+                            age = datetime.now(timezone.utc) - tweet_time
+                            if age.total_seconds() > 86400:  # 24時間
+                                continue
+                        except Exception:
+                            pass
+
+                    parent_link = time_link.locator("..").first
+                    href = parent_link.get_attribute("href") if parent_link.count() > 0 else None
                     if not href:
                         continue
                     mention_url = f"https://x.com{href}" if href.startswith("/") else href
@@ -241,14 +268,16 @@ def run_scan() -> dict:
                     if not mention_text:
                         continue
 
-                    # 著者取得
+                    # 著者取得（User-Name要素の全テキストから@usernameを抽出）
                     user_el = article.locator('[data-testid="User-Name"]').first
-                    author = user_el.inner_text().split("\n")[0] if user_el.count() > 0 else "unknown"
+                    author_full = user_el.inner_text() if user_el.count() > 0 else ""
+                    author = author_full.split("\n")[0] if author_full else "unknown"
 
-                    # 自分自身の投稿はスキップ
-                    my_user = os.environ.get("X_USERNAME", "fuku_ai07").lower()
-                    author_lower = author.lower()
-                    if my_user in author_lower or f"@{my_user}" in author_lower:
+                    # 自分自身の投稿はスキップ（@username がテキスト内に含まれるか）
+                    if f"@{my_user}" in author_full.lower() or my_user in author_full.lower():
+                        continue
+                    # URLにも自分のユーザー名が含まれていたらスキップ
+                    if f"/{my_user}/" in mention_url.lower():
                         continue
 
                     print(f"  処理: @{author} — {mention_text[:50]}")
