@@ -17,7 +17,7 @@ def _load_env(path):
 
 _load_env("instances/ai_bento/.env")
 
-from platforms.x.actions import post_tweet
+from platforms.x.poster import post_to_x
 print("テスト投稿中...")
-result = post_tweet("AIツールを毎日検証中🤖 会社員がAIで副業を目指すリアルな記録を発信します。フォローよろしくお願いします！ #AI副業 #ChatGPT #生成AI")
+result = post_to_x("AIツールを毎日検証中🤖 会社員がAIで副業を目指すリアルな記録を発信します。フォローよろしくお願いします！ #AI副業 #ChatGPT #生成AI")
 print(f"結果: {result}")
