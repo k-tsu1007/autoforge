@@ -222,6 +222,8 @@ def get_connection() -> sqlite3.Connection:
             cols = [r["name"] for r in _connection.execute("PRAGMA table_info(articles)").fetchall()]
             if "summary" not in cols:
                 _connection.execute("ALTER TABLE articles ADD COLUMN summary TEXT")
+            if "url" not in cols:
+                _connection.execute("ALTER TABLE articles ADD COLUMN url TEXT")
         except Exception:
             pass
         _connection.commit()

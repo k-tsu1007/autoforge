@@ -212,8 +212,8 @@ def main() -> tuple | None:
     # ツイート案生成（X連携）
     tweet_drafts = []
     try:
-        from platforms.x.tweet_generator import generate_link_tweet
-        tweet_drafts = generate_link_tweet(article["title"], post_url)
+        from platforms.x.tweet_generator import generate_batch
+        tweet_drafts = generate_batch(1)
     except Exception as e:
         print(f"ツイート案生成失敗: {e}")
 
