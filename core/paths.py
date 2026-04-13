@@ -63,6 +63,29 @@ def logs_dir() -> Path:
     return REPO_ROOT / "logs"
 
 
+def prompts_dir() -> Path:
+    """Instance prompts directory (instances/<name>/prompts/)."""
+    inst = _try_instance()
+    if inst:
+        return inst.root / "prompts"
+    return REPO_ROOT / "prompts"
+
+
+def load_prompt(name: str, **kwargs) -> str:
+    """Load a prompt template from the instance's prompts/ directory.
+
+    Falls back to empty string if file not found.
+    Supports {variable} substitution via kwargs.
+    """
+    p = prompts_dir() / name
+    if not p.exists():
+        return ""
+    text = p.read_text(encoding="utf-8")
+    if kwargs:
+        text = text.format_map(kwargs)
+    return text
+
+
 def db_path() -> Path:
     inst = _try_instance()
     if inst:

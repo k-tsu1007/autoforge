@@ -125,30 +125,30 @@ def _decide_reply(mention_text: str) -> dict:
     try:
         from core.llm.wrapper import call_llm
 
-        persona = "あなたは本業をしながらAI・note・SNSの副収入を試している30代です。"
+        # インスタンスのプロンプトファイルを優先読み込み
+        prompt = ""
+        try:
+            from core.paths import load_prompt
+            prompt = load_prompt("mention_reply.txt", mention_text=mention_text[:300])
+        except Exception:
+            pass
 
-        prompt = f"""{persona}
+        if not prompt:
+            prompt = f"""あなたは本業をしながらAI・note・SNSの副収入を試している30代です。
 
-以下は自分のツイートへの返信です。この返信に対して「自然に会話を続けるべきか」「ここで終えるべきか」を判断し、返す場合は一言を書いてください。
+以下は自分のツイートへの返信です。「自然に会話を続けるべきか」「ここで終えるべきか」を判断してください。
 
 【相手の返信】
 {mention_text[:300]}
 
 【判断基準】
-- 相手が質問・感想・興味を示している → 返す
-- 相手が単なる感謝・了解・スタンプ的な一言 → 終える
-- 相手が否定・クレーム系 → 終える（無視）
-- 会話がひと段落した自然な流れ → 終える
+- 質問・感想・興味 → 返す
+- 感謝・了解・スタンプ → 終える
+- 否定・クレーム → 終える
 
-【返す場合のトーン】
-- 発見・興味・軽い問い返しを起点にする
-- 相手に向けて書く。自分語りや重い話にしない
-- 明るすぎず、暗すぎない対等な会話トーン
-- 70字以内、ハッシュタグなし、URL禁止
-
-【出力フォーマット（必ずこの形式で）】
+【出力フォーマット】
 REPLY: yes または no
-TEXT: （返す場合のみ一言。noなら空白）"""
+TEXT: （返す場合のみ70字以内の一言）"""
 
         raw = call_llm(prompt, task_type="strategy_evolution", temperature=0.8, max_tokens=150).strip()
 
