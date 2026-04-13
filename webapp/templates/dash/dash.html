@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div id="d-wrap"
+     hx-get="/dash/partial"
+     hx-trigger="every 30s"
+     hx-swap="innerHTML">
+  {% include "dash/dash_partial.html" %}
+</div>
+{% endblock %}

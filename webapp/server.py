@@ -228,6 +228,22 @@ def brain_partial(request: Request, user: str = Depends(check_auth)):
     return templates.TemplateResponse(request=request, name="brain_partial.html", context={"data": data})
 
 
+@app.get("/dash", response_class=HTMLResponse)
+def dash_page(request: Request, user: str = Depends(check_auth)):
+    """新ダッシュボード。"""
+    from webapp.brain import build_brain_data
+    data = build_brain_data()
+    return templates.TemplateResponse(request=request, name="dash/dash.html", context={"data": data})
+
+
+@app.get("/dash/partial", response_class=HTMLResponse)
+def dash_partial(request: Request, user: str = Depends(check_auth)):
+    """HTMX partial — /dash の30秒更新用。"""
+    from webapp.brain import build_brain_data
+    data = build_brain_data()
+    return templates.TemplateResponse(request=request, name="dash/dash_partial.html", context={"data": data})
+
+
 @app.get("/activity", response_class=HTMLResponse)
 def activity_page(request: Request, user: str = Depends(check_auth)):
     """ライブアクティビティビュー（GitHub Actions風）。"""

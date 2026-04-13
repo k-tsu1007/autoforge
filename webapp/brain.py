@@ -328,14 +328,19 @@ def compute_today_stats() -> dict:
 
 
 def _next_scheduled(today_plan: list) -> dict | None:
-    """today_plan から「次に来るアクション」を返す。"""
+    """today_plan から「次に来るアクション」を返す。minutes_left 付き。"""
     now = datetime.now(JST)
     now_str = now.strftime("%H:%M")
     for row in today_plan:
-        # time フィールドの最初のスロットだけ比較
         first = (row.get("time") or "").split(" / ")[0].strip()
         if first and first != "—" and first > now_str:
-            return {"time": first, "what": row["what"], "icon": row["icon"]}
+            try:
+                h, m = int(first[:2]), int(first[3:])
+                target_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                mins = max(0, int((target_dt - now).total_seconds() / 60))
+            except Exception:
+                mins = None
+            return {"time": first, "what": row["what"], "icon": row["icon"], "minutes_left": mins}
     return None
 
 
