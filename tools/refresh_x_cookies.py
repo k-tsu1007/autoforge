@@ -159,12 +159,13 @@ def try_direct_login(session_path: Path) -> bool:
             # デバッグ: メール入力後のスクリーンショット
             page.screenshot(path=str(ROOT / "instances" / _inst0 / "data" / "login_step2.png"))
 
-            # 「次へ」ボタンをクリック（Enterの代わり）
-            try:
-                page.click("button[data-testid='LoginForm_Login_Button'], button:has-text('次へ'), div[data-testid='LoginForm_Login_Button']", timeout=5000)
-            except PwTimeout:
-                page.keyboard.press("Enter")
+            # Enterキーで次へ進む
+            page.keyboard.press("Enter")
             page.wait_for_timeout(3000)
+
+            # デバッグ: Enter後のスクリーンショット
+            page.screenshot(path=str(ROOT / "instances" / _inst0 / "data" / "login_step3.png"))
+            print(f"  step3 URL: {page.url}")
 
             # ユーザー名確認ステップ（出る場合）
             try:
