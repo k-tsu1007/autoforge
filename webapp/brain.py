@@ -148,7 +148,11 @@ def check_action_items() -> list[dict]:
         if cookie_path.exists():
             cookies = json.loads(cookie_path.read_text(encoding="utf-8"))
             now_ts = datetime.now(JST).timestamp()
-            min_exp = min((c.get("expires", 0) for c in cookies if c.get("expires", 0) > 0), default=0)
+            # auth_token の有効期限を優先チェック（Cloudflare 等の短命クッキーを除外）
+            auth_exps = [c.get("expires", 0) for c in cookies if c.get("name") == "auth_token" and c.get("expires", 0) > 0]
+            min_exp = auth_exps[0] if auth_exps else min(
+                (c.get("expires", 0) for c in cookies if c.get("expires", 0) > now_ts + 86400 * 2), default=0
+            )
             if min_exp:
                 days_left = int((min_exp - now_ts) / 86400)
                 if days_left < 14:
