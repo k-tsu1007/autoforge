@@ -164,10 +164,22 @@ def try_direct_login(session_path: Path) -> bool:
             except PwTimeout:
                 pass
 
-            # パスワード欄が出るまで待つ
+            # パスワード欄が出るまで待つ（先にcookieチェック）
             try:
                 page.wait_for_selector("input[name='password']", timeout=20000)
             except PwTimeout:
+                # パスワード不要でログイン済みの可能性をチェック
+                cookies_now = context.cookies("https://x.com")
+                if any(c["name"] == "auth_token" for c in cookies_now):
+                    print("  パスワード不要でログイン済み！")
+                    session_path.parent.mkdir(parents=True, exist_ok=True)
+                    session_path.write_text(
+                        json.dumps(cookies_now, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    print(f"[OK] {len(cookies_now)}件のCookieを保存: {session_path}")
+                    browser.close()
+                    return True
                 _inst = os.environ.get("AC_INSTANCE", "default")
                 snap = ROOT / "instances" / _inst / "data" / "login_debug.png"
                 snap.parent.mkdir(parents=True, exist_ok=True)
