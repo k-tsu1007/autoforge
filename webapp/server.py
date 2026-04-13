@@ -220,6 +220,14 @@ def brain_page(request: Request, user: str = Depends(check_auth)):
     return templates.TemplateResponse(request=request, name="brain.html", context={"data": data})
 
 
+@app.get("/brain/partial", response_class=HTMLResponse)
+def brain_partial(request: Request, user: str = Depends(check_auth)):
+    """HTMX用 partial — スクロール位置を保持したまま30秒ごとに更新。"""
+    from webapp.brain import build_brain_data
+    data = build_brain_data()
+    return templates.TemplateResponse(request=request, name="brain_partial.html", context={"data": data})
+
+
 @app.get("/activity", response_class=HTMLResponse)
 def activity_page(request: Request, user: str = Depends(check_auth)):
     """ライブアクティビティビュー（GitHub Actions風）。"""

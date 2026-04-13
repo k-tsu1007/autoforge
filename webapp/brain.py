@@ -382,6 +382,10 @@ def build_brain_data() -> dict:
         cost7 = {}
         cost30 = {}
 
+    snapshots = get_recent_snapshots(30)
+    today_stats = compute_today_stats()
+    today_plan = _build_today_plan(strategy)
+
     return {
         "phase": phase,
         "north_star": {
@@ -397,14 +401,17 @@ def build_brain_data() -> dict:
         "advisor_summary": advisor_summary,
         "actions": check_action_items(),
         "events": get_recent_events(24),
-        "snapshots": get_recent_snapshots(30),
+        "snapshots": snapshots,
         "lifts": lifts,
         "cost7": cost7,
         "cost30": cost30,
         "goal": _build_goal(strategy),
-        "today_plan": _build_today_plan(strategy),
-        "today_stats": compute_today_stats(),
-        "next_event": _next_scheduled(_build_today_plan(strategy)),
+        "today_plan": today_plan,
+        "today_stats": today_stats,
+        "today_achievement": _today_achievement(today_stats, strategy),
+        "next_event": _next_scheduled(today_plan),
+        "daemon_status": _daemon_status(),
+        "sparkline_pts": _sparkline_pts(snapshots[:14]),
         "updated_at": datetime.now(JST).strftime("%H:%M:%S"),
     }
 
@@ -458,6 +465,80 @@ def _build_today_plan(strategy: dict) -> list:
         {"icon": "❤️", "time": " / ".join(like_slots) if like_slots else "—", "what": f"いいね ({likes_target}件)",   "detail": "advisor が決めた時刻に1件。10分ごとにチェック"},
         {"icon": "🌙", "time": "22:00",        "what": "夜のまとめ",              "detail": "Discord通知＋ダッシュボード更新＋(日曜のみ)忘却処理"},
     ]
+
+
+def _daemon_status() -> dict:
+    """daemon の死活状態を詳細に返す。"""
+    from core.db import get_connection
+    conn = get_connection()
+    h = conn.execute("SELECT * FROM health WHERE component='daemon'").fetchone()
+    if not h:
+        return {"alive": False, "seconds_ago": None, "display": "記録なし"}
+    try:
+        hb = datetime.fromisoformat(str(h["last_heartbeat"]).replace("Z", "+00:00"))
+        if hb.tzinfo is None:
+            hb = hb.replace(tzinfo=JST)
+        secs = int((datetime.now(JST) - hb).total_seconds())
+        alive = secs < 300
+        if secs < 60:
+            display = f"{secs}秒前"
+        elif secs < 3600:
+            display = f"{secs // 60}分前"
+        else:
+            display = f"{secs // 3600}時間前"
+        return {"alive": alive, "seconds_ago": secs, "display": display}
+    except Exception:
+        return {"alive": False, "seconds_ago": None, "display": "解析エラー"}
+
+
+def _today_achievement(today_stats: dict, strategy: dict) -> dict:
+    """今日の実績 vs 目標を返す。"""
+    adv = strategy.get("advisor") or {}
+    note_target = int(adv.get("note_daily_target") or 3)
+    x_target = int(adv.get("single_daily_target") or 20)
+    growth_target = int(adv.get("growth_daily_likes") or 3)
+
+    def _pct(actual, target):
+        if not target:
+            return 0
+        return min(100, round(actual / target * 100))
+
+    return {
+        "articles": {
+            "actual": today_stats["articles"],
+            "target": note_target,
+            "pct": _pct(today_stats["articles"], note_target),
+        },
+        "tweets": {
+            "actual": today_stats["tweets"],
+            "target": x_target,
+            "pct": _pct(today_stats["tweets"], x_target),
+        },
+        "growth": {
+            "actual": today_stats["growth_actions"],
+            "target": growth_target,
+            "pct": _pct(today_stats["growth_actions"], growth_target),
+        },
+        "likes": {
+            "actual": today_stats["likes_received"],
+            "target": None,
+            "pct": None,
+        },
+    }
+
+
+def _sparkline_pts(snapshots: list, width: int = 120, height: int = 30) -> str:
+    """スナップショットから SVG polyline の points 文字列を生成する（古→新の順）。"""
+    vals = [float(s["north_star_value"] or 0) for s in reversed(snapshots)]
+    if len(vals) < 2:
+        return ""
+    max_v = max(vals) or 1
+    pts = []
+    for i, v in enumerate(vals):
+        x = round(i / (len(vals) - 1) * width, 1)
+        y = round(height - (v / max_v) * (height - 4) - 2, 1)
+        pts.append(f"{x},{y}")
+    return " ".join(pts)
 
 
 def _build_goal(strategy: dict) -> dict:
