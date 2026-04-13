@@ -29,8 +29,11 @@ try:
     cols = [d[0] for d in conn.execute("SELECT * FROM tweet_queue LIMIT 0").description or []]
     print(f"tweet_queue columns: {cols}")
     print(f"ツイートキュー: {len(rows)}件 (直近10件)")
-    for r in rows:
-        print(f"  {r}")
+    posted = sum(1 for r in rows if r["posted"])
+    pending = [r for r in rows if not r["posted"]]
+    print(f"  未投稿: {len(pending)}件 / 投稿済: {posted}件")
+    for r in pending[:5]:
+        print(f"  [{r['type']}] {r['text'][:70]}...")
 except Exception as e:
     print(f"tweetsテーブルエラー: {e}")
     # テーブル一覧
