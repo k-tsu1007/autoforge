@@ -127,19 +127,26 @@ def try_direct_login(session_path: Path) -> bool:
         try:
             page.goto("https://x.com/i/flow/login", timeout=60000)
             # メール入力欄が出るまで待つ
-            # メール入力欄を複数セレクタで探す
-            email_sel = None
-            for sel in ["input[autocomplete='username']", "input[name='text']", "input[type='text']"]:
-                try:
-                    page.wait_for_selector(sel, timeout=10000)
-                    email_sel = sel
-                    break
-                except PwTimeout:
-                    continue
-            if not email_sel:
-                raise Exception("メール入力欄が見つかりません")
-            page.click(email_sel)
-            page.keyboard.type(email, delay=50)
+            def react_fill(sel: str, value: str):
+                """ReactのinputにJSでネイティブイベントを発火しながら値をセット。"""
+                page.evaluate(f"""
+                    (function(sel, val) {{
+                        var inp = document.querySelector(sel);
+                        if (!inp) return;
+                        var setter = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'value').set;
+                        setter.call(inp, val);
+                        inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    }})('{sel}', arguments[0]);
+                """, value)
+
+            # メール入力欄を待つ
+            page.wait_for_selector("input", timeout=20000)
+            page.wait_for_timeout(1000)
+
+            react_fill("input", email)
+            page.wait_for_timeout(500)
             page.keyboard.press("Enter")
             page.wait_for_timeout(3000)
 
@@ -148,29 +155,29 @@ def try_direct_login(session_path: Path) -> bool:
                 inp = page.locator("input[data-testid='ocfEnterTextTextInput']")
                 if inp.is_visible(timeout=5000):
                     print("  ユーザー名確認ステップ...")
-                    inp.click()
-                    page.keyboard.type(username or email.split("@")[0], delay=50)
+                    react_fill("input[data-testid='ocfEnterTextTextInput']",
+                               username or email.split("@")[0])
+                    page.wait_for_timeout(500)
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(3000)
             except PwTimeout:
                 pass
 
-            # パスワード欄が出るまで待つ（タイムアウト伸ばす）
+            # パスワード欄が出るまで待つ
             try:
-                page.wait_for_selector("input[name='password']", timeout=30000)
+                page.wait_for_selector("input[name='password']", timeout=20000)
             except PwTimeout:
-                # スクリーンショットで状態確認
                 _inst = os.environ.get("AC_INSTANCE", "default")
                 snap = ROOT / "instances" / _inst / "data" / "login_debug.png"
                 snap.parent.mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(snap))
-                print(f"  パスワード欄が見つかりません。スクリーンショット保存: {snap}")
+                print(f"  パスワード欄が見つかりません。スクリーンショット: {snap}")
                 print(f"  現在URL: {page.url}")
                 browser.close()
                 return False
 
-            page.click("input[name='password']")
-            page.keyboard.type(password, delay=50)
+            react_fill("input[name='password']", password)
+            page.wait_for_timeout(500)
             page.keyboard.press("Enter")
             page.wait_for_timeout(5000)
 
