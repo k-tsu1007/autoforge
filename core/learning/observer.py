@@ -18,7 +18,8 @@ if sys.platform == "win32":
         pass
 
 ROOT = Path(__file__).resolve().parent
-SIGNALS_JSON = ROOT / "data" / "daily_signals.json"
+from core.paths import data_dir as _dd
+SIGNALS_JSON = _dd() / "daily_signals.json"
 JST = timezone(timedelta(hours=9))
 
 

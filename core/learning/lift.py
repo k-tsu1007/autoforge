@@ -28,8 +28,9 @@ if sys.platform == "win32":
         pass
 
 ROOT = Path(__file__).resolve().parent
-LIFTS_JSON = ROOT / "data" / "param_lifts.json"
-from core.paths import strategy_path as _sp; STRATEGY_JSON = _sp()
+from core.paths import strategy_path as _sp, data_dir as _dd
+STRATEGY_JSON = _sp()
+LIFTS_JSON = _dd() / "param_lifts.json"
 JST = timezone(timedelta(hours=9))
 
 MIN_SAMPLES = 2  # この件数未満の値は「探索中」扱い

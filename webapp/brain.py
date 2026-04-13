@@ -143,7 +143,8 @@ def check_action_items() -> list[dict]:
 
     # 2. X cookie 期限
     try:
-        cookie_path = ROOT / "x_session.json"
+        from core.paths import x_session_path
+        cookie_path = x_session_path()
         if cookie_path.exists():
             cookies = json.loads(cookie_path.read_text(encoding="utf-8"))
             now_ts = datetime.now(JST).timestamp()
@@ -379,9 +380,23 @@ def _build_today_plan(strategy: dict) -> list:
         x_target = single_target
         x_source = "fallback"
 
+    # コンテンツプラットフォームに応じた記事投稿スケジュール
+    try:
+        from core.content_platform import get_content_platform
+        content_platform = get_content_platform()
+    except Exception:
+        content_platform = "note"
+
+    if content_platform == "wordpress":
+        wp_slots = normalize_slots(adv.get("wp_post_slots") or ["10:00", "19:00"])
+        wp_target = adv.get("wp_daily_target") or adv.get("wp_articles_per_day") or 2
+        content_row = {"icon": "📝", "time": " / ".join(wp_slots), "what": f"WordPress記事公開 ({wp_target}本)", "detail": "wp_post_slots に従い generate→publish"}
+    else:
+        content_row = {"icon": "📝", "time": " / ".join(note_slots), "what": f"Note記事公開 ({note_target}本)", "detail": "advisor が決めた時間帯に generate→publish"}
+
     return [
         {"icon": "🌅", "time": "06:00",        "what": "朝の学習＋方針決定",     "detail": "前日メトリクス分析→Claudeが今日のパラメータを決定"},
-        {"icon": "📝", "time": " / ".join(note_slots), "what": f"Note記事公開 ({note_target}本)", "detail": "advisor が決めた時間帯に generate→publish"},
+        content_row,
         {"icon": "🐦", "time": x_time_str,    "what": f"単発ツイート ({x_target}本)", "detail": f"時刻決定元: {x_source} / 5分ごとにチェック"},
         {"icon": "🔁", "time": " / ".join(quote_slots) if quote_slots else "—", "what": f"引用RT ({quote_target}件)", "detail": "advisor が決めた時刻に1件。10分ごとにチェック"},
         {"icon": "💬", "time": " / ".join(reply_slots) if reply_slots else "—", "what": f"リプライ ({reply_target}件)", "detail": "advisor が決めた時刻に1件。10分ごとにチェック"},
