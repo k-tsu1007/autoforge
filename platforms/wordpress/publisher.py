@@ -168,9 +168,9 @@ def publish_article(article: dict) -> str | None:
         print("サムネイル生成中...")
         thumb_path = generate_thumbnail(
             title=article["title"],
-            genre=article.get("genre", ""),
+            genre="",   # カテゴリはCocoonが表示するためサムネイルには入れない
             tags=article.get("tags", []),
-            use_sd=False,  # VPS環境ではSD無効、Pillowのみ使用
+            use_sd=False,
         )
         featured_media_id = upload_media(site_url, auth, thumb_path, article["title"])
     except Exception as e:

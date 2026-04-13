@@ -52,7 +52,7 @@ for draft_path in sorted(published_dir.glob("draft_*.json")):
 
     # サムネイル生成
     print(f"\n処理中: {title}")
-    thumb_path = generate_thumbnail(title=title, genre=genre, tags=article.get("tags", []), use_sd=False)
+    thumb_path = generate_thumbnail(title=title, genre="", tags=article.get("tags", []), use_sd=False)
     media_id = upload_media(site_url, auth, thumb_path, title)
     if not media_id:
         continue
