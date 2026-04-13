@@ -291,6 +291,54 @@ def get_recent_events(hours: int = 24) -> list[dict]:
     return events[:30]
 
 
+def compute_today_stats() -> dict:
+    """今日だけの実績（累計ではなく当日分）。"""
+    from core.db import get_connection
+    conn = get_connection()
+    today = _today()
+
+    art = conn.execute(
+        "SELECT COUNT(*) as n, COALESCE(SUM(likes),0) as likes, COALESCE(SUM(views),0) as views"
+        " FROM articles WHERE substr(COALESCE(published_at,''),1,10)=?", (today,)
+    ).fetchone()
+
+    try:
+        tw = conn.execute(
+            "SELECT COUNT(*) as n FROM tweet_posted WHERE substr(COALESCE(posted_at,''),1,10)=?", (today,)
+        ).fetchone()
+        tweets_n = tw["n"] if tw else 0
+    except Exception:
+        tweets_n = 0
+
+    try:
+        gr = conn.execute(
+            "SELECT COUNT(*) as n FROM growth_actions WHERE substr(COALESCE(executed_at,''),1,10)=? AND success=1", (today,)
+        ).fetchone()
+        growth_n = gr["n"] if gr else 0
+    except Exception:
+        growth_n = 0
+
+    return {
+        "articles": int(art["n"]) if art else 0,
+        "likes_received": int(art["likes"]) if art else 0,
+        "views": int(art["views"]) if art else 0,
+        "tweets": tweets_n,
+        "growth_actions": growth_n,
+    }
+
+
+def _next_scheduled(today_plan: list) -> dict | None:
+    """today_plan から「次に来るアクション」を返す。"""
+    now = datetime.now(JST)
+    now_str = now.strftime("%H:%M")
+    for row in today_plan:
+        # time フィールドの最初のスロットだけ比較
+        first = (row.get("time") or "").split(" / ")[0].strip()
+        if first and first != "—" and first > now_str:
+            return {"time": first, "what": row["what"], "icon": row["icon"]}
+    return None
+
+
 def build_brain_data() -> dict:
     """Brain ページに渡すデータを構築する。"""
     from core.db import get_connection
@@ -355,6 +403,9 @@ def build_brain_data() -> dict:
         "cost30": cost30,
         "goal": _build_goal(strategy),
         "today_plan": _build_today_plan(strategy),
+        "today_stats": compute_today_stats(),
+        "next_event": _next_scheduled(_build_today_plan(strategy)),
+        "updated_at": datetime.now(JST).strftime("%H:%M:%S"),
     }
 
 
