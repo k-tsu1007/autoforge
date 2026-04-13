@@ -22,13 +22,15 @@ conn = get_connection()
 
 # tweets テーブル確認
 try:
+    # tweet_queue テーブルを使う
     rows = conn.execute(
-        "SELECT id, type, text, posted, created_at FROM tweets ORDER BY created_at DESC LIMIT 10"
+        "SELECT * FROM tweet_queue ORDER BY rowid DESC LIMIT 10"
     ).fetchall()
+    cols = [d[0] for d in conn.execute("SELECT * FROM tweet_queue LIMIT 0").description or []]
+    print(f"tweet_queue columns: {cols}")
     print(f"ツイートキュー: {len(rows)}件 (直近10件)")
     for r in rows:
-        status = "✅投稿済" if r[3] else "⏳未投稿"
-        print(f"  [{status}][{r[1]}] {r[2][:60]}...")
+        print(f"  {r}")
 except Exception as e:
     print(f"tweetsテーブルエラー: {e}")
     # テーブル一覧
