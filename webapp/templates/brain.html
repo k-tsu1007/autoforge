@@ -275,7 +275,7 @@
       {% set state = 'none' %}
     {% elif first_time < now_hm %}
       {% set state = 'done' %}
-    {% elif first_time == data.next_event.time if data.next_event else false %}
+    {% elif data.next_event and first_time == data.next_event.time %}
       {% set state = 'now' %}
     {% else %}
       {% set state = 'future' %}
@@ -295,7 +295,7 @@
         {% if row.time and ' / ' in row.time and state != 'done' %}
         <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.3rem;">
           {% for t in row.time.split(' / ') %}
-            <span style="background:#0f1419; border:1px solid #2f3336; color:{% if t.strip() < now_hm %}#555{% elif t.strip() == (data.next_event.time if data.next_event else '') %}#1d9bf0{% else %}#71767b{% endif %}; padding:0.1rem 0.4rem; border-radius:4px; font-family:monospace; font-size:0.78rem;">{{ t.strip() }}</span>
+            <span style="background:#0f1419; border:1px solid #2f3336; color:{% if t.strip() < now_hm %}#555{% elif data.next_event and t.strip() == data.next_event.time %}#1d9bf0{% else %}#71767b{% endif %}; padding:0.1rem 0.4rem; border-radius:4px; font-family:monospace; font-size:0.78rem;">{{ t.strip() }}</span>
           {% endfor %}
         </div>
         {% endif %}
