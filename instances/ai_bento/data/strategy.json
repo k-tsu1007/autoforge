@@ -20,6 +20,25 @@
     "max_tokens": 4096,
     "temperature": 0.8
   },
+  "seo_params": {
+    "seed_queries": [
+      "ChatGPT 使い方 副業",
+      "AIツール 比較 おすすめ",
+      "生成AI 仕事 活用",
+      "WordPress 始め方 初心者",
+      "AIスクール 評判 口コミ",
+      "副業 AI 会社員",
+      "エックスサーバー WordPress 設定",
+      "Claude ChatGPT 違い",
+      "AI 画像生成 副業",
+      "ブログ アフィリエイト AI"
+    ],
+    "relevant_terms": [
+      "AI", "ChatGPT", "Claude", "副業", "WordPress", "ブログ",
+      "生成AI", "AIツール", "スクール", "アフィリエイト", "収益",
+      "エックスサーバー", "VPS", "自動化", "会社員"
+    ]
+  },
   "advisor": {
     "wp_daily_target": 2,
     "wp_post_slots": ["10:00", "19:00"],

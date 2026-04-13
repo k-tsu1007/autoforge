@@ -1,0 +1,42 @@
+{
+  "publishing_params": {
+    "phase": "trust_building",
+    "weekly_paid_count": 2,
+    "weekly_seo_count": 2
+  },
+  "content_params": {
+    "target_length_chars": 2800,
+    "free_ratio": 0.65,
+    "tags_main": ["#ChatGPT活用", "#副業", "#SNS運用", "#生成AI", "#AI副業"],
+    "tweet_params": {
+      "tone": "親しみやすく、押し売り感なし",
+      "hashtags": ["#ChatGPT", "#副業", "#SNS運用"],
+      "account_stage": "初心者"
+    }
+  },
+  "generation_params": {
+    "model": "claude-opus-4-5",
+    "max_tokens": 4096,
+    "temperature": 0.8
+  },
+  "advisor": {
+    "note_daily_target": 1,
+    "note_post_slots": ["11:10"],
+    "single_daily_target": 20,
+    "single_post_slots": ["07:00","08:00","09:00","10:30","11:30","12:00","13:00","15:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"],
+    "quote_daily_target": 4,
+    "quote_post_slots": ["08:30","12:30","18:30","21:30"],
+    "reply_daily_target": 8,
+    "reply_post_slots": ["07:30","09:30","11:30","13:30","15:30","17:30","19:30","22:30"],
+    "like_post_slots": ["08:00","09:00","10:00","11:00","12:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"],
+    "min_gap_minutes": 30,
+    "growth_daily_likes": 15,
+    "growth_search_keywords": ["ChatGPT 副業", "生成AI 仕事術", "SNS運用 個人", "note 副業", "副業 初心者"],
+    "thread_length_default": 5,
+    "thread_length_min": 3,
+    "thread_length_max": 7,
+    "thread_weekly_target": 2,
+    "tweet_draft_patterns": ["link", "experiment", "comparison"],
+    "reasoning": "初期設定: 11:10スロットでテスト投稿"
+  }
+}

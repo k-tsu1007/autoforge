@@ -80,6 +80,20 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
     tags_main = params.get("tags_main", [])
     target_len = params.get("target_length_chars", 2000)
 
+    # SEOキーワードを取得（未使用のものを1件）
+    seo_keyword = ""
+    try:
+        from core.seo_keywords import get_next, refresh
+        seo_keyword = get_next() or ""
+        if not seo_keyword:
+            print("[generator] SEOキーワードが空のため refresh します...")
+            refresh()
+            seo_keyword = get_next() or ""
+        if seo_keyword:
+            print(f"[generator] SEOキーワード: {seo_keyword}")
+    except Exception as e:
+        print(f"[generator] SEOキーワード取得失敗（スキップ）: {e}")
+
     # 記事タイプを決定
     article_type = _get_article_type(strategy, history)
     print(f"[generator] 記事タイプ: {article_type}")
@@ -110,6 +124,11 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
     if all_titles[-10:]:
         existing_context = "\n## 直近の記事タイトル（同じ型・テーマの繰り返しを避ける）\n" + "\n".join(f"- {t}" for t in all_titles[-10:])
 
+    # SEOキーワード指示
+    seo_instruction = ""
+    if seo_keyword:
+        seo_instruction = f"\n## ターゲットSEOキーワード\n「{seo_keyword}」を記事タイトルと本文冒頭に自然に含めること。\n"
+
     topic_instruction = f"\n## トピック指定\n{topic_hint}\n" if topic_hint else ""
 
     # lift 学習結果
@@ -139,6 +158,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
 - CTAは「広告」「PR」と明示すること（絶対厳守）
 
 {type_prompt}
+{seo_instruction}
 {existing_context}
 {topic_instruction}
 {learning_hint}
@@ -171,6 +191,14 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
     )
 
     article["article_type"] = article_type
+
+    # 使用したSEOキーワードを記録
+    if seo_keyword:
+        try:
+            from core.seo_keywords import mark_used
+            mark_used(seo_keyword, article.get("title", ""))
+        except Exception:
+            pass
 
     # タイトル重複チェック
     if article.get("title", "") in all_titles:

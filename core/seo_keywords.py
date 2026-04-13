@@ -15,25 +15,32 @@ from pathlib import Path
 
 JST = timezone(timedelta(hours=9))
 
-# このアカウントのテーマに関連するシードキーワード
-SEED_QUERIES = [
+# フォールバック用デフォルト値（インスタンス設定がない場合に使用）
+_DEFAULT_SEED_QUERIES = [
     "副業 始め方",
     "副業 会社員",
     "ChatGPT 副業",
-    "ChatGPT 使い方 仕事",
-    "note 収益化",
-    "note 有料記事 書き方",
-    "SNS運用 初心者",
     "AI 副業",
     "生成AI 活用",
-    "副業 何から始める",
 ]
 
-# 関連性フィルタ（このワードを1つ以上含むサジェストのみ採用）
-RELEVANT_TERMS = [
-    "副業", "ChatGPT", "AI", "note", "SNS", "生成AI", "収益", "発信", "フォロワー",
-    "インスタ", "Twitter", "X ", "ブログ", "アフィリエイト", "自動化", "ライター",
+_DEFAULT_RELEVANT_TERMS = [
+    "副業", "ChatGPT", "AI", "生成AI", "収益", "ブログ", "アフィリエイト",
 ]
+
+
+def _get_seo_config() -> tuple[list[str], list[str]]:
+    """インスタンスの strategy.json から seo_params を取得する。なければデフォルト値。"""
+    try:
+        from core.paths import strategy_path
+        import json
+        strategy = json.loads(strategy_path().read_text(encoding="utf-8"))
+        seo = strategy.get("seo_params", {})
+        seeds = seo.get("seed_queries", _DEFAULT_SEED_QUERIES)
+        relevant = seo.get("relevant_terms", _DEFAULT_RELEVANT_TERMS)
+        return seeds, relevant
+    except Exception:
+        return _DEFAULT_SEED_QUERIES, _DEFAULT_RELEVANT_TERMS
 
 
 def _fetch_suggestions(query: str) -> list[str]:
@@ -52,9 +59,11 @@ def _fetch_suggestions(query: str) -> list[str]:
         return []
 
 
-def _is_relevant(keyword: str) -> bool:
+def _is_relevant(keyword: str, relevant_terms: list[str] | None = None) -> bool:
     """関連性フィルタ。"""
-    return any(t in keyword for t in RELEVANT_TERMS)
+    if relevant_terms is None:
+        _, relevant_terms = _get_seo_config()
+    return any(t in keyword for t in relevant_terms)
 
 
 def _keywords_path() -> Path:
@@ -81,17 +90,18 @@ def _save(data: dict) -> None:
 
 def refresh() -> dict:
     """Googleサジェストを収集してseo_keywords.jsonを更新する。"""
-    print("Googleサジェスト収集中...")
+    seed_queries, relevant_terms = _get_seo_config()
+    print(f"Googleサジェスト収集中（シード{len(seed_queries)}件）...")
     existing = _load()
     existing_kws = {k["keyword"] for k in existing.get("keywords", [])}
 
     new_kws = []
-    for seed in SEED_QUERIES:
+    for seed in seed_queries:
         print(f"  シード: {seed}")
         suggestions = _fetch_suggestions(seed)
         for s in suggestions:
             s = s.strip()
-            if s and s not in existing_kws and _is_relevant(s) and len(s) <= 30:
+            if s and s not in existing_kws and _is_relevant(s, relevant_terms) and len(s) <= 30:
                 new_kws.append(s)
                 existing_kws.add(s)
         time.sleep(0.5)  # レート制限対策

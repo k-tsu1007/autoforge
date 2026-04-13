@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>autoforge システムマップ — fuku_ai_sns</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 24px;
+  }
+
+  h1 { font-size: 22px; font-weight: 700; color: #f8fafc; }
+  h2 { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+  h3 { font-size: 15px; font-weight: 600; color: #f1f5f9; margin-bottom: 8px; }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 28px; padding-bottom: 16px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .goal-badge {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: #fff; font-weight: 700; font-size: 15px;
+    padding: 8px 18px; border-radius: 99px;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+
+  .card {
+    background: #1e293b; border-radius: 12px; padding: 16px;
+    border: 1px solid #334155;
+  }
+  .card.accent-x  { border-color: #1d9bf0; }
+  .card.accent-note { border-color: #41b883; }
+  .card.accent-paid { border-color: #f59e0b; }
+  .card.accent-seo  { border-color: #a855f7; }
+  .card.accent-warn { border-color: #ef4444; }
+  .card.accent-learn { border-color: #06b6d4; }
+
+  /* ファネル */
+  .funnel {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; margin-bottom: 16px;
+  }
+  .funnel-step {
+    text-align: center; padding: 12px 20px;
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    min-width: 120px;
+  }
+  .funnel-step .icon { font-size: 22px; display: block; margin-bottom: 4px; }
+  .funnel-step .label { font-size: 12px; color: #94a3b8; }
+  .funnel-step .value { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+  .funnel-arrow {
+    font-size: 20px; color: #475569; padding: 0 8px; flex-shrink: 0;
+  }
+  .funnel-step.x-step   { border-color: #1d9bf0; }
+  .funnel-step.note-step { border-color: #41b883; }
+  .funnel-step.paid-step { border-color: #f59e0b; }
+
+  /* 週間カレンダー */
+  .week {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
+    margin-bottom: 16px;
+  }
+  .day-card {
+    background: #1e293b; border-radius: 10px; padding: 10px 8px;
+    text-align: center; border: 1px solid #334155;
+  }
+  .day-name { font-size: 11px; color: #64748b; margin-bottom: 6px; }
+  .day-badge {
+    display: inline-block; padding: 3px 8px; border-radius: 99px;
+    font-size: 11px; font-weight: 600; margin-bottom: 6px;
+  }
+  .badge-free { background: #1e4d2e; color: #4ade80; }
+  .badge-paid { background: #451a03; color: #fbbf24; }
+  .badge-seo  { background: #2e1065; color: #c084fc; }
+  .day-kw { font-size: 10px; color: #64748b; line-height: 1.4; }
+  .day-card.today { border-color: #60a5fa; background: #1e3a5f; }
+
+  /* パイプライン */
+  .pipeline {
+    display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap;
+  }
+  .pipe-step {
+    background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; color: #cbd5e1;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .pipe-step .dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot-x    { background: #1d9bf0; }
+  .dot-note { background: #41b883; }
+  .dot-paid { background: #f59e0b; }
+  .dot-seo  { background: #a855f7; }
+  .dot-learn { background: #06b6d4; }
+  .dot-gray  { background: #475569; }
+  .pipe-arrow { color: #475569; font-size: 13px; align-self: center; }
+
+  /* X投稿タイプ */
+  .tweet-types {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .tweet-type {
+    background: #0f172a; border-radius: 8px; padding: 8px 10px;
+    border-left: 3px solid #1d9bf0; font-size: 12px;
+  }
+  .tweet-type .name { font-weight: 600; color: #93c5fd; margin-bottom: 2px; }
+  .tweet-type .ex { color: #64748b; font-size: 11px; }
+
+  /* note記事フォーマット */
+  .note-formats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  }
+  .note-format {
+    background: #0f172a; border-radius: 8px; padding: 8px;
+    text-align: center; border-top: 3px solid #41b883; font-size: 11px;
+  }
+  .note-format .name { font-weight: 600; color: #86efac; margin-bottom: 3px; }
+  .note-format .desc { color: #64748b; font-size: 10px; }
+
+  /* 禁止ルール */
+  .rule-list { list-style: none; }
+  .rule-list li {
+    padding: 5px 0; font-size: 12px; color: #fca5a5;
+    border-bottom: 1px solid #1e293b; display: flex; gap: 6px;
+  }
+  .rule-list li::before { content: "✕"; color: #ef4444; flex-shrink: 0; }
+
+  /* 学習ループ */
+  .learn-loop {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px;
+  }
+  .learn-node {
+    background: #0f172a; border: 1px solid #0e7490; border-radius: 8px;
+    padding: 8px 12px; font-size: 12px; text-align: center;
+    flex: 1;
+  }
+  .learn-node .name { color: #67e8f9; font-weight: 600; margin-bottom: 2px; }
+  .learn-node .desc { color: #64748b; font-size: 10px; }
+  .learn-arrow { color: #0e7490; font-size: 16px; }
+
+  /* ターゲット */
+  .target-box {
+    background: linear-gradient(135deg, #1e3a5f, #1e293b);
+    border: 1px solid #1d9bf0; border-radius: 10px; padding: 14px;
+  }
+  .target-box .persona { font-size: 16px; font-weight: 700; color: #93c5fd; margin-bottom: 8px; }
+  .target-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .target-tag {
+    background: #1e293b; color: #94a3b8; font-size: 11px;
+    padding: 3px 10px; border-radius: 99px; border: 1px solid #334155;
+  }
+
+  /* 逆算 */
+  .calc-row {
+    display: flex; align-items: center; gap: 12px; padding: 8px 0;
+    border-bottom: 1px solid #1e293b; font-size: 13px;
+  }
+  .calc-row:last-child { border-bottom: none; }
+  .calc-label { color: #94a3b8; width: 140px; flex-shrink: 0; }
+  .calc-value { color: #f1f5f9; font-weight: 600; }
+  .calc-now   { color: #64748b; font-size: 11px; margin-left: 8px; }
+  .arrow-right { color: #475569; }
+
+  .section-title {
+    font-size: 16px; font-weight: 700; color: #f1f5f9;
+    margin: 24px 0 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .num {
+    background: #334155; color: #94a3b8; width: 22px; height: 22px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0;
+  }
+
+  .tag-x    { color: #1d9bf0; }
+  .tag-note { color: #41b883; }
+  .tag-paid { color: #f59e0b; }
+  .tag-seo  { color: #a855f7; }
+
+  .small { font-size: 11px; color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div class="header">
+  <div>
+    <h1>autoforge システムマップ</h1>
+    <div class="small" style="margin-top:4px;">インスタンス: fuku_ai_sns &nbsp;|&nbsp; 更新: 2026-04-12</div>
+  </div>
+  <div class="goal-badge">🎯 目標: note 月1万円</div>
+</div>
+
+<!-- 逆算 -->
+<div class="section-title"><span class="num">1</span>目標の逆算</div>
+<div class="card" style="margin-bottom:16px;">
+  <div class="calc-row">
+    <div class="calc-label">月1万円</div>
+    <div class="arrow-right">=</div>
+    <div class="calc-value">有料記事500円 × 月20件購入</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">月20件購入</div>
+    <div class="arrow-right">=</div>
+    <div class="calc-value">月間PV 2,000以上</div>
+    <div class="calc-now">現在: 約600PV/月（平均10PV×54記事）</div>
+  </div>
+  <div class="calc-row">
+    <div class="calc-label">月PV 2,000</div>
+    <div class="arrow-right">=</div>
+    <div class="calc-value">SEO流入 + フォロワー流入の合算</div>
+    <div class="calc-now">目標まで約3倍</div>
+  </div>
+</div>
+
+<!-- ファネル -->
+<div class="section-title"><span class="num">2</span>ファネル構造</div>
+<div class="funnel" style="margin-bottom:16px;">
+  <div class="funnel-step x-step">
+    <span class="icon">𝕏</span>
+    <div class="value">X投稿・返信</div>
+    <div class="label">認知・信頼構築</div>
+  </div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step">
+    <span class="icon">👤</span>
+    <div class="value">プロフィール訪問</div>
+    <div class="label">「この人面白い」</div>
+  </div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step note-step">
+    <span class="icon">📝</span>
+    <div class="value">note 無料記事</div>
+    <div class="label">フォロー・スキ</div>
+  </div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step note-step">
+    <span class="icon">🔍</span>
+    <div class="value">SEO流入</div>
+    <div class="label">検索から直接訪問</div>
+  </div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step paid-step">
+    <span class="icon">💰</span>
+    <div class="value">有料記事購入</div>
+    <div class="label">500円 × 20件/月</div>
+  </div>
+</div>
+
+<!-- ターゲット -->
+<div class="section-title"><span class="num">3</span>ターゲット読者</div>
+<div class="target-box" style="margin-bottom:16px;">
+  <div class="persona">本業があるけど AI・note で副収入を試したい 20〜30代</div>
+  <div class="small">このターゲットが読みたいのは「成功者の話」ではなく「自分と同じ目線で書かれた試行錯誤の記録」</div>
+  <div class="target-tags">
+    <div class="target-tag">完璧主義で最初の一歩が踏み出せない</div>
+    <div class="target-tag">以前試みたが続かなかった</div>
+    <div class="target-tag">忙しさを理由に後回しにしている</div>
+    <div class="target-tag">本業の傍ら副収入を探している</div>
+  </div>
+</div>
+
+<!-- 週間スケジュール -->
+<div class="section-title"><span class="num">4</span>週間コンテンツスケジュール</div>
+<div class="week">
+  <div class="day-card">
+    <div class="day-name">月曜</div>
+    <div class="day-badge badge-paid">有料記事</div>
+    <div class="day-kw">テンプレ・ツール型<br>500円</div>
+  </div>
+  <div class="day-card">
+    <div class="day-name">火曜</div>
+    <div class="day-badge badge-seo">SEO記事</div>
+    <div class="day-kw">Googleサジェスト<br>キーワード指定<br>3500字・完全無料</div>
+  </div>
+  <div class="day-card">
+    <div class="day-name">水曜</div>
+    <div class="day-badge badge-free">通常無料</div>
+    <div class="day-kw">5形式ローテーション</div>
+  </div>
+  <div class="day-card">
+    <div class="day-name">木曜</div>
+    <div class="day-badge badge-paid">有料記事</div>
+    <div class="day-kw">テンプレ・ツール型<br>500円</div>
+  </div>
+  <div class="day-card">
+    <div class="day-name">金曜</div>
+    <div class="day-badge badge-free">通常無料</div>
+    <div class="day-kw">5形式ローテーション</div>
+  </div>
+  <div class="day-card">
+    <div class="day-name">土曜</div>
+    <div class="day-badge badge-seo">SEO記事</div>
+    <div class="day-kw">Googleサジェスト<br>キーワード指定<br>3500字・完全無料</div>
+  </div>
+  <div class="day-card today">
+    <div class="day-name">日曜 ← 今日</div>
+    <div class="day-badge badge-free">通常無料</div>
+    <div class="day-kw">5形式ローテーション</div>
+  </div>
+</div>
+
+<!-- X戦略 -->
+<div class="section-title"><span class="num">5</span>X（Twitter）パイプライン</div>
+<div class="grid-2">
+  <div class="card accent-x">
+    <h3>📤 単発投稿（1日20本）</h3>
+    <div class="tweet-types" style="margin-top:10px;">
+      <div class="tweet-type">
+        <div class="name">一行気づき</div>
+        <div class="ex">「バズる投稿って狙ってる時に来ない」</div>
+      </div>
+      <div class="tweet-type">
+        <div class="name">実況・進捗</div>
+        <div class="ex">「今日note書き終えた。書くうちに気づいた」</div>
+      </div>
+      <div class="tweet-type">
+        <div class="name">共感あるある</div>
+        <div class="ex">「副業始めたいけど何から手をつければ」</div>
+      </div>
+      <div class="tweet-type">
+        <div class="name">失敗・試行錯誤</div>
+        <div class="ex">「AIに丸投げしたら自分の言葉じゃなかった」</div>
+      </div>
+      <div class="tweet-type">
+        <div class="name">問い投げ</div>
+        <div class="ex">「フォロワー数ってどこから意味が出る？」</div>
+      </div>
+      <div class="tweet-type">
+        <div class="name">雑談</div>
+        <div class="ex">「コーヒー3杯飲みながらnote書いた」</div>
+      </div>
+    </div>
+    <div class="small" style="margin-top:8px;">📌 禁止: まとめ型・ハッシュタグ・箇条書き・「〜しましょう」</div>
+  </div>
+
+  <div class="card accent-x">
+    <h3>💬 エンゲージメント（毎日）</h3>
+    <div style="margin-top:10px;">
+      <div class="calc-row">
+        <div class="calc-label">引用RT</div>
+        <div class="calc-value">1日4件</div>
+        <div class="calc-now">別視点・補足を加える返信</div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-label">リプライ</div>
+        <div class="calc-value">1日8件</div>
+        <div class="calc-now">第三者が「面白い」と思う返答</div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-label">いいね</div>
+        <div class="calc-value">1日15件</div>
+        <div class="calc-now">関連度スコア≥7のみ実行</div>
+      </div>
+    </div>
+    <div class="small" style="margin-top:8px;">📌 禁止: 「いいですね」「同意します」だけの返信</div>
+  </div>
+</div>
+
+<!-- note戦略 -->
+<div class="section-title"><span class="num">6</span>note パイプライン</div>
+<div class="grid-2">
+  <div class="card accent-note">
+    <h3>📝 記事フォーマット 5種（ローテーション）</h3>
+    <div class="note-formats" style="margin-top:10px;">
+      <div class="note-format">
+        <div class="name">対話形式</div>
+        <div class="desc">読者との Q&A 往復</div>
+      </div>
+      <div class="note-format">
+        <div class="name">ケーススタディ</div>
+        <div class="desc">架空の読者「Aさん」</div>
+      </div>
+      <div class="note-format">
+        <div class="name">一点集中</div>
+        <div class="desc">1テーマを深掘り</div>
+      </div>
+      <div class="note-format">
+        <div class="name">問いかけ展開</div>
+        <div class="desc">問いから本題へ</div>
+      </div>
+      <div class="note-format">
+        <div class="name">比較・検証</div>
+        <div class="desc">AとBを対比</div>
+      </div>
+    </div>
+    <div class="small" style="margin-top:8px;">📌 禁止: 「悩み代弁→N個のポイント→有料リード」の固定構成</div>
+  </div>
+
+  <div class="card accent-paid">
+    <h3>💰 有料記事の必須要件</h3>
+    <div style="margin-top:10px; font-size:13px;">
+      以下のいずれか1つを必ず含める：
+      <ul style="margin-top:8px; padding-left:16px; color:#fde68a; font-size:12px; line-height:2;">
+        <li>そのまま使えるテンプレート（穴埋め形式）</li>
+        <li>ChatGPT用プロンプト文（コピペで使える）</li>
+        <li>チェックリスト（10項目以上）</li>
+        <li>具体的なケーススタディ</li>
+      </ul>
+    </div>
+    <div class="small" style="margin-top:8px;">→ 「これだけのために500円払う価値がある」密度</div>
+  </div>
+</div>
+
+<div class="card accent-seo" style="margin-bottom:16px;">
+  <h3>🔍 SEO集客記事 — Googleサジェスト自動収集</h3>
+  <div style="display:flex; gap:16px; margin-top:10px; align-items:flex-start;">
+    <div style="flex:1;">
+      <div class="small" style="margin-bottom:6px; color:#c084fc;">収集フロー（毎週月曜）</div>
+      <div class="pipeline">
+        <div class="pipe-step"><span class="dot dot-seo"></span>シード10種</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><span class="dot dot-seo"></span>Googleサジェスト取得</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><span class="dot dot-seo"></span>関連性フィルタ</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step"><span class="dot dot-seo"></span>seo_keywords.json</div>
+      </div>
+    </div>
+    <div style="background:#0f172a; border-radius:8px; padding:10px 14px; font-size:12px; min-width:220px;">
+      <div style="color:#c084fc; font-weight:600; margin-bottom:6px;">現在の状況</div>
+      <div>収集済み: <strong style="color:#f1f5f9;">47件</strong></div>
+      <div>次のキーワード: <strong style="color:#f1f5f9;">副業 始め方</strong></div>
+      <div style="color:#64748b; margin-top:4px; font-size:11px;">約23週分のストック</div>
+    </div>
+  </div>
+</div>
+
+<!-- noteエンゲージ -->
+<div class="card accent-note" style="margin-bottom:16px;">
+  <h3>❤️ note クリエイターへのエンゲージ（毎日10時・20時）</h3>
+  <div style="display:flex; gap:24px; margin-top:10px; font-size:13px;">
+    <div>スキ: <strong style="color:#4ade80;">1日最大20件</strong> <span class="small">副業・ChatGPT・SNS運用タグの新着記事</span></div>
+    <div>フォロー: <strong style="color:#4ade80;">1日最大10件</strong> <span class="small">スキした相手のクリエイターをフォロー</span></div>
+  </div>
+  <div class="small" style="margin-top:6px;">→ 相互フォロー・相互スキによるフォロワー増加を狙う</div>
+</div>
+
+<!-- 学習ループ -->
+<div class="section-title"><span class="num">7</span>自動改善ループ（morning pipeline 毎日6時）</div>
+<div class="card accent-learn" style="margin-bottom:16px;">
+  <div class="learn-loop">
+    <div class="learn-node">
+      <div class="name">evaluate</div>
+      <div class="desc">note API からPV・スキを取得</div>
+    </div>
+    <div class="learn-arrow">→</div>
+    <div class="learn-node">
+      <div class="name">knowledge</div>
+      <div class="desc">確証済みの傾向を蓄積</div>
+    </div>
+    <div class="learn-arrow">→</div>
+    <div class="learn-node">
+      <div class="name">advisor</div>
+      <div class="desc">投稿数・時刻を最適化</div>
+    </div>
+    <div class="learn-arrow">→</div>
+    <div class="learn-node">
+      <div class="name">evolve</div>
+      <div class="desc">program.md を自動更新</div>
+    </div>
+    <div class="learn-arrow">→</div>
+    <div class="learn-node">
+      <div class="name">seo_keywords</div>
+      <div class="desc">月曜: Googleサジェスト収集</div>
+    </div>
+  </div>
+</div>
+
+<!-- 禁止ルール -->
+<div class="section-title"><span class="num">8</span>絶対禁止ルール（全コンテンツ共通）</div>
+<div class="card accent-warn">
+  <ul class="rule-list">
+    <li>「フォロワーが◯人増えた」「◯ヶ月で◯人」などの数値実績（架空でも禁止）</li>
+    <li>「私が試した結果」「実証済み」など架空の体験談</li>
+    <li>「月収◯円稼げた」など収益実績</li>
+    <li>箇条書き・番号付きリスト・まとめ構造のツイート（X単発投稿のみ）</li>
+    <li>「〜しましょう」「〜することが大切です」など説教・教訓口調</li>
+    <li>Markdownのテーブル記法（note で崩れる）</li>
+  </ul>
+</div>
+
+<!-- フッター -->
+<div style="margin-top:24px; padding-top:16px; border-top:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center;">
+  <div class="small">autoforge / fuku_ai_sns &nbsp;|&nbsp; phase: trust_building</div>
+  <div style="display:flex; gap:16px; font-size:12px;">
+    <span>📄 記事数: 54本</span>
+    <span>❤️ 平均スキ: 1.1</span>
+    <span>👁 平均PV: 10</span>
+    <span class="tag-paid">💰 有料記事: 月2本（月・木）</span>
+    <span class="tag-seo">🔍 SEO記事: 月8本（火・土）</span>
+  </div>
+</div>
+
+</body>
+</html>
