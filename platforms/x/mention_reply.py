@@ -245,6 +245,12 @@ def run_scan() -> dict:
                     user_el = article.locator('[data-testid="User-Name"]').first
                     author = user_el.inner_text().split("\n")[0] if user_el.count() > 0 else "unknown"
 
+                    # 自分自身の投稿はスキップ
+                    my_user = os.environ.get("X_USERNAME", "fuku_ai07").lower()
+                    author_lower = author.lower()
+                    if my_user in author_lower or f"@{my_user}" in author_lower:
+                        continue
+
                     print(f"  処理: @{author} — {mention_text[:50]}")
 
                     # いいね（通知ページから直接クリック）
