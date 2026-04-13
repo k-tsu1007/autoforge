@@ -129,17 +129,18 @@ def try_direct_login(session_path: Path) -> bool:
             # メール入力欄が出るまで待つ
             def react_fill(sel: str, value: str):
                 """ReactのinputにJSでネイティブイベントを発火しながら値をセット。"""
-                page.evaluate(f"""
-                    (function(sel, val) {{
+                page.evaluate(
+                    """([sel, val]) => {
                         var inp = document.querySelector(sel);
                         if (!inp) return;
                         var setter = Object.getOwnPropertyDescriptor(
                             window.HTMLInputElement.prototype, 'value').set;
                         setter.call(inp, val);
-                        inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-                    }})('{sel}', arguments[0]);
-                """, value)
+                        inp.dispatchEvent(new Event('input', {bubbles: true}));
+                        inp.dispatchEvent(new Event('change', {bubbles: true}));
+                    }""",
+                    [sel, value],
+                )
 
             # メール入力欄を待つ
             page.wait_for_selector("input", timeout=20000)
