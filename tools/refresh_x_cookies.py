@@ -127,8 +127,19 @@ def try_direct_login(session_path: Path) -> bool:
         try:
             page.goto("https://x.com/i/flow/login", timeout=60000)
             # メール入力欄が出るまで待つ
-            page.wait_for_selector("input[autocomplete='username']", timeout=30000)
-            page.fill("input[autocomplete='username']", email)
+            # メール入力欄を複数セレクタで探す
+            email_sel = None
+            for sel in ["input[autocomplete='username']", "input[name='text']", "input[type='text']"]:
+                try:
+                    page.wait_for_selector(sel, timeout=10000)
+                    email_sel = sel
+                    break
+                except PwTimeout:
+                    continue
+            if not email_sel:
+                raise Exception("メール入力欄が見つかりません")
+            page.click(email_sel)
+            page.fill(email_sel, email)
             page.keyboard.press("Enter")
             page.wait_for_timeout(3000)
 
