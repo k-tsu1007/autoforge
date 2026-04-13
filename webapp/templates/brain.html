@@ -1,21 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Brain — auto-content-engine{% endblock %}
+{% block title %}Brain{% endblock %}
 {% block content %}
 <div id="bc"
      hx-get="/brain/partial"
      hx-trigger="every 30s"
-     hx-swap="innerHTML"
-     hx-indicator="#hx-spin">
+     hx-swap="innerHTML">
   {% include "brain_partial.html" %}
 </div>
-
-{# リフレッシュ中スピナー（右下固定） #}
-<div id="hx-spin" class="htmx-indicator" style="
-  position: fixed; bottom: 1.2rem; right: 1.2rem;
-  background: #1e2a36; border: 1px solid #2f3336;
-  border-radius: 999px; padding: 0.3rem 0.8rem;
-  font-size: 0.75rem; color: #555;
-  opacity: 0; transition: opacity 0.2s;
-  pointer-events: none;
-">⟳ 更新中…</div>
 {% endblock %}
