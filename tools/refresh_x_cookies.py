@@ -142,7 +142,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
     data_dir = ROOT / "instances" / _inst0 / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    browser = await uc.start(headless=False)
+    browser = await uc.start(headless=True)
     try:
         tab = await browser.get("https://x.com/i/flow/login")
 
