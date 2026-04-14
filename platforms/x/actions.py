@@ -241,8 +241,27 @@ def reply_tweet(tweet_url: str, text: str) -> bool:
                 browser.close()
                 return False
 
-            target_article = page.locator("article").first
-            if target_article.count() == 0:
+            # URLのステータスIDに対応するarticleを探す（親ツイートではなく返信先を正確に取得）
+            import re as _re
+            status_id_match = _re.search(r"/status/(\d+)", tweet_url)
+            status_id = status_id_match.group(1) if status_id_match else None
+            target_article = None
+            if status_id:
+                articles = page.locator("article").all()
+                for a in articles:
+                    try:
+                        t = a.locator("time").first
+                        if t.count() > 0:
+                            parent = t.locator("..").first
+                            href = parent.get_attribute("href") or ""
+                            if status_id in href:
+                                target_article = a
+                                break
+                    except Exception:
+                        continue
+            if target_article is None:
+                target_article = page.locator("article").last  # フォールバック: 最後のarticle
+            if target_article is None or target_article.count() == 0:
                 _snap("02_no_article")
                 print("❌ ツイート本体が見つからない")
                 browser.close()
