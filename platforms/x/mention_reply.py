@@ -234,6 +234,23 @@ def run_scan() -> dict:
                 browser.close()
                 return {"liked": 0, "queued": 0}
 
+            # 「すべて」タブをクリック（デフォルトが「おすすめ」の場合があるため）
+            try:
+                all_tab = page.locator("[role='tab']").filter(has_text="すべて").first
+                if all_tab.count() > 0:
+                    all_tab.click()
+                    page.wait_for_timeout(3000)
+                    print("「すべて」タブをクリック")
+                else:
+                    # 英語UI: "All" tab
+                    all_tab_en = page.locator("[role='tab']").filter(has_text="All").first
+                    if all_tab_en.count() > 0:
+                        all_tab_en.click()
+                        page.wait_for_timeout(3000)
+                        print("「All」タブをクリック")
+            except Exception as e:
+                print(f"タブクリック失敗(続行): {e}")
+
             # スクロールして件数を増やす
             for _ in range(3):
                 page.mouse.wheel(0, 2000)
