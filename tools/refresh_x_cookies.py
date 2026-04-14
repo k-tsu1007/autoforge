@@ -120,36 +120,33 @@ def try_chrome_profile(session_path: Path) -> bool:
     return False
 
 
-async def _get_cookies(tab) -> list:
-    """Cookie を dict リストで返す。nodriver の Cookie オブジェクトに依存しない。"""
-    # storage.get_cookies は Network domain の有効化不要で全 cookie を返す
+async def _get_cookies(browser) -> list:
+    """browser.cookies.get_all() で取得した Cookie オブジェクトを dict リストに変換して返す。"""
     try:
-        import nodriver.cdp.storage as cdp_storage
-        raw = await asyncio.wait_for(
-            tab.send(cdp_storage.get_cookies()),
-            timeout=8,
-        )
+        raw = await browser.cookies.get_all()
+        if not raw:
+            return []
         result = []
-        for c in (raw or []):
-            try:
-                result.append({
-                    "name": c.name,
-                    "value": c.value,
-                    "domain": c.domain,
-                    "path": c.path,
-                    "secure": bool(c.secure),
-                    "httpOnly": bool(c.http_only),
-                    "expires": int(c.expires) if c.expires and c.expires > 0 else -1,
-                    "sameSite": c.same_site.value if c.same_site else None,
-                })
-            except Exception:
-                # フォールバック: getattr で安全に取る
-                result.append({
-                    "name": getattr(c, "name", ""),
-                    "value": getattr(c, "value", ""),
-                    "domain": getattr(c, "domain", ""),
-                    "path": getattr(c, "path", "/"),
-                })
+        for c in raw:
+            if isinstance(c, dict):
+                result.append(c)
+                continue
+            # Cookie dataclass → dict
+            entry = {
+                "name": getattr(c, "name", ""),
+                "value": getattr(c, "value", ""),
+                "domain": getattr(c, "domain", ""),
+                "path": getattr(c, "path", "/"),
+                "secure": bool(getattr(c, "secure", False)),
+                "httpOnly": bool(getattr(c, "http_only", getattr(c, "httpOnly", False))),
+            }
+            exp = getattr(c, "expires", -1)
+            if exp and exp > 0:
+                entry["expires"] = int(exp)
+            ss = getattr(c, "same_site", getattr(c, "sameSite", None))
+            if ss is not None:
+                entry["sameSite"] = ss.value if hasattr(ss, "value") else str(ss)
+            result.append(entry)
         return result
     except Exception as e:
         print(f"  [cookie取得エラー] {type(e).__name__}: {e}")
@@ -371,7 +368,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
             except Exception:
                 pass
             # パスワード不要でログイン済みの可能性をチェック
-            cookies_now = await _get_cookies(tab)
+            cookies_now = await _get_cookies(browser)
             if any(c["name"] == "auth_token" for c in cookies_now):
                 print("  パスワード不要でログイン済み！")
                 session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -419,7 +416,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         print("  auth_token待機中...")
         for wait_i in range(15):
             await asyncio.sleep(2)
-            cookies = await _get_cookies(tab)
+            cookies = await _get_cookies(browser)
             has_auth = any(c["name"] == "auth_token" for c in cookies)
             print(f"  [{wait_i+1}/15] auth_token={'YES' if has_auth else 'no'}, cookies={len(cookies)}, URL={tab.url}")
             if has_auth:
