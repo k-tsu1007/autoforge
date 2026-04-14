@@ -109,19 +109,23 @@ def _record_like(mention_url: str, mention_text: str, author: str) -> None:
 
 
 def _queue_reply(mention_url: str, mention_text: str, author: str, reply_text: str) -> None:
-    """遅延付きでリプライキューに積む。"""
+    """遅延付きでリプライキューに積む。レビューモード時は approved=NULL で保留。"""
     delay_min = random.randint(DELAY_MIN_MIN, DELAY_MAX_MIN)
     send_after = (datetime.now(JST) + timedelta(minutes=delay_min)).strftime("%Y-%m-%d %H:%M:%S")
     try:
-        from core.db import get_connection, transaction
+        from core.db import get_connection, transaction, review_mode_enabled
+        approved = None if review_mode_enabled() else 1
         with transaction() as c:
             c.execute(
                 """INSERT OR IGNORE INTO mention_reply_queue
-                   (mention_url, mention_text, mention_author, reply_text, send_after)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (mention_url, mention_text[:500], author, reply_text, send_after),
+                   (mention_url, mention_text, mention_author, reply_text, send_after, approved)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (mention_url, mention_text[:500], author, reply_text, send_after, approved),
             )
-        print(f"  📋 キュー追加 (送信予定 {delay_min}分後): {reply_text[:40]}")
+        if approved is None:
+            print(f"  📋 レビュー待ちキュー追加: {reply_text[:40]}")
+        else:
+            print(f"  📋 キュー追加 (送信予定 {delay_min}分後): {reply_text[:40]}")
     except Exception as e:
         print(f"キュー追加失敗: {e}")
 
@@ -362,7 +366,7 @@ def run_send() -> dict:
         pending = conn.execute(
             "SELECT id, mention_url, mention_text, mention_author, reply_text, "
             "COALESCE(fail_count, 0) as fail_count FROM mention_reply_queue "
-            "WHERE sent = 0 AND send_after <= ?",
+            "WHERE sent = 0 AND COALESCE(approved, 1) = 1 AND send_after <= ?",
             (now_str,)
         ).fetchall()
     except Exception as e:

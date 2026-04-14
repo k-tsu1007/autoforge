@@ -119,8 +119,9 @@ def generate_batch(n: int = None) -> list[str]:
 
 
 def add_to_queue(tweets: list[str]) -> int:
-    from core.db import get_connection
+    from core.db import get_connection, review_mode_enabled
     conn = get_connection()
+    approved = None if review_mode_enabled() else 1
     added = 0
     now = datetime.now(JST).isoformat()
     for t in tweets:
@@ -131,8 +132,8 @@ def add_to_queue(tweets: list[str]) -> int:
         if exists:
             continue
         conn.execute(
-            "INSERT INTO tweet_queue (type, text, added_at, posted) VALUES (?, ?, ?, 0)",
-            ("単発", t, now),
+            "INSERT INTO tweet_queue (type, text, added_at, posted, approved) VALUES (?, ?, ?, 0, ?)",
+            ("単発", t, now, approved),
         )
         added += 1
     conn.commit()

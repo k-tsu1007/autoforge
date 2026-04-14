@@ -230,6 +230,16 @@ def get_connection() -> sqlite3.Connection:
             cols = [r["name"] for r in _connection.execute("PRAGMA table_info(mention_reply_queue)").fetchall()]
             if "fail_count" not in cols:
                 _connection.execute("ALTER TABLE mention_reply_queue ADD COLUMN fail_count INTEGER DEFAULT 0")
+            if "approved" not in cols:
+                # 既存アイテムは approved=1 (自動承認) にして動作を変えない
+                _connection.execute("ALTER TABLE mention_reply_queue ADD COLUMN approved INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        try:
+            cols = [r["name"] for r in _connection.execute("PRAGMA table_info(tweet_queue)").fetchall()]
+            if "approved" not in cols:
+                # 既存アイテムは approved=1 (自動承認) にして動作を変えない
+                _connection.execute("ALTER TABLE tweet_queue ADD COLUMN approved INTEGER DEFAULT 1")
         except Exception:
             pass
         _connection.commit()
@@ -405,7 +415,9 @@ def add_to_tweet_queue(tweet_type: str, text: str, scheduled_at: str = None) -> 
     """キューにツイートを追加。
     scheduled_at: ISO形式の文字列 ('2026-04-12T10:00:00+09:00')。
                   指定すると post_next_from_db がその時刻になるまでスキップする。
+    レビューモード時は approved=NULL（保留）で挿入し、承認後に投稿される。
     """
+    approved = None if review_mode_enabled() else 1
     with transaction() as conn:
         # 列が無い古いDBにも対応
         try:
@@ -413,8 +425,8 @@ def add_to_tweet_queue(tweet_type: str, text: str, scheduled_at: str = None) -> 
         except Exception:
             pass
         conn.execute(
-            "INSERT INTO tweet_queue (type, text, scheduled_at) VALUES (?, ?, ?)",
-            (tweet_type, text, scheduled_at),
+            "INSERT INTO tweet_queue (type, text, scheduled_at, approved) VALUES (?, ?, ?, ?)",
+            (tweet_type, text, scheduled_at, approved),
         )
 
 
@@ -446,6 +458,12 @@ def is_already_posted_today(text: str) -> bool:
         (today, text),
     ).fetchone()
     return row is not None
+
+
+def review_mode_enabled() -> bool:
+    """環境変数 REVIEW_MODE=1 のときレビューモードを有効にする。"""
+    import os
+    return os.environ.get("REVIEW_MODE", "").strip() in ("1", "true", "True", "yes")
 
 
 def increment_tweet_fail_count(queue_id: int) -> None:

@@ -244,6 +244,62 @@ def dash_partial(request: Request, user: str = Depends(check_auth)):
     return templates.TemplateResponse(request=request, name="dash/dash_partial.html", context={"data": data})
 
 
+@app.get("/review", response_class=HTMLResponse)
+def review_page(request: Request, user: str = Depends(check_auth)):
+    """レビューキュー — 承認待ちのツイート・メンション返信を確認して承認/却下する。"""
+    from core.db import get_connection, review_mode_enabled
+    conn = get_connection()
+    tweets = [dict(r) for r in conn.execute(
+        "SELECT id, type, text, added_at FROM tweet_queue "
+        "WHERE posted=0 AND approved IS NULL ORDER BY id DESC"
+    ).fetchall()]
+    replies = [dict(r) for r in conn.execute(
+        "SELECT id, mention_author, mention_text, reply_text, send_after FROM mention_reply_queue "
+        "WHERE sent=0 AND approved IS NULL ORDER BY id DESC"
+    ).fetchall()]
+    review_on = review_mode_enabled()
+    return templates.TemplateResponse(
+        request=request, name="review.html",
+        context={"tweets": tweets, "replies": replies, "review_on": review_on}
+    )
+
+
+@app.post("/review/tweet/{item_id}/approve", response_class=HTMLResponse)
+def review_tweet_approve(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE tweet_queue SET approved=1 WHERE id=?", (item_id,))
+    conn.commit()
+    return HTMLResponse("")
+
+
+@app.post("/review/tweet/{item_id}/reject", response_class=HTMLResponse)
+def review_tweet_reject(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE tweet_queue SET approved=0, posted=1 WHERE id=?", (item_id,))
+    conn.commit()
+    return HTMLResponse("")
+
+
+@app.post("/review/reply/{item_id}/approve", response_class=HTMLResponse)
+def review_reply_approve(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE mention_reply_queue SET approved=1 WHERE id=?", (item_id,))
+    conn.commit()
+    return HTMLResponse("")
+
+
+@app.post("/review/reply/{item_id}/reject", response_class=HTMLResponse)
+def review_reply_reject(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE mention_reply_queue SET approved=0, sent=2 WHERE id=?", (item_id,))
+    conn.commit()
+    return HTMLResponse("")
+
+
 @app.get("/activity", response_class=HTMLResponse)
 def activity_page(request: Request, user: str = Depends(check_auth)):
     """ライブアクティビティビュー（GitHub Actions風）。"""
