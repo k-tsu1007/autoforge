@@ -762,6 +762,99 @@ def api_run_plugin(plugin: str = Form(...), user: str = Depends(check_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/flow", response_class=HTMLResponse)
+def flow_page(request: Request, user: str = Depends(check_auth)):
+    """システムフロー図 + プロンプト閲覧・編集。"""
+    from core.instance import get_active_instance
+    inst = get_active_instance()
+    prompts_dir = inst.root / "prompts"
+
+    def read_txt(name: str) -> str:
+        p = prompts_dir / f"{name}.txt"
+        return p.read_text(encoding="utf-8") if p.exists() else "(ファイルなし)"
+
+    def extract_py_prompt(rel_path: str, marker: str) -> str:
+        p = ROOT / rel_path
+        if not p.exists():
+            return "(ファイルなし)"
+        try:
+            src = p.read_text(encoding="utf-8")
+            idx = src.find(marker)
+            if idx == -1:
+                return "(プロンプト未検出)"
+            tq = src.find('"""', idx)
+            if tq == -1:
+                return "(プロンプト未検出)"
+            end = src.find('"""', tq + 3)
+            if end == -1:
+                return "(プロンプト未検出)"
+            return src[tq + 3:end].strip()
+        except Exception as e:
+            return f"(読み取りエラー: {e})"
+
+    prompts = {
+        "tweet_generator": {
+            "label": "ツイート生成", "editable": True,
+            "file": "prompts/tweet_generator.txt",
+            "content": read_txt("tweet_generator"),
+        },
+        "article_generator": {
+            "label": "記事生成", "editable": True,
+            "file": "prompts/article_generator.txt",
+            "content": read_txt("article_generator"),
+        },
+        "engage_quote": {
+            "label": "引用RTコメント生成", "editable": True,
+            "file": "prompts/engage_quote.txt",
+            "content": read_txt("engage_quote"),
+        },
+        "engage_reply": {
+            "label": "リプライ生成", "editable": True,
+            "file": "prompts/engage_reply.txt",
+            "content": read_txt("engage_reply"),
+        },
+        "mention_reply": {
+            "label": "メンション返信生成", "editable": True,
+            "file": "prompts/mention_reply.txt",
+            "content": read_txt("mention_reply"),
+        },
+        "advisor": {
+            "label": "運用アドバイス (advisor)", "editable": False,
+            "file": "core/learning/advisor.py",
+            "content": extract_py_prompt("core/learning/advisor.py", 'prompt = f"""'),
+        },
+        "evolve": {
+            "label": "戦略進化 (evolve)", "editable": False,
+            "file": "core/learning/evolve.py",
+            "content": extract_py_prompt("core/learning/evolve.py", 'return f"""'),
+        },
+        "regen_learner": {
+            "label": "レビュー学習 (regen_learner)", "editable": False,
+            "file": "core/learning/regen_learner.py",
+            "content": extract_py_prompt("core/learning/regen_learner.py", 'prompt = f"""'),
+        },
+    }
+    saved = request.query_params.get("saved")
+    return templates.TemplateResponse(
+        request=request,
+        name="flow.html",
+        context={"prompts": prompts, "saved": saved},
+    )
+
+
+@app.post("/flow/prompt/{name}/save")
+def save_prompt(name: str, text: str = Form(...), user: str = Depends(check_auth)):
+    """プロンプト .txt ファイルを保存する。"""
+    from core.instance import get_active_instance
+    allowed = {"tweet_generator", "article_generator", "engage_quote", "engage_reply", "mention_reply"}
+    if name not in allowed:
+        raise HTTPException(status_code=400, detail="編集不可のプロンプトです")
+    inst = get_active_instance()
+    p = inst.root / "prompts" / f"{name}.txt"
+    p.write_text(text, encoding="utf-8")
+    return RedirectResponse(url="/flow?saved=" + name, status_code=303)
+
+
 def main():
     import uvicorn
     uvicorn.run(

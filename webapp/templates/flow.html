@@ -1,0 +1,667 @@
+{% extends "base.html" %}
+{% block title %}システムフロー — autoforge{% endblock %}
+
+{% block head %}
+<style>
+/* ─── PIPELINE OVERVIEW BAR ─── */
+.pipe-bar {
+  display: flex; align-items: stretch; gap: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; margin-bottom: 2rem;
+}
+.pipe-stage {
+  flex: 1; padding: .75rem .6rem; text-align: center;
+  border-right: 1px solid var(--border); position: relative;
+  text-decoration: none; display: block;
+  transition: background .15s;
+}
+.pipe-stage:last-child { border-right: none; }
+.pipe-stage:hover { background: var(--surface2); }
+.pipe-stage::after {
+  content: "▸";
+  position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
+  color: var(--border); font-size: .8rem; z-index: 1;
+}
+.pipe-stage:last-child::after { display: none; }
+.ps-icon { font-size: 1.1rem; display: block; margin-bottom: .2rem; }
+.ps-label { font-size: .72rem; color: var(--muted); display: block; }
+.ps-time { font-size: .65rem; color: var(--dim); display: block; margin-top: .1rem; }
+
+/* ─── FLOW SECTION ─── */
+.flow-section { margin-bottom: 2rem; }
+.flow-section-hd {
+  font-size: .72rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .1em; padding-bottom: .5rem; margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: .5rem;
+}
+.flow-section-hd .fsh-icon { font-size: 1rem; }
+.flow-section-hd .fsh-time {
+  margin-left: auto; font-family: var(--font-mono); font-size: .72rem;
+  background: var(--border); padding: .1rem .5rem; border-radius: 4px; color: var(--text);
+}
+
+/* ─── STEP TIMELINE ─── */
+.flow-steps { position: relative; }
+.flow-step {
+  display: grid; grid-template-columns: 28px 1fr; gap: 0 .75rem;
+  margin-bottom: 0; position: relative;
+}
+.flow-step::before {
+  content: ""; position: absolute; left: 13px; top: 28px;
+  width: 2px; bottom: 0; background: var(--border);
+}
+.flow-step:last-child::before { display: none; }
+.step-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: .1rem; z-index: 1; position: relative;
+  font-size: .72rem; font-weight: 700; color: var(--muted);
+}
+.step-dot.has-prompt { border-color: var(--blue); color: var(--blue); }
+.step-body { padding-bottom: 1.2rem; }
+.step-name {
+  font-size: .85rem; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  min-height: 28px; align-content: center;
+}
+.step-desc { font-size: .78rem; color: var(--muted); margin: .2rem 0 .4rem; line-height: 1.5; }
+.step-file {
+  font-family: var(--font-mono); font-size: .68rem; color: var(--dim);
+  background: var(--bg); border: 1px solid var(--border);
+  padding: .1rem .4rem; border-radius: 3px;
+}
+.step-badge {
+  font-size: .68rem; padding: .1rem .45rem; border-radius: 4px;
+  font-weight: 700; letter-spacing: .03em;
+}
+.badge-prompt { background: #1a2744; color: var(--blue); border: 1px solid #60a5fa33; }
+.badge-nocode { background: var(--border); color: var(--muted); }
+.badge-edit   { background: #0c2016; color: var(--green); border: 1px solid #4ade8033; }
+.badge-loop   { background: #1c0f02; color: var(--yellow); border: 1px solid #facc1533; }
+
+/* ─── PROMPT PANEL ─── */
+.prompt-panel {
+  margin-top: .5rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.prompt-panel summary {
+  list-style: none; cursor: pointer; padding: .5rem .8rem;
+  font-size: .78rem; color: var(--muted);
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--surface); user-select: none;
+}
+.prompt-panel summary::-webkit-details-marker { display: none; }
+.prompt-panel summary::after { content: "▾"; margin-left: auto; color: var(--muted); font-size: .65rem; }
+.prompt-panel[open] summary::after { content: "▴"; }
+.prompt-panel summary:hover { color: var(--text); }
+.prompt-body { background: var(--bg); }
+.prompt-pre {
+  padding: .9rem 1rem; font-family: var(--font-mono); font-size: .78rem;
+  color: var(--text); white-space: pre-wrap; line-height: 1.6;
+  max-height: 420px; overflow-y: auto;
+  border: none; margin: 0;
+}
+.prompt-edit-area {
+  width: 100%; background: var(--bg); color: var(--text);
+  border: none; border-top: 1px solid var(--border);
+  padding: .9rem 1rem; font-family: var(--font-mono); font-size: .78rem;
+  line-height: 1.6; resize: vertical; min-height: 200px;
+  outline: none;
+}
+.prompt-edit-area:focus { border-color: var(--blue); }
+.prompt-actions {
+  display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem;
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+.prompt-save-btn {
+  background: var(--blue); color: #000; border: none;
+  padding: .3rem .9rem; border-radius: 999px; font-weight: 700;
+  font-size: .75rem; cursor: pointer;
+}
+.prompt-save-btn:hover { opacity: .85; }
+.prompt-readonly-note { font-size: .72rem; color: var(--dim); }
+
+/* ─── DATA FLOW ARROWS ─── */
+.data-flow {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  margin: .4rem 0; font-size: .75rem;
+}
+.df-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: .15rem .5rem; color: var(--muted);
+}
+.df-box.df-db  { border-color: #60a5fa44; color: var(--blue); }
+.df-box.df-ai  { border-color: #a3e63544; color: var(--lime); }
+.df-box.df-out { border-color: #4ade8033; color: var(--green); }
+.df-arr { color: var(--dim); font-size: .7rem; }
+
+/* ─── SAVE BANNER ─── */
+.save-banner {
+  background: #0c2016; border: 1px solid #4ade8033; border-radius: 8px;
+  padding: .6rem 1rem; margin-bottom: 1rem; font-size: .82rem; color: var(--green);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if saved %}
+<div class="save-banner">✓ 「{{ saved }}」プロンプトを保存しました。次回の生成から反映されます。</div>
+{% endif %}
+
+<h2 style="margin-top:0;">システムフロー</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.4rem;">
+  各フェーズの処理内容と使用プロンプトを確認できます。<strong style="color:var(--blue);">青い ✎ マーク</strong>のプロンプトは編集・保存が可能です。
+</p>
+
+{# ─── PIPELINE OVERVIEW BAR ─── #}
+<div class="pipe-bar">
+  <a class="pipe-stage" href="#morning">
+    <span class="ps-icon">🌅</span>
+    <span class="ps-label">朝の戦略更新</span>
+    <span class="ps-time">06:00</span>
+  </a>
+  <a class="pipe-stage" href="#article">
+    <span class="ps-icon">📝</span>
+    <span class="ps-label">記事生成・投稿</span>
+    <span class="ps-time">スロット毎</span>
+  </a>
+  <a class="pipe-stage" href="#xpost">
+    <span class="ps-icon">🐦</span>
+    <span class="ps-label">Xツイート投稿</span>
+    <span class="ps-time">5分毎</span>
+  </a>
+  <a class="pipe-stage" href="#engage">
+    <span class="ps-icon">💬</span>
+    <span class="ps-label">エンゲージ</span>
+    <span class="ps-time">10分毎</span>
+  </a>
+  <a class="pipe-stage" href="#mention">
+    <span class="ps-icon">📨</span>
+    <span class="ps-label">メンション返信</span>
+    <span class="ps-time">10/30分毎</span>
+  </a>
+  <a class="pipe-stage" href="#learn">
+    <span class="ps-icon">🧠</span>
+    <span class="ps-label">学習ループ</span>
+    <span class="ps-time">06:00</span>
+  </a>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 1: MORNING                       #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="morning">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">🌅</span>
+    朝の戦略更新パイプライン
+    <span class="fsh-time">毎日 06:00</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          evaluate — Note統計を取得
+          <span class="step-badge badge-nocode">データ取得</span>
+        </div>
+        <div class="step-desc">NoteのPV・スキ・コメント数を全記事分フェッチしてDBに保存する。以降のステップのインプットになる。</div>
+        <div class="data-flow">
+          <span class="df-box">Note API</span><span class="df-arr">→</span>
+          <span class="df-box df-db">articles DB</span>
+        </div>
+        <span class="step-file">core/learning/evaluate.py</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">2</div>
+      <div class="step-body">
+        <div class="step-name">
+          advisor — 今日の運用パラメータを決定
+          <span class="step-badge badge-prompt">Claude プロンプト</span>
+        </div>
+        <div class="step-desc">記事成績・ツイートデータ・A/Bリフト結果を Claude に渡し、投稿スロット・ターゲット件数・検索キーワードなどをJSONで出力させる。結果は <code>strategy.json</code> の <code>advisor</code> セクションに保存。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">統計DB</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (sonnet)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">strategy.json / advisor</span>
+        </div>
+        <span class="step-file">core/learning/advisor.py</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る <span style="color:var(--dim);font-size:.7rem;">(コード埋め込み・読み取り専用)</span></summary>
+          <div class="prompt-body">
+            <pre class="prompt-pre">{{ prompts.advisor.content }}</pre>
+            <div class="prompt-actions">
+              <span class="prompt-readonly-note">⚠ このプロンプトは advisor.py に埋め込まれています。変更はコードを直接編集してください。</span>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">3</div>
+      <div class="step-body">
+        <div class="step-name">
+          tweet_generator — 今日のツイート15本生成
+          <span class="step-badge badge-edit">✎ 編集可能</span>
+        </div>
+        <div class="step-desc">直近の記事テーマ・knowledge.jsonの傾向（DO/DONT）を参照し、7種類のジャンルを混ぜてツイートを生成する。生成されたツイートは <code>tweet_queue</code> に追加。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">記事テーマ + knowledge</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (sonnet)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">tweet_queue DB</span>
+        </div>
+        <span class="step-file">prompts/tweet_generator.txt</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る・編集する</summary>
+          <div class="prompt-body">
+            <form method="post" action="/flow/prompt/tweet_generator/save">
+              <textarea class="prompt-edit-area" name="text" rows="30">{{ prompts.tweet_generator.content }}</textarea>
+              <div class="prompt-actions">
+                <button type="submit" class="prompt-save-btn">💾 保存</button>
+                <span class="prompt-readonly-note">変数: {n} = 本数, {recent_topics} = 最近の記事トピック, {do_rules} / {dont_rules} = knowledge.json</span>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">4</div>
+      <div class="step-body">
+        <div class="step-name">
+          evolve — コンテンツ戦略を自己改善
+          <span class="step-badge badge-prompt">Claude プロンプト</span>
+        </div>
+        <div class="step-desc">記事の成果・タグ別成績・ツイートデータをもとに Claude が <code>program.md</code>（AIへの指示書）と <code>strategy.json</code> の改善案を生成・上書きする。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">記事 / ツイート成績</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (sonnet)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">program.md + strategy.json</span>
+        </div>
+        <span class="step-file">core/learning/evolve.py</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る <span style="color:var(--dim);font-size:.7rem;">(コード埋め込み・読み取り専用)</span></summary>
+          <div class="prompt-body">
+            <pre class="prompt-pre">{{ prompts.evolve.content }}</pre>
+            <div class="prompt-actions">
+              <span class="prompt-readonly-note">⚠ evolve.py に埋め込まれています。変更はコードを直接編集してください。</span>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 2: ARTICLE GENERATION            #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="article">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">📝</span>
+    Note記事の生成・投稿
+    <span class="fsh-time">advisor の note_post_slots に一致した時</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          スロット確認
+          <span class="step-badge badge-nocode">制御</span>
+        </div>
+        <div class="step-desc"><code>advisor.note_post_slots</code> と現在時刻を照合。当日の投稿数が <code>note_daily_target</code> 未満なら生成に進む。</div>
+        <span class="step-file">platforms/note/policy.py</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">2</div>
+      <div class="step-body">
+        <div class="step-name">
+          article_generator — 記事本文を生成
+          <span class="step-badge badge-edit">✎ 編集可能</span>
+        </div>
+        <div class="step-desc">SEOキーワード・ジャンル・ターゲット読者・文体ルールを渡して Claude に記事を書かせる。無料部分と有料部分（<code>free_ratio</code> で比率設定）を生成。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">strategy.json + knowledge</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (opus)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">articles DB (draft)</span>
+        </div>
+        <span class="step-file">prompts/article_generator.txt</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る・編集する</summary>
+          <div class="prompt-body">
+            <form method="post" action="/flow/prompt/article_generator/save">
+              <textarea class="prompt-edit-area" name="text" rows="30">{{ prompts.article_generator.content }}</textarea>
+              <div class="prompt-actions">
+                <button type="submit" class="prompt-save-btn">💾 保存</button>
+                <span class="prompt-readonly-note">変数: {genre}, {target_length}, {free_ratio}, {seo_keywords}, {recent_titles} など</span>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">3</div>
+      <div class="step-body">
+        <div class="step-name">
+          publish — Note に投稿
+          <span class="step-badge badge-nocode">投稿</span>
+        </div>
+        <div class="step-desc">生成した記事を Playwright 経由で Note に投稿する。投稿後、記事タイトルからツイート下書きを自動生成して <code>tweet_queue</code> に追加。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">articles DB</span><span class="df-arr">→</span>
+          <span class="df-box">Note (Playwright)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">note_url 保存 + tweet_queue 追加</span>
+        </div>
+        <span class="step-file">platforms/note/publisher.py</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 3: X POSTING                     #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="xpost">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">🐦</span>
+    X 単発ツイート投稿
+    <span class="fsh-time">5分毎チェック / advisor の single_post_slots に一致した時</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          PostingPolicy — 投稿してよい時間か判定
+          <span class="step-badge badge-nocode">制御</span>
+        </div>
+        <div class="step-desc"><code>advisor.single_post_slots</code> と照合。直近の投稿から <code>min_gap_minutes</code> 以上経過しているか確認。</div>
+        <span class="step-file">platforms/x/policy.py</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">2</div>
+      <div class="step-body">
+        <div class="step-name">
+          tweet_queue → X API 投稿
+          <span class="step-badge badge-nocode">投稿</span>
+        </div>
+        <div class="step-desc"><code>tweet_queue</code> から次の未投稿ツイートを取り出して X API で投稿する。<br>ツイートの内容は朝の tweet_generator (ステップ1-3) または Note 投稿時の連動ツイートで生成済み。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">tweet_queue DB</span><span class="df-arr">→</span>
+          <span class="df-box">X API</span><span class="df-arr">→</span>
+          <span class="df-box df-out">tweet_posted DB</span>
+        </div>
+        <span class="step-file">platforms/x/poster.py</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 4: ENGAGE                        #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="engage">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">💬</span>
+    エンゲージ（引用RT・リプライ）
+    <span class="fsh-time">10分毎 / advisor の quote_post_slots・reply_post_slots に一致した時</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          キーワード検索・スコアリング
+          <span class="step-badge badge-nocode">検索</span>
+        </div>
+        <div class="step-desc"><code>advisor.growth_search_keywords</code> で X を検索し、関連性スコア (0〜10) でフィルタリング。すでに反応済みのツイートはスキップ。</div>
+        <div class="data-flow">
+          <span class="df-box">X 検索 (Playwright)</span><span class="df-arr">→</span>
+          <span class="df-box df-db">スコアリング</span><span class="df-arr">→</span>
+          <span class="df-box df-out">候補ツイート</span>
+        </div>
+        <span class="step-file">platforms/x/engage.py</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">2a</div>
+      <div class="step-body">
+        <div class="step-name">
+          engage_quote — 引用RTコメントを生成
+          <span class="step-badge badge-edit">✎ 編集可能</span>
+        </div>
+        <div class="step-desc">対象ツイートの本文を渡し、120文字以内の引用コメントを生成。自分の観察を添えるが、否定・説教・褒め殺しは禁止。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">対象ツイート本文</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (haiku)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">engage_queue (approved=NULL)</span>
+        </div>
+        <span class="step-file">prompts/engage_quote.txt</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る・編集する</summary>
+          <div class="prompt-body">
+            <form method="post" action="/flow/prompt/engage_quote/save">
+              <textarea class="prompt-edit-area" name="text" rows="20">{{ prompts.engage_quote.content }}</textarea>
+              <div class="prompt-actions">
+                <button type="submit" class="prompt-save-btn">💾 保存</button>
+                <span class="prompt-readonly-note">変数: {tweet_text} = 対象ツイート本文</span>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">2b</div>
+      <div class="step-body">
+        <div class="step-name">
+          engage_reply — リプライを生成
+          <span class="step-badge badge-edit">✎ 編集可能</span>
+        </div>
+        <div class="step-desc">対象ツイートに対して80文字以内のリプライを生成。何が刺さったか素直に反応する。空虚な称賛・振り返りコメントは禁止。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">対象ツイート本文</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (haiku)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">engage_queue (approved=NULL)</span>
+        </div>
+        <span class="step-file">prompts/engage_reply.txt</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る・編集する</summary>
+          <div class="prompt-body">
+            <form method="post" action="/flow/prompt/engage_reply/save">
+              <textarea class="prompt-edit-area" name="text" rows="20">{{ prompts.engage_reply.content }}</textarea>
+              <div class="prompt-actions">
+                <button type="submit" class="prompt-save-btn">💾 保存</button>
+                <span class="prompt-readonly-note">変数: {tweet_text} = 対象ツイート本文</span>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">3</div>
+      <div class="step-body">
+        <div class="step-name">
+          レビューキュー → 承認 → 投稿
+          <span class="step-badge badge-nocode">投稿</span>
+        </div>
+        <div class="step-desc"><code>REVIEW_MODE=1</code> の場合、生成物は <a href="/review">レビューページ</a> に溜まり承認後に投稿される。<code>=0</code> の場合は即時投稿。投稿後、対象ツイートに<strong>いいね</strong>も行う。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">engage_queue (approved=1)</span><span class="df-arr">→</span>
+          <span class="df-box">X API (引用RT/リプライ)</span><span class="df-arr">+</span>
+          <span class="df-box">❤️ いいね</span>
+        </div>
+        <span class="step-file">platforms/x/engage.py → run_send()</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 5: MENTION REPLY                 #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="mention">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">📨</span>
+    メンション返信
+    <span class="fsh-time">スキャン: 10分毎 (8〜22時) / 送信: 30分毎</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          X 通知ページをスキャン (Chromium)
+          <span class="step-badge badge-nocode">スキャン</span>
+        </div>
+        <div class="step-desc">X の「@メンション」タブを Chromium でスキャン。新着のメンションを全取得。取得したメンション全てに<strong>いいね</strong>する。</div>
+        <span class="step-file">platforms/x/mention_reply.py → run_scan()</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">2</div>
+      <div class="step-body">
+        <div class="step-name">
+          mention_reply — 返信するか判断・文章生成
+          <span class="step-badge badge-edit">✎ 編集可能</span>
+        </div>
+        <div class="step-desc">
+          スレッドのコンテキスト（引用ツイート・前後の会話）を取得し、<strong>トーンを判定してから</strong>返信文を生成する。<br>
+          「ありがとう」「了解」など会話終了系は返信しない。ネタ系ツイートには短く軽いトーンで返す。<br>
+          生成後はランダム遅延 (15〜45分) を設けてから送信キューに入れる。
+        </div>
+        <div class="data-flow">
+          <span class="df-box df-db">メンション本文 + スレッドコンテキスト</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (haiku)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">mention_reply_queue</span>
+        </div>
+        <span class="step-file">prompts/mention_reply.txt</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る・編集する</summary>
+          <div class="prompt-body">
+            <form method="post" action="/flow/prompt/mention_reply/save">
+              <textarea class="prompt-edit-area" name="text" rows="25">{{ prompts.mention_reply.content }}</textarea>
+              <div class="prompt-actions">
+                <button type="submit" class="prompt-save-btn">💾 保存</button>
+                <span class="prompt-readonly-note">変数: {context} = スレッド文脈, {mention_text} = 相手の発言</span>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">3</div>
+      <div class="step-body">
+        <div class="step-name">
+          遅延送信 → 投稿 → いいね
+          <span class="step-badge badge-nocode">投稿</span>
+        </div>
+        <div class="step-desc"><code>send_after</code> が現在時刻を過ぎた返信を送信する。<code>REVIEW_MODE=1</code> の場合は <a href="/review">レビューページ</a> で承認が必要。送信後、対象ツイートに<strong>いいね</strong>する。</div>
+        <span class="step-file">platforms/x/mention_reply.py → run_send()</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 6: LEARNING LOOP                 #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="learn">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">🧠</span>
+    学習ループ
+    <span class="fsh-time">毎日 06:00 (朝パイプライン内)</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          レビュー操作（承認・却下・再生成）
+          <span class="step-badge badge-loop">ユーザー操作</span>
+        </div>
+        <div class="step-desc"><a href="/review">レビューページ</a> での承認・却下・再生成操作が <code>regen_log</code> テーブルに記録される。これが学習データになる。</div>
+        <div class="data-flow">
+          <span class="df-box">レビューページ操作</span><span class="df-arr">→</span>
+          <span class="df-box df-db">regen_log DB</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot has-prompt">2</div>
+      <div class="step-body">
+        <div class="step-name">
+          regen_learner — 承認/却下パターンを分析
+          <span class="step-badge badge-prompt">Claude プロンプト</span>
+        </div>
+        <div class="step-desc"><code>regen_log</code> の承認済みテキストと却下済みテキストを Claude に渡し、「何が良くて何が悪かったか」を DO/DONT ルールとして抽出させる。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">regen_log (承認 / 却下)</span><span class="df-arr">→</span>
+          <span class="df-box df-ai">Claude (haiku)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">knowledge.json (DO/DONT rules)</span>
+        </div>
+        <span class="step-file">core/learning/regen_learner.py</span>
+        <details class="prompt-panel">
+          <summary>📄 プロンプトを見る <span style="color:var(--dim);font-size:.7rem;">(コード埋め込み・読み取り専用)</span></summary>
+          <div class="prompt-body">
+            <pre class="prompt-pre">{{ prompts.regen_learner.content }}</pre>
+            <div class="prompt-actions">
+              <span class="prompt-readonly-note">⚠ regen_learner.py に埋め込まれています。変更はコードを直接編集してください。</span>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">3</div>
+      <div class="step-body">
+        <div class="step-name">
+          knowledge.json → 生成プロンプトに反映
+          <span class="step-badge badge-loop">フィードバック</span>
+        </div>
+        <div class="step-desc">抽出された DO/DONT ルールは翌朝から <code>tweet_generator.txt</code>・<code>article_generator.txt</code> の <code>{do_rules}</code> / <code>{dont_rules}</code> 変数として埋め込まれる。advisor や evolve も knowledge を参照して戦略を調整する。</div>
+        <div class="data-flow">
+          <span class="df-box df-db">knowledge.json</span><span class="df-arr">→</span>
+          <span class="df-box">tweet_generator</span><span class="df-arr">+</span>
+          <span class="df-box">article_generator</span><span class="df-arr">+</span>
+          <span class="df-box">advisor / evolve</span>
+        </div>
+        <span class="step-file">core/learning/knowledge.py</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
