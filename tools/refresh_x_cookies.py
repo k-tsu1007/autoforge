@@ -260,10 +260,9 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                 print(f"  execCommand result: {set_ok}")
                 await asyncio.sleep(1)
 
-                # 値確認（IIFE形式）
+                # 値確認（IIFE形式）— f-string は1つにまとめる（}}混入防止）
                 val_check = await tab.evaluate(
-                    f"(() => {{ const el = document.querySelector('{found_sel}');"
-                    "  return el ? el.value : 'NOT_FOUND'; }})()"
+                    f"(() => {{ const el = document.querySelector('{found_sel}'); return el ? el.value : 'NOT_FOUND'; }})()"
                 )
                 print(f"  value after exec: '{val_check}'")
 
