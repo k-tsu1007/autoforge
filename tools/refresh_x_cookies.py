@@ -243,26 +243,25 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                         await asyncio.sleep(1)
 
                         # 方法A: JS nativeInputValueSetter（React対応）
-                        set_ok = await tab.evaluate(f"""
-                            () => {{
-                                const el = document.querySelector('{sel.replace("'", "\\'")}')
-                                        || document.querySelector('input[data-testid="ocfEnterTextTextInput"]')
-                                        || document.querySelector('input[name="text"]');
-                                if (!el) return 'NOT_FOUND';
-                                el.focus();
-                                try {{
-                                    const setter = Object.getOwnPropertyDescriptor(
-                                        window.HTMLInputElement.prototype, 'value'
-                                    ).set;
-                                    setter.call(el, '{uname}');
-                                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
-                                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
-                                    return 'JS_OK:' + el.value;
-                                }} catch(e) {{
-                                    return 'JS_ERR:' + e.message;
-                                }}
-                            }}
-                        """)
+                        # f-string内でバックスラッシュ不可のため事前に変数化
+                        escaped_uname = uname.replace("'", "\\'")
+                        js_code = (
+                            "() => {"
+                            "  const el = document.querySelector('input[data-testid=\"ocfEnterTextTextInput\"]')"
+                            "           || document.querySelector('input[name=\"text\"]');"
+                            "  if (!el) return 'NOT_FOUND';"
+                            "  el.focus();"
+                            "  try {"
+                            "    const setter = Object.getOwnPropertyDescriptor("
+                            "      window.HTMLInputElement.prototype, 'value').set;"
+                            f"    setter.call(el, '{escaped_uname}');"
+                            "    el.dispatchEvent(new Event('input', {bubbles: true}));"
+                            "    el.dispatchEvent(new Event('change', {bubbles: true}));"
+                            "    return 'JS_OK:' + el.value;"
+                            "  } catch(e) { return 'JS_ERR:' + e.message; }"
+                            "}"
+                        )
+                        set_ok = await tab.evaluate(js_code)
                         print(f"  JS setValue: {set_ok}")
                         await asyncio.sleep(1)
 
