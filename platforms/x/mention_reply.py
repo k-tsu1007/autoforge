@@ -200,33 +200,41 @@ def _decide_reply(mention_text: str, context: dict | None = None) -> dict:
             if quoted:
                 ctx_section += f"\n【引用元ツイート】\n{quoted[:200]}"
 
+        # コンテキストセクションを整形（テンプレートの {context} に差し込む）
+        context_block = ""
+        if ctx_section:
+            context_block = ctx_section.strip() + "\n\n"
+
         # インスタンスのプロンプトファイルを優先読み込み
         prompt = ""
         try:
             from core.paths import load_prompt
-            prompt = load_prompt("mention_reply.txt", mention_text=mention_text[:300])
-            # プロンプトファイルがある場合はコンテキストを末尾に追記
-            if prompt and ctx_section:
-                prompt = prompt.rstrip() + f"\n{ctx_section}"
+            prompt = load_prompt(
+                "mention_reply.txt",
+                mention_text=mention_text[:300],
+                context=context_block,
+            )
         except Exception:
             pass
 
         if not prompt:
             prompt = f"""あなたは本業をしながらAI・note・SNSの副収入を試している30代です。
-{ctx_section}
-以下は自分のツイートへの返信です。「自然に会話を続けるべきか」「ここで終えるべきか」を判断してください。
 
-【相手の返信】
+{context_block}【相手の返信】
 {mention_text[:300]}
 
+【最重要：まず会話の流れとトーンを読む】
+- ネタ・ユーモア系のやり取りには同じノリで軽く返す（真面目な文章は逆効果）
+- 相手のトーン・テンションに合わせることを最優先にする
+
 【判断基準】
-- 質問・感想・興味 → 返す
-- 感謝・了解・スタンプ → 終える
+- 質問・感想・ボケ・興味 → 返す
+- 感謝・了解・スタンプで会話がひと段落 → 終える
 - 否定・クレーム → 終える
 
 【出力フォーマット】
 REPLY: yes または no
-TEXT: （返す場合のみ70字以内の一言、会話の流れを踏まえて自然に）"""
+TEXT: （返す場合のみ70字以内の一言）"""
 
         raw = call_llm(prompt, task_type="strategy_evolution", temperature=0.8, max_tokens=150).strip()
 
