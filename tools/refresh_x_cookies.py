@@ -356,29 +356,50 @@ async def _try_direct_login_async(session_path: Path) -> bool:
 
         # パスワード入力
         await pw_input.click()
-        await asyncio.sleep(0.3)
-        await pw_input.send_keys(password)
         await asyncio.sleep(0.5)
-        await pw_input.send_keys('\n')
-        await asyncio.sleep(5)
+        await pw_input.send_keys(password)
+        await asyncio.sleep(1)
 
-        cookies = await browser.cookies.get_all()
-        has_auth = any(c.get("name") == "auth_token" for c in (cookies or []))
+        # ログインボタンをクリック（Enter より確実）
+        pw_submitted = False
+        for btn_sel in [
+            'button[data-testid="LoginForm_Login_Button"]',
+            'button[type="submit"]',
+        ]:
+            try:
+                btn = await tab.select(btn_sel, timeout=2)
+                if btn:
+                    await btn.click()
+                    pw_submitted = True
+                    print(f"  ログインボタンクリック: {btn_sel}")
+                    break
+            except Exception:
+                continue
+        if not pw_submitted:
+            await pw_input.send_keys('\n')
+            print("  パスワード Enter送信")
 
-        if has_auth:
-            session_path.parent.mkdir(parents=True, exist_ok=True)
-            session_path.write_text(
-                json.dumps(cookies, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            print(f"[OK] ログイン成功。{len(cookies)}件のCookieを保存: {session_path}")
-            return True
-        else:
-            print("[NG] auth_tokenが取得できませんでした（パスワードが違うか2FA有効の可能性）")
-            snap_fail2 = data_dir / "login_fail.png"
-            await tab.save_screenshot(str(snap_fail2))
-            print(f"  スクリーンショット: {snap_fail2}")
-            return False
+        # auth_token が取得できるまで最大30秒待つ
+        print("  auth_token待機中...")
+        for wait_i in range(15):
+            await asyncio.sleep(2)
+            cookies = await browser.cookies.get_all()
+            has_auth = any(c.get("name") == "auth_token" for c in (cookies or []))
+            print(f"  [{wait_i+1}/15] auth_token={'YES' if has_auth else 'no'}, cookies={len(cookies or [])}, URL={tab.url}")
+            if has_auth:
+                session_path.parent.mkdir(parents=True, exist_ok=True)
+                session_path.write_text(
+                    json.dumps(cookies, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                print(f"[OK] ログイン成功。{len(cookies)}件のCookieを保存: {session_path}")
+                return True
+
+        print("[NG] auth_tokenが取得できませんでした（パスワードが違うか2FA有効の可能性）")
+        snap_fail2 = data_dir / "login_fail.png"
+        await tab.save_screenshot(str(snap_fail2))
+        print(f"  スクリーンショット: {snap_fail2}")
+        return False
 
     except Exception as e:
         print(f"[NG] ログインエラー: {e}")
