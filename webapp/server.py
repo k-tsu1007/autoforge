@@ -478,13 +478,13 @@ def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT mention_text, reply_text FROM mention_reply_queue WHERE id=?", (item_id,)
+            "SELECT mention_text, reply_text, mention_url FROM mention_reply_queue WHERE id=?", (item_id,)
         ).fetchone()
         if not row:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
         old_text = row["reply_text"] or ""
         from platforms.x.mention_reply import generate_reply_text
-        new_text = generate_reply_text(row["mention_text"] or "")
+        new_text = generate_reply_text(row["mention_text"] or "", mention_url=row["mention_url"] or "")
         if not new_text:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         conn.execute("UPDATE mention_reply_queue SET reply_text=? WHERE id=?", (new_text, item_id))

@@ -174,17 +174,19 @@ def _fetch_tweet_context(page, tweet_url: str) -> dict:
     return ctx
 
 
-def _decide_reply(mention_text: str, context: dict | None = None) -> dict:
+def _decide_reply(mention_text: str, context: dict | None = None, force: bool = False) -> dict:
     """Claudeが返信すべきか判断し、返すなら文章も生成。
 
     context: _fetch_tweet_context の戻り値（スレッド履歴・引用ツイート）
+    force: True のとき should_reply チェックをスキップして強制生成（再生成ボタン用）
     Returns: {"should_reply": bool, "reply": str}
     """
-    # 明らかな会話終了は即スキップ
-    lower = mention_text.lower()
-    for pat in _END_PATTERNS:
-        if pat in mention_text or pat in lower:
-            return {"should_reply": False, "reply": ""}
+    if not force:
+        # 明らかな会話終了は即スキップ
+        lower = mention_text.lower()
+        for pat in _END_PATTERNS:
+            if pat in mention_text or pat in lower:
+                return {"should_reply": False, "reply": ""}
 
     try:
         from core.llm.wrapper import call_llm
@@ -252,21 +254,33 @@ TEXT: （返す場合のみ70字以内の一言）"""
         return {"should_reply": False, "reply": ""}
 
 
-def generate_reply_text(mention_text: str) -> str:
-    """返信テキストだけを強制生成（should_reply 判断をスキップ）。再生成ボタン用。"""
-    try:
-        from core.llm.wrapper import call_llm
-        prompt = f"""あなたは本業をしながらAI・note・SNSの副収入を試している30代です。
+def generate_reply_text(mention_text: str, mention_url: str = "") -> str:
+    """返信テキストだけを強制生成（should_reply 判断をスキップ）。再生成ボタン用。
 
-以下のツイートへの返信を1つ書いてください。
-70字以内、ハッシュタグなし、URL禁止。自然な一言のみ出力してください。
+    mention_url が渡された場合はスレッドコンテキストを取得して
+    _decide_reply() と同じプロンプトで生成する。
+    """
+    tweet_ctx = {"thread_texts": [], "quoted_text": ""}
 
-【相手のツイート】
-{mention_text[:300]}"""
-        return call_llm(prompt, task_type="strategy_evolution", temperature=0.9, max_tokens=150).strip()
-    except Exception as e:
-        print(f"返信生成失敗: {e}")
-        return ""
+    if mention_url:
+        try:
+            from playwright.sync_api import sync_playwright
+            import json
+            cookies = _load_cookies()
+            if cookies:
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    ctx_b = browser.new_context()
+                    ctx_b.add_cookies(cookies)
+                    page = ctx_b.new_page()
+                    page.set_default_timeout(20000)
+                    tweet_ctx = _fetch_tweet_context(page, mention_url)
+                    browser.close()
+        except Exception as e:
+            print(f"  コンテキスト取得失敗（再生成）: {e}")
+
+    result = _decide_reply(mention_text, context=tweet_ctx, force=True)
+    return result.get("reply", "")
 
 
 def _like_tweet_playwright(page, tweet_url: str) -> bool:
