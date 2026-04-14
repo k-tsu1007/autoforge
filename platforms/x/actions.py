@@ -29,9 +29,13 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         from platforms.x._browser import start_browser_with_session
         browser, tab = await start_browser_with_session(_get_session_path(), headless=True)
 
+        # セッション確立のため home を経由してから検索に移動する
+        tab = await browser.get("https://x.com/home")
+        await asyncio.sleep(5)
+
         url = f"https://x.com/search?q={quote(keyword)}&src=typed_query&f=live"
         tab = await browser.get(url)
-        await asyncio.sleep(5)
+        await asyncio.sleep(7)
 
         if "/login" in tab.url or "/flow/login" in tab.url:
             print("❌ Cookie 切れ")
