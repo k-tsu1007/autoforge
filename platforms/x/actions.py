@@ -4,6 +4,7 @@ x_session.json のCookieをCDP注入して認証済みセッションを使う�
 """
 
 import asyncio
+import json as _json
 import sys
 from pathlib import Path
 from urllib.parse import quote
@@ -53,21 +54,10 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         art_count2 = await tab.evaluate("(() => document.querySelectorAll('article').length)()")
         print(f"  [search] article数(スクロール後): {art_count2}")
 
-        # 最初のarticleのリンクをデバッグ
-        debug_links = await tab.evaluate("""
-            (() => {
-                const art = document.querySelector('article');
-                if (!art) return 'no article';
-                const links = [...art.querySelectorAll('a')];
-                return links.slice(0, 5).map(a => a.getAttribute('href')).join(' | ');
-            })()
-        """)
-        print(f"  [search] 1件目のlinks: {debug_links}")
-
-        tweets = await tab.evaluate("""
+        tweets_json = await tab.evaluate("""
             (() => {
                 const arts = [...document.querySelectorAll('article')];
-                return arts.map(art => {
+                const results = arts.map(art => {
                     const link = art.querySelector('a[href*="/status/"]');
                     const href = link ? link.getAttribute('href') : null;
                     return {
@@ -76,10 +66,14 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
                         text: art.innerText.substring(0, 500)
                     };
                 }).filter(t => t.url);
+                return JSON.stringify(results);
             })()
         """)
+        try:
+            tweets = _json.loads(tweets_json) if tweets_json else []
+        except Exception:
+            tweets = []
 
-        print(f"  [search] tweets type={type(tweets)}, len={len(tweets) if tweets else 0}, raw={repr(tweets)[:200] if tweets else tweets}")
         seen = set()
         for t in (tweets or []):
             if len(results) >= max_results:
