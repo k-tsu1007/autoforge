@@ -213,6 +213,17 @@ CREATE TABLE IF NOT EXISTS engage_queue (
     fail_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', '+9 hours'))
 );
+
+CREATE TABLE IF NOT EXISTS regen_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_type TEXT NOT NULL,   -- 'tweet' | 'engage' | 'reply'
+    queue_id INTEGER NOT NULL,    -- 各キューテーブルの id
+    old_text TEXT,                -- 再生成前のテキスト
+    new_text TEXT,                -- 再生成後のテキスト（最終承認テキスト）
+    approved INTEGER DEFAULT NULL, -- 1=承認 0=却下 NULL=未決
+    created_at TEXT DEFAULT (datetime('now', '+9 hours'))
+);
+CREATE INDEX IF NOT EXISTS idx_regen_log_type ON regen_log(content_type, approved);
 """
 
 

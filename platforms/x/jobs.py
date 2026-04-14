@@ -185,9 +185,21 @@ def job_mention_send():
         _log(f"❌ メンション返信送信エラー: {e}")
 
 
+def job_regen_learn():
+    """再生成ログ学習 — 毎朝6:00にレビュー承認/却下パターンを分析してknowledgeを更新。"""
+    _log("🧠 再生成ログ学習開始")
+    try:
+        from core.learning.regen_learner import run
+        result = run()
+        _log(f"🧠 再生成ログ学習完了: {result}")
+    except Exception as e:
+        _log(f"❌ 再生成ログ学習エラー: {e}")
+
+
 def register_jobs(scheduler, jst, inst=None):
     """APScheduler に X 関連ジョブを登録する。"""
     from apscheduler.triggers.interval import IntervalTrigger
+    from apscheduler.triggers.cron import CronTrigger
 
     now = datetime.now(jst)
 
@@ -243,4 +255,12 @@ def register_jobs(scheduler, jst, inst=None):
         max_instances=1,
         coalesce=True,
         next_run_time=now + timedelta(minutes=3),
+    )
+    scheduler.add_job(
+        job_regen_learn,
+        CronTrigger(hour=6, minute=0, timezone=jst),
+        id="regen_learn",
+        name="Regen Log Learning",
+        max_instances=1,
+        coalesce=True,
     )

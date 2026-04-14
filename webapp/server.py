@@ -302,6 +302,10 @@ def review_tweet_approve(item_id: int, request: Request, user: str = Depends(che
     from core.db import get_connection
     conn = get_connection()
     conn.execute("UPDATE tweet_queue SET approved=1 WHERE id=?", (item_id,))
+    conn.execute(
+        "UPDATE regen_log SET approved=1 WHERE content_type='tweet' AND queue_id=? AND approved IS NULL",
+        (item_id,)
+    )
     conn.commit()
 
     def _post():
@@ -325,7 +329,13 @@ def review_tweet_approve(item_id: int, request: Request, user: str = Depends(che
 def review_tweet_reject(item_id: int, request: Request, user: str = Depends(check_auth)):
     from core.db import get_connection
     conn = get_connection()
+    row = conn.execute("SELECT text FROM tweet_queue WHERE id=?", (item_id,)).fetchone()
     conn.execute("UPDATE tweet_queue SET approved=0, posted=1 WHERE id=?", (item_id,))
+    if row:
+        conn.execute(
+            "UPDATE regen_log SET approved=0 WHERE content_type='tweet' AND queue_id=? AND approved IS NULL",
+            (item_id,)
+        )
     conn.commit()
     return HTMLResponse("")
 
@@ -335,12 +345,18 @@ def review_tweet_regenerate(item_id: int, request: Request, user: str = Depends(
     from core.db import get_connection
     conn = get_connection()
     try:
+        old_row = conn.execute("SELECT text FROM tweet_queue WHERE id=?", (item_id,)).fetchone()
+        old_text = old_row["text"] if old_row else ""
         from platforms.x.tweet_generator import generate_batch
         new_tweets = generate_batch(n=1)
         if not new_tweets:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         new_text = new_tweets[0]
         conn.execute("UPDATE tweet_queue SET text=? WHERE id=?", (new_text, item_id))
+        conn.execute(
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text) VALUES ('tweet',?,?,?)",
+            (item_id, old_text, new_text)
+        )
         conn.commit()
         return HTMLResponse(
             f'<div class="rv-text" id="tw-text-{item_id}">'
@@ -356,6 +372,10 @@ def review_engage_approve(item_id: int, request: Request, user: str = Depends(ch
     conn = get_connection()
     now_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S")
     conn.execute("UPDATE engage_queue SET approved=1, scheduled_at=? WHERE id=?", (now_str, item_id))
+    conn.execute(
+        "UPDATE regen_log SET approved=1 WHERE content_type='engage' AND queue_id=? AND approved IS NULL",
+        (item_id,)
+    )
     conn.commit()
 
     def _send():
@@ -374,6 +394,10 @@ def review_engage_reject(item_id: int, request: Request, user: str = Depends(che
     from core.db import get_connection
     conn = get_connection()
     conn.execute("UPDATE engage_queue SET approved=0, sent=2 WHERE id=?", (item_id,))
+    conn.execute(
+        "UPDATE regen_log SET approved=0 WHERE content_type='engage' AND queue_id=? AND approved IS NULL",
+        (item_id,)
+    )
     conn.commit()
     return HTMLResponse("")
 
@@ -384,16 +408,21 @@ def review_engage_regenerate(item_id: int, request: Request, user: str = Depends
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT action_type, target_text FROM engage_queue WHERE id=?", (item_id,)
+            "SELECT action_type, target_text, comment FROM engage_queue WHERE id=?", (item_id,)
         ).fetchone()
         if not row:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
+        old_text = row["comment"] or ""
         mode = "quote" if row["action_type"] == "quote_tweet" else "reply"
         from platforms.x.engage import _generate_comment
         new_comment = _generate_comment(row["target_text"] or "", mode)
         if not new_comment:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         conn.execute("UPDATE engage_queue SET comment=? WHERE id=?", (new_comment, item_id))
+        conn.execute(
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text) VALUES ('engage',?,?,?)",
+            (item_id, old_text, new_comment)
+        )
         conn.commit()
         return HTMLResponse(
             f'<div class="rv-text" style="margin-top:.5rem;" id="eg-text-{item_id}">'
@@ -413,6 +442,10 @@ def review_reply_approve(item_id: int, request: Request, user: str = Depends(che
         "UPDATE mention_reply_queue SET approved=1, send_after=? WHERE id=?",
         (now_str, item_id)
     )
+    conn.execute(
+        "UPDATE regen_log SET approved=1 WHERE content_type='reply' AND queue_id=? AND approved IS NULL",
+        (item_id,)
+    )
     conn.commit()
 
     def _send():
@@ -431,6 +464,10 @@ def review_reply_reject(item_id: int, request: Request, user: str = Depends(chec
     from core.db import get_connection
     conn = get_connection()
     conn.execute("UPDATE mention_reply_queue SET approved=0, sent=2 WHERE id=?", (item_id,))
+    conn.execute(
+        "UPDATE regen_log SET approved=0 WHERE content_type='reply' AND queue_id=? AND approved IS NULL",
+        (item_id,)
+    )
     conn.commit()
     return HTMLResponse("")
 
@@ -441,15 +478,20 @@ def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT mention_text FROM mention_reply_queue WHERE id=?", (item_id,)
+            "SELECT mention_text, reply_text FROM mention_reply_queue WHERE id=?", (item_id,)
         ).fetchone()
         if not row:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
+        old_text = row["reply_text"] or ""
         from platforms.x.mention_reply import generate_reply_text
         new_text = generate_reply_text(row["mention_text"] or "")
         if not new_text:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         conn.execute("UPDATE mention_reply_queue SET reply_text=? WHERE id=?", (new_text, item_id))
+        conn.execute(
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text) VALUES ('reply',?,?,?)",
+            (item_id, old_text, new_text)
+        )
         conn.commit()
         return HTMLResponse(
             f'<div class="rv-text" style="margin-top:.5rem;" id="rp-text-{item_id}">'

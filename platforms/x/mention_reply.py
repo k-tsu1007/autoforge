@@ -295,7 +295,7 @@ def run_scan() -> dict:
 
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -303,8 +303,13 @@ def run_scan() -> dict:
             page.set_default_navigation_timeout(25000)
 
             # 通知ページ（全タブ）— mentions タブは @mention のみ、replies は全タブに出る
+            # Chromium を使用: WebKit は x.com/notifications をレンダリングできない場合がある
             page.goto("https://x.com/notifications")
-            page.wait_for_timeout(6000)
+            try:
+                page.wait_for_selector('[data-testid="primaryColumn"]', timeout=20000)
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
 
             if "/login" in page.url or "/flow/login" in page.url:
                 print("セッション切れ")
