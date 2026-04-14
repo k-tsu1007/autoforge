@@ -125,13 +125,13 @@ def call_claude_cli(
     cli_env.pop("ANTHROPIC_API_KEY", None)
     cli_env.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-    # SYSTEM権限プロセスからでもTsubasaのClaudeConfig を参照できるよう明示的にセット
+    # SYSTEM権限プロセスからでもTsubasaのClaudeConfig を参照できるよう強制上書き
     if os.name == "nt":
         _tsubasa_home = r"C:\Users\Tsubasa"
-        cli_env.setdefault("USERPROFILE", _tsubasa_home)
-        cli_env.setdefault("APPDATA", rf"{_tsubasa_home}\AppData\Roaming")
-        cli_env.setdefault("LOCALAPPDATA", rf"{_tsubasa_home}\AppData\Local")
-        cli_env.setdefault("HOME", _tsubasa_home)
+        cli_env["USERPROFILE"] = _tsubasa_home
+        cli_env["APPDATA"] = rf"{_tsubasa_home}\AppData\Roaming"
+        cli_env["LOCALAPPDATA"] = rf"{_tsubasa_home}\AppData\Local"
+        cli_env["HOME"] = _tsubasa_home
 
     try:
         result = subprocess.run(
