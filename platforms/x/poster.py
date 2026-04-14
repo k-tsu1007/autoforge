@@ -38,27 +38,6 @@ from core.paths import tweet_posted_path as _tpp; POSTED_JSON = _tpp()
 JST = timezone(timedelta(hours=9))
 
 
-def _to_cdp_cookies(pw_cookies: list) -> list:
-    """Playwright cookie format → nodriver/CDP format."""
-    result = []
-    for c in pw_cookies:
-        cc = {
-            "name": c.get("name", ""),
-            "value": c.get("value", ""),
-            "domain": c.get("domain", ""),
-            "path": c.get("path", "/"),
-            "secure": c.get("secure", False),
-            "httpOnly": c.get("httpOnly", False),
-        }
-        exp = c.get("expires", -1)
-        if exp and exp > 0:
-            cc["expires"] = int(exp)
-        ss = c.get("sameSite")
-        if ss:
-            cc["sameSite"] = ss
-        result.append(cc)
-    return result
-
 
 def should_post_now() -> bool:
     """現在時刻がpost_time_slotsの範囲内か判定。"""
@@ -112,31 +91,25 @@ from core.paths import x_session_path as _xsp; X_SESSION_JSON = _xsp()
 
 
 async def _post_to_x_async(text: str):
-    """nodriverでXに投稿する（保存したCookieを使用）。"""
+    """nodriverでXに投稿する（x_session.json のCookieをCDP注入）。"""
     try:
         import nodriver as uc
     except ImportError:
         print("nodriverが未インストール。")
         return False
 
-    from core.paths import x_chrome_profile_dir
-    profile_dir = x_chrome_profile_dir()
-    if not profile_dir.exists():
-        print("❌ Chrome profile が見つかりません。refresh_x_cookies を実行してください。")
-        return False
-
     browser = None
     try:
-        # persistent profile でログイン済みセッションを使用（cookie set_all 不要）
-        browser = await uc.start(headless=False, user_data_dir=str(profile_dir))
+        from platforms.x._browser import start_browser_with_session
+        browser, tab = await start_browser_with_session(X_SESSION_JSON, headless=False)
 
-        # 投稿ページに直接アクセス
+        # 投稿ページに移動
         tab = await browser.get("https://x.com/compose/post")
         await asyncio.sleep(5)
 
         # ログインチェック
         if "/login" in tab.url or "/flow/login" in tab.url:
-            print("❌ Cookieが無効です。")
+            print("❌ Cookieが無効です。refresh_x_cookies を実行してください。")
             # Discord通知
             try:
                 from core.notify import send_discord
@@ -318,15 +291,10 @@ async def _post_thread_async(tweets: list) -> str | bool:
         print("nodriver未インストール")
         return False
 
-    from core.paths import x_chrome_profile_dir
-    profile_dir = x_chrome_profile_dir()
-    if not profile_dir.exists():
-        print("❌ Chrome profile が見つかりません。refresh_x_cookies を実行してください。")
-        return False
-
     browser = None
     try:
-        browser = await uc.start(headless=False, user_data_dir=str(profile_dir))
+        from platforms.x._browser import start_browser_with_session
+        browser, _ = await start_browser_with_session(X_SESSION_JSON, headless=False)
 
         tab = await browser.get("https://x.com/compose/post")
         await asyncio.sleep(5)

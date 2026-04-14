@@ -1,6 +1,6 @@
 """X (Twitter) アクション — nodriverで検索・いいねを実行する。
 
-persistent Chrome profile (chrome_profile_x) を使用する。
+x_session.json のCookieをCDP注入して認証済みセッションを使う。
 """
 
 import asyncio
@@ -11,9 +11,9 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _get_profile_dir():
-    from core.paths import x_chrome_profile_dir
-    return x_chrome_profile_dir()
+def _get_session_path():
+    from core.paths import x_session_path
+    return x_session_path()
 
 
 async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
@@ -23,15 +23,11 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         print("nodriverが未インストール。")
         return []
 
-    profile_dir = _get_profile_dir()
-    if not profile_dir.exists():
-        print("❌ Chrome profile なし。refresh_x_cookies を実行してください。")
-        return []
-
     results = []
     browser = None
     try:
-        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
+        from platforms.x._browser import start_browser_with_session
+        browser, tab = await start_browser_with_session(_get_session_path(), headless=True)
 
         url = f"https://x.com/search?q={quote(keyword)}&src=typed_query&f=live"
         tab = await browser.get(url)
@@ -97,14 +93,10 @@ async def _like_tweet_async(tweet_url: str) -> bool:
     except ImportError:
         return False
 
-    profile_dir = _get_profile_dir()
-    if not profile_dir.exists():
-        print("❌ Chrome profile なし。")
-        return False
-
     browser = None
     try:
-        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
+        from platforms.x._browser import start_browser_with_session
+        browser, _ = await start_browser_with_session(_get_session_path(), headless=True)
         tab = await browser.get(tweet_url)
         await asyncio.sleep(7)
 
@@ -159,13 +151,10 @@ async def _quote_tweet_async(tweet_url: str, comment: str) -> bool:
     except ImportError:
         return False
 
-    profile_dir = _get_profile_dir()
-    if not profile_dir.exists():
-        return False
-
     browser = None
     try:
-        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
+        from platforms.x._browser import start_browser_with_session
+        browser, _ = await start_browser_with_session(_get_session_path(), headless=True)
 
         from urllib.parse import quote as urlq
         intent = f"https://x.com/intent/tweet?url={urlq(tweet_url)}&text={urlq(comment)}"
@@ -204,13 +193,10 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
     except ImportError:
         return False
 
-    profile_dir = _get_profile_dir()
-    if not profile_dir.exists():
-        return False
-
     browser = None
     try:
-        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
+        from platforms.x._browser import start_browser_with_session
+        browser, _ = await start_browser_with_session(_get_session_path(), headless=True)
         tab = await browser.get(tweet_url)
         await asyncio.sleep(5)
 

@@ -50,38 +50,6 @@ DELAY_MIN_MIN = 15     # 最小遅延（分）
 DELAY_MAX_MIN = 45     # 最大遅延（分）
 
 
-def _to_cdp_cookies(pw_cookies: list) -> list:
-    """Playwright cookie format → nodriver/CDP format."""
-    result = []
-    for c in pw_cookies:
-        cc = {
-            "name": c.get("name", ""),
-            "value": c.get("value", ""),
-            "domain": c.get("domain", ""),
-            "path": c.get("path", "/"),
-            "secure": c.get("secure", False),
-            "httpOnly": c.get("httpOnly", False),
-        }
-        exp = c.get("expires", -1)
-        if exp and exp > 0:
-            cc["expires"] = int(exp)
-        ss = c.get("sameSite")
-        if ss:
-            cc["sameSite"] = ss
-        result.append(cc)
-    return result
-
-
-def _load_cookies():
-    try:
-        from core.paths import x_session_path
-        p = x_session_path()
-        if p.exists():
-            return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return None
-
 
 def _already_processed(mention_url: str, author: str = "") -> bool:
     """mention_reply_queue または growth_actions に処理済みか確認。
@@ -282,16 +250,13 @@ async def _generate_reply_text_async(mention_text: str, mention_url: str = "") -
 
     if mention_url:
         try:
-            import nodriver as uc
-            from core.paths import x_chrome_profile_dir
-            profile_dir = x_chrome_profile_dir()
-            if profile_dir.exists():
-                browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
-                try:
-                    tab = await browser.get("about:blank")
-                    tweet_ctx = await _fetch_tweet_context_async(tab, mention_url)
-                finally:
-                    browser.stop()
+            from core.paths import x_session_path
+            from platforms.x._browser import start_browser_with_session
+            browser, tab = await start_browser_with_session(x_session_path(), headless=True)
+            try:
+                tweet_ctx = await _fetch_tweet_context_async(tab, mention_url)
+            finally:
+                browser.stop()
         except Exception as e:
             print(f"  コンテキスト取得失敗（再生成）: {e}")
 
@@ -310,18 +275,6 @@ def generate_reply_text(mention_text: str, mention_url: str = "") -> str:
 
 async def _run_scan_async() -> dict:
     """通知ページをスキャンしてメンションをいいね＆返信キューに積む。"""
-    try:
-        import nodriver as uc
-    except ImportError:
-        print("nodriver が見つかりません")
-        return {"liked": 0, "queued": 0}
-
-    from core.paths import x_chrome_profile_dir
-    profile_dir = x_chrome_profile_dir()
-    if not profile_dir.exists():
-        print("Chrome profile なし。refresh_x_cookies を実行してください")
-        return {"liked": 0, "queued": 0}
-
     liked = 0
     queued = 0
     skipped = 0
@@ -329,7 +282,9 @@ async def _run_scan_async() -> dict:
 
     browser = None
     try:
-        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
+        from core.paths import x_session_path
+        from platforms.x._browser import start_browser_with_session
+        browser, _ = await start_browser_with_session(x_session_path(), headless=True)
 
         tab = await browser.get("https://x.com/notifications")
         await asyncio.sleep(5)
