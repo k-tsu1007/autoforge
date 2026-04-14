@@ -112,6 +112,26 @@ def root_redirect(user: str = Depends(check_auth)):
     return RedirectResponse(url="/instances", status_code=307)
 
 
+@app.get("/debug/claude", response_class=JSONResponse)
+def debug_claude(user: str = Depends(check_auth)):
+    """Claude CLIの動作確認用デバッグエンドポイント。"""
+    import subprocess, shutil
+    claude = shutil.which("claude.cmd") or r"C:\Users\Tsubasa\AppData\Roaming\npm\claude.cmd"
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)
+    env["USERPROFILE"] = r"C:\Users\Tsubasa"
+    env["APPDATA"] = r"C:\Users\Tsubasa\AppData\Roaming"
+    env["LOCALAPPDATA"] = r"C:\Users\Tsubasa\AppData\Local"
+    env["HOME"] = r"C:\Users\Tsubasa"
+    r = subprocess.run(
+        [claude, "-p", "--output-format", "json", "--model", "sonnet"],
+        input="hi", capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=30, env=env, shell=True,
+    )
+    return {"rc": r.returncode, "stdout": r.stdout[:500], "stderr": r.stderr[:200],
+            "claude_bin": claude, "appdata": env.get("APPDATA"), "userprofile": env.get("USERPROFILE")}
+
+
 @app.get("/articles", response_class=HTMLResponse)
 def articles_page(request: Request, user: str = Depends(check_auth)):
     """記事一覧。"""
