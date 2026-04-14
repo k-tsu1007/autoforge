@@ -335,17 +335,33 @@ def run_scan() -> dict:
     return {"liked": liked, "queued": queued, "skipped": skipped}
 
 
+MAX_FAIL_COUNT = 3        # これ以上失敗したら放棄
+QUEUE_EXPIRE_HOURS = 24  # 作成からこの時間を超えたら放棄
+
+
 def run_send() -> dict:
-    """キューの中で send_after を過ぎたものを送信する。"""
+    """キューの中で send_after を過ぎたものを送信する。
+    失敗3回以上 or 作成から24時間超過のアイテムは sent=2 で放棄する。"""
     from platforms.x.actions import reply_tweet
 
-    now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+    now_jst = datetime.now(JST)
+    now_str = now_jst.strftime("%Y-%m-%d %H:%M:%S")
+    expire_str = (now_jst - timedelta(hours=QUEUE_EXPIRE_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
 
     try:
         from core.db import get_connection, transaction
         conn = get_connection()
+
+        # 期限切れアイテムを放棄（sent=2）
+        with transaction() as c:
+            c.execute(
+                "UPDATE mention_reply_queue SET sent = 2 WHERE sent = 0 AND created_at <= ?",
+                (expire_str,)
+            )
+
         pending = conn.execute(
-            "SELECT id, mention_url, mention_text, mention_author, reply_text FROM mention_reply_queue "
+            "SELECT id, mention_url, mention_text, mention_author, reply_text, "
+            "COALESCE(fail_count, 0) as fail_count FROM mention_reply_queue "
             "WHERE sent = 0 AND send_after <= ?",
             (now_str,)
         ).fetchall()
@@ -354,8 +370,23 @@ def run_send() -> dict:
         return {"sent": 0}
 
     sent = 0
+    abandoned = 0
     for row in pending:
-        row_id, mention_url, mention_text, author, reply_text = row
+        row_id = row[0]
+        mention_url = row[1]
+        mention_text = row[2]
+        author = row[3]
+        reply_text = row[4]
+        fail_count = row[5]
+
+        # 失敗回数上限チェック
+        if fail_count >= MAX_FAIL_COUNT:
+            with transaction() as c:
+                c.execute("UPDATE mention_reply_queue SET sent = 2 WHERE id = ?", (row_id,))
+            abandoned += 1
+            print(f"  ⏭ 放棄 (失敗{fail_count}回): @{author} — {reply_text[:40]}")
+            continue
+
         print(f"  送信: @{author} — {reply_text[:40]}")
         try:
             ok = reply_tweet(mention_url, reply_text)
@@ -381,12 +412,30 @@ def run_send() -> dict:
                 sent += 1
                 print(f"    ✅ 送信完了")
             else:
-                print(f"    ❌ 送信失敗")
+                # 失敗カウントを増やし、次回リトライ用に send_after を5分後に延ばす
+                retry_after = (now_jst + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+                with transaction() as c:
+                    c.execute(
+                        "UPDATE mention_reply_queue SET fail_count = COALESCE(fail_count, 0) + 1, "
+                        "send_after = ? WHERE id = ?",
+                        (retry_after, row_id)
+                    )
+                print(f"    ❌ 送信失敗 (失敗{fail_count + 1}回目, 5分後にリトライ)")
         except Exception as e:
-            print(f"    送信エラー: {e}")
+            retry_after = (now_jst + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                with transaction() as c:
+                    c.execute(
+                        "UPDATE mention_reply_queue SET fail_count = COALESCE(fail_count, 0) + 1, "
+                        "send_after = ? WHERE id = ?",
+                        (retry_after, row_id)
+                    )
+            except Exception:
+                pass
+            print(f"    送信エラー: {e} (失敗{fail_count + 1}回目, 5分後にリトライ)")
 
-    print(f"送信完了: {sent}件")
-    return {"sent": sent}
+    print(f"送信完了: {sent}件 放棄: {abandoned}件")
+    return {"sent": sent, "abandoned": abandoned}
 
 
 if __name__ == "__main__":

@@ -226,6 +226,12 @@ def get_connection() -> sqlite3.Connection:
                 _connection.execute("ALTER TABLE articles ADD COLUMN url TEXT")
         except Exception:
             pass
+        try:
+            cols = [r["name"] for r in _connection.execute("PRAGMA table_info(mention_reply_queue)").fetchall()]
+            if "fail_count" not in cols:
+                _connection.execute("ALTER TABLE mention_reply_queue ADD COLUMN fail_count INTEGER DEFAULT 0")
+        except Exception:
+            pass
         _connection.commit()
     return _connection
 

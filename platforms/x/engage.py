@@ -195,20 +195,28 @@ def _notify(action_type: str, url: str, text: str) -> None:
         print(f"Discord通知失敗: {e}")
 
 
-def run(max_quote_per_call: int = 1, max_reply_per_call: int = 1, enforce_slots: bool = True) -> dict:
+def run(max_quote_per_call: int = 1, max_reply_per_call: int = 1,
+        enforce_slots: bool = True, enforce_reply_slots: bool = False) -> dict:
+    """引用RTはスロット制、リプライは日次上限だけ見て適宜実施。"""
     from platforms.x.actions import search_tweets, quote_tweet, reply_tweet
 
     q_need, r_need = _targets()
     q_need = min(q_need, max_quote_per_call)
     r_need = min(r_need, max_reply_per_call)
+
+    # 引用RT: スロット制を維持
     if enforce_slots:
-        q_in_slot, r_in_slot = _slot_match()
+        q_in_slot, _ = _slot_match()
         if not q_in_slot:
             q_need = 0
+
+    # リプライ: enforce_reply_slots=True の場合のみスロット制（デフォルト=適宜実施）
+    if enforce_reply_slots:
+        _, r_in_slot = _slot_match()
         if not r_in_slot:
             r_need = 0
+
     if q_need == 0 and r_need == 0:
-        print(f"今日の目標達成済みまたはスロット外 (q/r)")
         return {"quoted": 0, "replied": 0, "skipped": True}
 
     keywords = _get_keywords()
