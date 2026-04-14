@@ -121,6 +121,13 @@ def x_session_path() -> Path:
     return REPO_ROOT / "x_session.json"
 
 
+def x_chrome_profile_dir() -> Path:
+    """X 自動化用の Chrome persistent profile ディレクトリ。"""
+    inst = _try_instance()
+    base = inst.data_dir if inst else REPO_ROOT / "data"
+    return base / "chrome_profile_x"
+
+
 def note_session_path() -> Path:
     inst = _try_instance()
     if inst:

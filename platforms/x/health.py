@@ -54,15 +54,15 @@ async def _check_cookie_alive_async() -> dict:
     except ImportError:
         return {"ok": False, "reason": "nodriver未インストール"}
 
-    if not X_SESSION_JSON.exists():
-        return {"ok": False, "reason": "x_session.jsonなし"}
+    from core.paths import x_chrome_profile_dir
+    profile_dir = x_chrome_profile_dir()
+    if not profile_dir.exists():
+        return {"ok": False, "reason": "Chrome profile なし（refresh_x_cookies を実行してください）"}
 
+    username = os.environ.get("X_USERNAME", "")
     browser = None
     try:
-        cookies = json.loads(X_SESSION_JSON.read_text(encoding="utf-8"))
-        username = os.environ.get("X_USERNAME", "")
-        browser = await uc.start(headless=True)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
         tab = await browser.get(f"https://x.com/{username}")
         await asyncio.sleep(5)
         url = tab.url

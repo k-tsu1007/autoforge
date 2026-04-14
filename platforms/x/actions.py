@@ -9,8 +9,6 @@ import sys
 from pathlib import Path
 from urllib.parse import quote
 
-if sys.platform == "win32":
-
 ROOT = Path(__file__).resolve().parent.parent
 from core.paths import x_session_path as _xsp; X_SESSION_JSON = _xsp()
 
@@ -50,16 +48,16 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         print("nodriverが未インストール。")
         return []
 
-    cookies = _load_cookies()
-    if not cookies:
-        print("❌ x_session.json が見つかりません。")
+    from core.paths import x_chrome_profile_dir
+    profile_dir = x_chrome_profile_dir()
+    if not profile_dir.exists():
+        print("❌ Chrome profile なし。refresh_x_cookies を実行してください。")
         return []
 
     results = []
     browser = None
     try:
-        browser = await uc.start(headless=True)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
 
         url = f"https://x.com/search?q={quote(keyword)}&src=typed_query&f=live"
         tab = await browser.get(url)

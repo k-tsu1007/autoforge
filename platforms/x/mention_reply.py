@@ -283,11 +283,11 @@ async def _generate_reply_text_async(mention_text: str, mention_url: str = "") -
     if mention_url:
         try:
             import nodriver as uc
-            cookies = _load_cookies()
-            if cookies:
-                browser = await uc.start(headless=True)
+            from core.paths import x_chrome_profile_dir
+            profile_dir = x_chrome_profile_dir()
+            if profile_dir.exists():
+                browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
                 try:
-                    await browser.cookies.set_all(_to_cdp_cookies(cookies))
                     tab = await browser.get("about:blank")
                     tweet_ctx = await _fetch_tweet_context_async(tab, mention_url)
                 finally:
@@ -316,9 +316,10 @@ async def _run_scan_async() -> dict:
         print("nodriver が見つかりません")
         return {"liked": 0, "queued": 0}
 
-    cookies = _load_cookies()
-    if not cookies:
-        print("x_session.json が見つかりません")
+    from core.paths import x_chrome_profile_dir
+    profile_dir = x_chrome_profile_dir()
+    if not profile_dir.exists():
+        print("Chrome profile なし。refresh_x_cookies を実行してください")
         return {"liked": 0, "queued": 0}
 
     liked = 0
@@ -328,8 +329,7 @@ async def _run_scan_async() -> dict:
 
     browser = None
     try:
-        browser = await uc.start(headless=True)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
 
         tab = await browser.get("https://x.com/notifications")
         await asyncio.sleep(5)

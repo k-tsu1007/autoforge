@@ -119,17 +119,16 @@ async def _post_to_x_async(text: str):
         print("nodriverが未インストール。")
         return False
 
-    if not X_SESSION_JSON.exists():
-        print("❌ x_session.json が見つかりません。")
-        print("Cookieを取得してください: python refresh_x_cookies.py")
+    from core.paths import x_chrome_profile_dir
+    profile_dir = x_chrome_profile_dir()
+    if not profile_dir.exists():
+        print("❌ Chrome profile が見つかりません。refresh_x_cookies を実行してください。")
         return False
-
-    cookies = json.loads(X_SESSION_JSON.read_text(encoding="utf-8"))
 
     browser = None
     try:
-        browser = await uc.start(headless=False)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        # persistent profile でログイン済みセッションを使用（cookie set_all 不要）
+        browser = await uc.start(headless=False, user_data_dir=str(profile_dir))
 
         # 投稿ページに直接アクセス
         tab = await browser.get("https://x.com/compose/post")

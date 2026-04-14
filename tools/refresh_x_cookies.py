@@ -265,7 +265,13 @@ async def _try_direct_login_async(session_path: Path) -> bool:
     data_dir = ROOT / "instances" / _inst0 / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    browser = await uc.start(headless=False)
+    # persistent profile: ログイン後のセッションをディスクに保存する
+    from core.paths import x_chrome_profile_dir
+    profile_dir = x_chrome_profile_dir()
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    print(f"  Chrome profile: {profile_dir}")
+
+    browser = await uc.start(headless=False, user_data_dir=str(profile_dir))
     try:
         tab = await browser.get("https://x.com/i/flow/login")
 
