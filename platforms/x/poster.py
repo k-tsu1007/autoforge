@@ -119,7 +119,30 @@ async def _post_to_x_async(text: str):
             return False
 
         # 本文入力 — DraftJS エディタは send_keys で入力
-        editor = await tab.select('div[data-testid="tweetTextarea_0"]')
+        # テキストエリアが出るまでリトライ
+        editor = None
+        for attempt in range(3):
+            editor_count = await tab.evaluate(
+                "(() => document.querySelectorAll('div[data-testid=\"tweetTextarea_0\"]').length)()"
+            )
+            if editor_count and editor_count > 0:
+                try:
+                    editor = await tab.select('div[data-testid="tweetTextarea_0"]')
+                    if editor:
+                        break
+                except Exception:
+                    pass
+            print(f"  エディタ待機中... (attempt {attempt+1}/3, URL={tab.url})")
+            await asyncio.sleep(3)
+        if editor is None:
+            print(f"❌ tweetTextarea_0 が見つかりません (URL={tab.url})")
+            try:
+                ss_path = Path(__file__).parent.parent.parent / "logs" / "x_post_fail.png"
+                await tab.save_screenshot(str(ss_path))
+                print(f"  スクリーンショット保存: {ss_path}")
+            except Exception:
+                pass
+            return False
         await editor.click()
         await asyncio.sleep(0.5)
         await editor.send_keys(text)
@@ -303,8 +326,24 @@ async def _post_thread_async(tweets: list) -> str | bool:
             print("❌ Cookie 切れ")
             return False
 
-        # 1ツイート目を入力
-        editor = await tab.select('div[data-testid="tweetTextarea_0"]')
+        # 1ツイート目を入力 — エディタが出るまでリトライ
+        editor = None
+        for attempt in range(3):
+            editor_count = await tab.evaluate(
+                "(() => document.querySelectorAll('div[data-testid=\"tweetTextarea_0\"]').length)()"
+            )
+            if editor_count and editor_count > 0:
+                try:
+                    editor = await tab.select('div[data-testid="tweetTextarea_0"]')
+                    if editor:
+                        break
+                except Exception:
+                    pass
+            print(f"  エディタ待機中... (attempt {attempt+1}/3, URL={tab.url})")
+            await asyncio.sleep(3)
+        if editor is None:
+            print(f"❌ tweetTextarea_0 が見つかりません (thread, URL={tab.url})")
+            return False
         await editor.click()
         await asyncio.sleep(0.5)
         await editor.send_keys(tweets[0])
