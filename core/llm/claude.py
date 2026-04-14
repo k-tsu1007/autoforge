@@ -125,6 +125,14 @@ def call_claude_cli(
     cli_env.pop("ANTHROPIC_API_KEY", None)
     cli_env.pop("ANTHROPIC_AUTH_TOKEN", None)
 
+    # SYSTEM権限プロセスからでもTsubasaのClaudeConfig を参照できるよう明示的にセット
+    if os.name == "nt":
+        _tsubasa_home = r"C:\Users\Tsubasa"
+        cli_env.setdefault("USERPROFILE", _tsubasa_home)
+        cli_env.setdefault("APPDATA", rf"{_tsubasa_home}\AppData\Roaming")
+        cli_env.setdefault("LOCALAPPDATA", rf"{_tsubasa_home}\AppData\Local")
+        cli_env.setdefault("HOME", _tsubasa_home)
+
     try:
         result = subprocess.run(
             cmd,
@@ -160,14 +168,6 @@ def call_claude_cli(
 
         if data.get("is_error"):
             err_msg = data.get("result", "") or ""
-            # 未ログイン → API にフォールバック
-            if "Not logged in" in err_msg or "Please run /login" in err_msg:
-                print(f"⚠ claude CLI未ログイン → API にフォールバック")
-                return call_claude_api(prompt, {
-                    "haiku": "claude-haiku-4-5-20251001",
-                    "sonnet": "claude-sonnet-4-6",
-                    "opus": "claude-opus-4-6",
-                }.get(model, "claude-sonnet-4-6"), system, max_tokens, temperature)
             # overloaded_error の場合は opus にフォールバック (1回だけ)
             if not _fallback_attempted and "overloaded_error" in err_msg and model != "opus":
                 _OVERLOADED_UNTIL[model] = _t.time() + 900
