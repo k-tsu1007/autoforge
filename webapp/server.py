@@ -233,21 +233,6 @@ def partial_jobs(request: Request, user: str = Depends(check_auth)):
     )
 
 
-@app.get("/brain", response_class=HTMLResponse)
-def brain_page(request: Request, user: str = Depends(check_auth)):
-    """Brain — システムの判断根拠を1ページに集約。"""
-    from webapp.brain import build_brain_data
-    data = build_brain_data()
-    return templates.TemplateResponse(request=request, name="brain.html", context={"data": data})
-
-
-@app.get("/brain/partial", response_class=HTMLResponse)
-def brain_partial(request: Request, user: str = Depends(check_auth)):
-    """HTMX用 partial — スクロール位置を保持したまま30秒ごとに更新。"""
-    from webapp.brain import build_brain_data
-    data = build_brain_data()
-    return templates.TemplateResponse(request=request, name="brain_partial.html", context={"data": data})
-
 
 @app.get("/dash", response_class=HTMLResponse)
 def dash_page(request: Request, user: str = Depends(check_auth)):
