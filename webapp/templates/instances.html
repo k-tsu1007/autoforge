@@ -2,83 +2,24 @@
 {% block title %}インスタンス選択{% endblock %}
 {% block content %}
 <h2>🛰 パイプラインを選択</h2>
-<p style="color:#71767b; margin-bottom:1rem;">運用中の自動化パイプライン (インスタンス) を選んで詳細を見ます。<br>
+<p style="color:var(--muted); margin-bottom:1rem;">運用中の自動化パイプライン (インスタンス) を選んで詳細を見ます。<br>
 このページからリンクで各パイプラインの専用ダッシュボードに遷移できます。</p>
 
 <style>
-.inst-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
-}
-.inst-card {
-    background: #16181c;
-    border: 1px solid #2f3336;
-    border-radius: 12px;
-    padding: 1rem 1.2rem;
-}
-.inst-card.active {
-    border-color: #1d9bf0;
-    box-shadow: 0 0 0 1px #1d9bf0 inset;
-}
-.inst-name {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 0.2rem;
-}
-.inst-name .badge {
-    display: inline-block;
-    background: #1d9bf0;
-    color: #fff;
-    font-size: 0.7rem;
-    padding: 0.1rem 0.45rem;
-    border-radius: 4px;
-    margin-left: 0.4rem;
-    vertical-align: middle;
-}
-.inst-desc {
-    color: #71767b;
-    font-size: 0.82rem;
-    margin-bottom: 0.6rem;
-}
-.inst-platforms {
-    display: flex;
-    gap: 0.3rem;
-    flex-wrap: wrap;
-    margin-bottom: 0.6rem;
-}
-.inst-platforms span {
-    background: #0f1419;
-    border: 1px solid #2f3336;
-    color: #1d9bf0;
-    font-size: 0.7rem;
-    padding: 0.1rem 0.45rem;
-    border-radius: 4px;
-}
-.inst-metrics {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.4rem 1rem;
-    font-size: 0.85rem;
-    margin-top: 0.6rem;
-}
-.inst-metrics .k { color: #71767b; }
-.inst-metrics .v { color: #fff; text-align: right; font-variant-numeric: tabular-nums; }
-.inst-link {
-    display: inline-block;
-    margin-top: 0.7rem;
-    color: #1d9bf0;
-    font-size: 0.85rem;
-    text-decoration: none;
-}
+.inst-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1rem; margin-top: 1rem; }
+.inst-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; }
+.inst-card.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+.inst-name { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+.inst-name .badge { display: inline-block; background: var(--blue); color: #000; font-size: .68rem; font-weight: 700; padding: .1rem .4rem; border-radius: 4px; margin-left: .4rem; vertical-align: middle; }
+.inst-desc { color: var(--muted); font-size: .82rem; margin-bottom: .6rem; }
+.inst-platforms { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.inst-platforms span { background: var(--bg); border: 1px solid var(--border); color: var(--blue); font-size: .68rem; padding: .1rem .4rem; border-radius: 4px; }
+.inst-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem 1rem; font-size: .82rem; margin-top: .6rem; }
+.inst-metrics .k { color: var(--muted); }
+.inst-metrics .v { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.inst-link { display: inline-block; margin-top: .7rem; color: var(--blue); font-size: .82rem; text-decoration: none; }
 .inst-link:hover { text-decoration: underline; }
-.inst-error {
-    color: #f4212e;
-    font-size: 0.78rem;
-    margin-top: 0.5rem;
-}
+.inst-error { color: var(--red); font-size: .78rem; margin-top: .5rem; }
 </style>
 
 <div class="inst-grid">
@@ -128,7 +69,7 @@
     </div>
 
     {% if inst.advisor and inst.advisor.reasoning %}
-    <div style="color:#71767b; font-size:0.75rem; margin-top:0.5rem; border-top:1px solid #2f3336; padding-top:0.5rem;">
+    <div style="color:var(--muted); font-size:.75rem; margin-top:.5rem; border-top:1px solid var(--border); padding-top:.5rem;">
         🤖 {{ inst.advisor.reasoning }}
     </div>
     {% endif %}
@@ -146,7 +87,7 @@
 {% endfor %}
 </div>
 
-<p style="margin-top:1.5rem; color:#71767b; font-size:0.78rem;">
+<p style="margin-top:1.5rem; color:var(--muted); font-size:.78rem;">
 新しいインスタンスを追加するには <code>instances/&lt;name&gt;/config.yaml</code> を作成し、別ポートで <code>python -m tools.run_daemon --instance &lt;name&gt;</code> と <code>tools.run_webapp</code> を起動してください。
 </p>
 {% endblock %}

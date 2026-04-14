@@ -1,137 +1,196 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}auto-content-engine{% endblock %}</title>
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
-            background: #0f1419;
-            color: #e7e9ea;
-            line-height: 1.6;
-        }
-        nav {
-            background: #15202b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #2f3336;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        nav h1 {
-            font-size: 1.2rem;
-            color: #1d9bf0;
-        }
-        nav ul {
-            list-style: none;
-            display: flex;
-            gap: 1.5rem;
-        }
-        nav a {
-            color: #e7e9ea;
-            text-decoration: none;
-            padding: 0.5rem 0.8rem;
-            border-radius: 6px;
-            transition: background 0.2s;
-        }
-        nav a:hover { background: #1d9bf0; color: white; }
-        main { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
-        h2 { margin: 1.5rem 0 1rem; color: #1d9bf0; }
-        .card {
-            background: #15202b;
-            padding: 1.5rem;
-            border-radius: 12px;
-            border: 1px solid #2f3336;
-            margin-bottom: 1.5rem;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-        }
-        .stat {
-            background: #1e2a36;
-            padding: 1rem;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .stat-label { color: #71767b; font-size: 0.85rem; }
-        .stat-value { font-size: 2rem; font-weight: bold; color: #1d9bf0; margin-top: 0.3rem; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        th, td {
-            text-align: left;
-            padding: 0.75rem;
-            border-bottom: 1px solid #2f3336;
-            font-size: 0.9rem;
-        }
-        th { color: #71767b; font-weight: 600; }
-        tr:hover { background: #1e2a36; }
-        a { color: #1d9bf0; }
-        textarea {
-            width: 100%;
-            background: #0f1419;
-            color: #e7e9ea;
-            border: 1px solid #2f3336;
-            border-radius: 6px;
-            padding: 1rem;
-            font-family: monospace;
-            font-size: 0.85rem;
-        }
-        button, input[type=submit] {
-            background: #1d9bf0;
-            color: white;
-            border: none;
-            padding: 0.6rem 1.2rem;
-            border-radius: 999px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        button:hover { background: #1a8cd8; }
-        .status-alive { color: #00ba7c; }
-        .status-error { color: #f4212e; }
-        .status-completed { color: #00ba7c; }
-        .pre {
-            background: #0f1419;
-            border: 1px solid #2f3336;
-            padding: 1rem;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 0.85rem;
-            overflow-x: auto;
-            white-space: pre-wrap;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}autoforge{% endblock %}</title>
+<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0a0a0a;
+  --surface:  #111111;
+  --surface2: #161616;
+  --border:   #222222;
+  --line:     #1a1a1a;
+  --text:     #f0f0f0;
+  --muted:    #555555;
+  --dim:      #333333;
+  --green:    #4ade80;
+  --blue:     #60a5fa;
+  --yellow:   #facc15;
+  --red:      #f87171;
+  --lime:     #a3e635;
+  --font-mono: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ─── HEADER ─── */
+#hdr {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .7rem 1.4rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 100;
+}
+#hdr .hdr-brand {
+  font-weight: 800; font-size: .9rem; color: var(--text);
+  text-decoration: none; letter-spacing: -.01em; white-space: nowrap;
+}
+#hdr .hdr-brand span { color: var(--lime); }
+#hdr nav { display: flex; gap: .1rem; }
+#hdr nav a {
+  color: var(--muted); text-decoration: none;
+  padding: .3rem .65rem; border-radius: 5px;
+  font-size: .8rem;
+  transition: color .15s, background .15s;
+  white-space: nowrap;
+}
+#hdr nav a:hover  { color: var(--text); background: var(--border); }
+#hdr nav a.active { color: var(--text); background: var(--border); }
+#hdr .hdr-right { margin-left: auto; display: flex; align-items: center; gap: .8rem; }
+#hdr .hdr-instance {
+  font-size: .75rem; color: var(--muted);
+  background: var(--border); border-radius: 4px;
+  padding: .2rem .55rem; white-space: nowrap;
+}
+
+/* ─── LAYOUT ─── */
+main { max-width: 1100px; margin: 0 auto; padding: 1.4rem; }
+
+/* ─── CARD ─── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.2rem;
+}
+
+/* ─── HEADINGS ─── */
+h2 { font-size: 1rem; font-weight: 700; color: var(--text); margin: 1.4rem 0 .8rem; }
+h3 { font-size: .85rem; font-weight: 600; color: var(--muted); margin: 1rem 0 .5rem; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ─── STAT GRID ─── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1.2rem;
+}
+.stat {
+  background: var(--surface);
+  padding: 1.1rem 1rem;
+  text-align: center;
+}
+.stat-label { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; }
+.stat-value { font-family: var(--font-mono); font-size: 1.9rem; font-weight: 800; color: var(--blue); line-height: 1.1; margin-top: .25rem; }
+
+/* ─── TABLE ─── */
+table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+tr:hover td { background: var(--surface2); }
+td a { color: var(--blue); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+
+/* ─── FORM ─── */
+textarea, input[type=text], input[type=number], select {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .6rem .8rem;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  outline: none;
+  transition: border-color .15s;
+}
+textarea:focus, input:focus, select:focus { border-color: var(--blue); }
+select { font-family: inherit; cursor: pointer; }
+button, input[type=submit] {
+  background: var(--blue);
+  color: #000;
+  border: none;
+  padding: .45rem 1.1rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: .8rem;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+button:hover, input[type=submit]:hover { opacity: .85; }
+
+/* ─── PRE / CODE ─── */
+.pre, pre {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: .9rem 1rem;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/* ─── STATUS COLORS ─── */
+.status-alive, .status-completed { color: var(--green); }
+.status-error { color: var(--red); }
+.text-muted  { color: var(--muted); }
+.text-green  { color: var(--green); }
+.text-red    { color: var(--red); }
+.text-yellow { color: var(--yellow); }
+.text-blue   { color: var(--blue); }
+
+/* ─── LINKS ─── */
+a { color: var(--blue); }
+</style>
+{% block head %}{% endblock %}
 </head>
 <body>
-    <nav>
-        <h1>🚀 autoforge</h1>
-        <ul>
-        {% set path = request.url.path if request else '/' %}
-        {% if path == '/instances' or path == '/' %}
-            <li><a href="/instances" style="color:#1d9bf0;">🛰 全インスタンス</a></li>
-        {% else %}
-            <li><a href="/instances">← 全インスタンス</a></li>
-            <li style="border-left:1px solid #2f3336; padding-left:0.8rem;">
-                <span style="color:#1d9bf0;">📦 {{ instance_name or 'fuku_ai_sns' }}</span>
-            </li>
-            <li><a href="/dash">🧠 状態</a></li>
-            <li><a href="/activity">⚡ 動き</a></li>
-            <li><a href="/review">✅ レビュー</a></li>
-            <li><a href="/articles">📝 記事</a></li>
-            <li><a href="/tweets">🐦 ツイート</a></li>
-            <li><a href="/strategy">⚙ 設定</a></li>
-        {% endif %}
-        </ul>
-    </nav>
-    <main>
-        {% block content %}{% endblock %}
-    </main>
+
+{% set _path = request.url.path if request else '/' %}
+
+<div id="hdr">
+  <a href="{% if _path == '/instances' or _path == '/' %}/instances{% else %}/dash{% endif %}" class="hdr-brand">auto<span>forge</span></a>
+
+  {% if _path != '/instances' and _path != '/' %}
+  <nav>
+    <a href="/dash"     {% if _path == '/dash'     %}class="active"{% endif %}>状態</a>
+    <a href="/activity" {% if _path == '/activity' %}class="active"{% endif %}>動き</a>
+    <a href="/review"   {% if _path == '/review'   %}class="active"{% endif %}>レビュー</a>
+    <a href="/articles" {% if _path == '/articles' %}class="active"{% endif %}>記事</a>
+    <a href="/tweets"   {% if _path == '/tweets'   %}class="active"{% endif %}>ツイート</a>
+    <a href="/strategy" {% if _path == '/strategy' %}class="active"{% endif %}>設定</a>
+    <a href="/instances">← 全体</a>
+  </nav>
+  {% endif %}
+
+  <div class="hdr-right">
+    {% if _path != '/instances' and _path != '/' %}
+    <span class="hdr-instance">{{ instance_name or 'fuku_ai_sns' }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<main>
+  {% block content %}{% endblock %}
+</main>
+
 </body>
 </html>

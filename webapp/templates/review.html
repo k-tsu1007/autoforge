@@ -3,103 +3,27 @@
 {% block content %}
 
 <style>
-  .rv-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.5rem;
-  }
-  .rv-mode-badge {
-    padding: .3rem .8rem;
-    border-radius: 999px;
-    font-size: .75rem;
-    font-weight: 700;
-    letter-spacing: .05em;
-  }
-  .rv-mode-on  { background: #16a34a22; color: #4ade80; border: 1px solid #4ade8044; }
-  .rv-mode-off { background: #71767b22; color: #71767b; border: 1px solid #71767b44; }
-
-  .rv-section-title {
-    font-size: .7rem;
-    color: #71767b;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    margin: 1.5rem 0 .6rem;
-  }
-  .rv-empty {
-    color: #555;
-    font-size: .85rem;
-    padding: .8rem 0;
-  }
-
-  .rv-card {
-    background: #111;
-    border: 1px solid #222;
-    border-radius: 10px;
-    padding: 1rem 1.2rem;
-    margin-bottom: .7rem;
-    display: flex;
-    gap: 1rem;
-    align-items: flex-start;
-  }
+  .rv-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .rv-mode-badge { padding: .3rem .8rem; border-radius: 999px; font-size: .75rem; font-weight: 700; letter-spacing: .05em; }
+  .rv-mode-on  { background: #16a34a22; color: var(--green); border: 1px solid #4ade8044; }
+  .rv-mode-off { background: #33333322; color: var(--muted); border: 1px solid #55555544; }
+  .rv-section-title { font-size: .7rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin: 1.5rem 0 .6rem; }
+  .rv-empty { color: var(--dim); font-size: .85rem; padding: .8rem 0; }
+  .rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: .7rem; display: flex; gap: 1rem; align-items: flex-start; }
   .rv-card-body { flex: 1; min-width: 0; }
-  .rv-meta {
-    font-size: .65rem;
-    color: #555;
-    margin-bottom: .3rem;
-  }
-  .rv-text {
-    font-size: .88rem;
-    color: #e7e9ea;
-    white-space: pre-wrap;
-    line-height: 1.55;
-  }
-  .rv-sub {
-    margin-top: .5rem;
-    padding: .5rem .7rem;
-    background: #0a0a0a;
-    border-radius: 6px;
-    font-size: .75rem;
-    color: #888;
-    border-left: 2px solid #333;
-  }
+  .rv-meta { font-size: .65rem; color: var(--muted); margin-bottom: .3rem; }
+  .rv-text { font-size: .88rem; color: var(--text); white-space: pre-wrap; line-height: 1.55; }
+  .rv-sub { margin-top: .5rem; padding: .5rem .7rem; background: var(--bg); border-radius: 6px; font-size: .75rem; color: #888; border-left: 2px solid var(--dim); }
   .rv-sub strong { color: #aaa; }
-
   .rv-actions { display: flex; flex-direction: column; gap: .4rem; flex-shrink: 0; }
-  .rv-btn {
-    padding: .35rem .9rem;
-    border-radius: 999px;
-    font-size: .75rem;
-    font-weight: 700;
-    border: none;
-    cursor: pointer;
-    transition: opacity .15s;
-  }
+  .rv-btn { padding: .35rem .9rem; border-radius: 999px; font-size: .75rem; font-weight: 700; border: none; cursor: pointer; transition: opacity .15s; background: var(--border); color: var(--text); }
   .rv-btn:hover { opacity: .8; }
-  .rv-btn-ok   { background: #16a34a; color: #fff; }
-  .rv-btn-ng   { background: #222; color: #f87171; border: 1px solid #f8717144; }
-  .rv-btn-regen { background: #1a2744; color: #60a5fa; border: 1px solid #60a5fa44; }
-
-  .rv-done {
-    opacity: .35;
-    pointer-events: none;
-    text-decoration: line-through;
-  }
-  .rv-hint {
-    background: #0d1a0d;
-    border: 1px solid #16a34a44;
-    border-radius: 8px;
-    padding: .9rem 1.1rem;
-    font-size: .8rem;
-    color: #4ade80;
-    margin-bottom: 1.2rem;
-  }
-  .rv-hint code {
-    background: #16a34a22;
-    padding: .1rem .35rem;
-    border-radius: 4px;
-    font-family: monospace;
-  }
+  .rv-btn-ok    { background: #16a34a; color: #fff; }
+  .rv-btn-ng    { background: var(--border); color: var(--red); border: 1px solid #f8717144; }
+  .rv-btn-regen { background: #1a2744; color: var(--blue); border: 1px solid #60a5fa44; }
+  .rv-done { opacity: .35; pointer-events: none; text-decoration: line-through; }
+  .rv-hint { background: #0d1a0d; border: 1px solid #16a34a44; border-radius: 8px; padding: .9rem 1.1rem; font-size: .8rem; color: var(--green); margin-bottom: 1.2rem; }
+  .rv-hint code { background: #16a34a22; padding: .1rem .35rem; border-radius: 4px; font-family: monospace; }
 </style>
 
 <div class="rv-header">
