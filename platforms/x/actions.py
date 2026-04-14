@@ -53,6 +53,17 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         art_count2 = await tab.evaluate("(() => document.querySelectorAll('article').length)()")
         print(f"  [search] article数(スクロール後): {art_count2}")
 
+        # 最初のarticleのリンクをデバッグ
+        debug_links = await tab.evaluate("""
+            (() => {
+                const art = document.querySelector('article');
+                if (!art) return 'no article';
+                const links = [...art.querySelectorAll('a')];
+                return links.slice(0, 5).map(a => a.getAttribute('href')).join(' | ');
+            })()
+        """)
+        print(f"  [search] 1件目のlinks: {debug_links}")
+
         tweets = await tab.evaluate("""
             (() => {
                 const arts = [...document.querySelectorAll('article')];
