@@ -1,21 +1,21 @@
 {# Activity partial — HTMX auto-refreshed #}
 <style>
 .act-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-.act-card { background: #15202b; border: 1px solid #2f3336; border-radius: 12px; padding: 1.2rem; }
-.act-card h3 { color: #1d9bf0; margin-bottom: 0.8rem; font-size: 1rem; }
-.job-row { display: grid; grid-template-columns: 24px 1.5fr 1fr 1fr 1fr; gap: 0.8rem; padding: 0.6rem 0; border-bottom: 1px solid #2f3336; align-items: center; font-size: 0.88rem; }
+.act-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem; }
+.act-card h3 { color: var(--blue); margin-bottom: 0.8rem; font-size: 1rem; }
+.job-row { display: grid; grid-template-columns: 24px 1.5fr 1fr 1fr 1fr; gap: 0.8rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border); align-items: center; font-size: 0.88rem; }
 .job-row:last-child { border-bottom: none; }
 .job-row .name { font-weight: 600; }
-.job-row .meta { color: #71767b; font-size: 0.8rem; }
+.job-row .meta { color: var(--muted); font-size: 0.8rem; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.dot-green { background: #00ba7c; box-shadow: 0 0 8px #00ba7c; }
-.dot-red { background: #f4212e; }
+.dot-green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.dot-red { background: var(--red); }
 .dot-gray { background: #555; }
-.dot-yellow { background: #f0b933; }
-.run-row { display: grid; grid-template-columns: 24px 1fr 80px 100px 1fr; gap: 0.8rem; padding: 0.5rem 0; border-bottom: 1px solid #2f3336; font-size: 0.85rem; align-items: center; }
+.dot-yellow { background: var(--yellow); }
+.run-row { display: grid; grid-template-columns: 24px 1fr 80px 100px 1fr; gap: 0.8rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; align-items: center; }
 .run-row:last-child { border-bottom: none; }
-.run-row .title { color: #e7e9ea; }
-.now-line { color: #71767b; font-size: 0.8rem; text-align: right; margin-top: 0.5rem; }
+.run-row .title { color: var(--text); }
+.now-line { color: var(--muted); font-size: 0.8rem; text-align: right; margin-top: 0.5rem; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .live { animation: pulse 1.5s infinite; }
 </style>
@@ -25,7 +25,7 @@
   {# === Scheduler ジョブ === #}
   <div class="act-card">
     <h3>📅 スケジュール（daemon）</h3>
-    <div class="job-row" style="color:#71767b; font-size:0.78rem; border-bottom:2px solid #2f3336;">
+    <div class="job-row" style="color:var(--muted); font-size:0.78rem; border-bottom:2px solid var(--border);">
       <div></div><div>ジョブ</div><div>頻度</div><div>状態</div><div>最終実行</div>
     </div>
     {% for j in jobs %}
@@ -46,7 +46,7 @@
   <div class="act-card">
     <h3>🚀 直近のパイプライン実行</h3>
     {% if runs %}
-    <div class="run-row" style="color:#71767b; font-size:0.78rem; border-bottom:2px solid #2f3336;">
+    <div class="run-row" style="color:var(--muted); font-size:0.78rem; border-bottom:2px solid var(--border);">
       <div></div><div>記事タイトル</div><div>所要</div><div>モード</div><div>時刻</div>
     </div>
     {% for r in runs %}
@@ -63,7 +63,7 @@
     </div>
     {% endfor %}
     {% else %}
-    <p style="color:#71767b;">記録なし</p>
+    <p style="color:var(--muted);">記録なし</p>
     {% endif %}
   </div>
 
@@ -87,7 +87,7 @@
       <div class="stat" style="flex:1;"><div class="stat-label">pending</div><div class="stat-value">{{ job_stats.pending or 0 }}</div></div>
       <div class="stat" style="flex:1;"><div class="stat-label">running</div><div class="stat-value">{{ job_stats.running or 0 }}</div></div>
       <div class="stat" style="flex:1;"><div class="stat-label">completed</div><div class="stat-value">{{ job_stats.completed or 0 }}</div></div>
-      <div class="stat" style="flex:1;"><div class="stat-label">failed</div><div class="stat-value" style="color:#f4212e;">{{ job_stats.failed or 0 }}</div></div>
+      <div class="stat" style="flex:1;"><div class="stat-label">failed</div><div class="stat-value" style="color:var(--red);">{{ job_stats.failed or 0 }}</div></div>
     </div>
   </div>
 

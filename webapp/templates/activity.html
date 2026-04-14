@@ -2,9 +2,9 @@
 {% block title %}Activity — auto-content-engine{% endblock %}
 {% block content %}
 <h2>⚡ Activity</h2>
-<p style="color: #71767b; margin-bottom: 1rem;">いま何が動いているか — 5秒ごとに自動更新</p>
+<p style="color: var(--muted); margin-bottom: 1rem;">いま何が動いているか — 5秒ごとに自動更新</p>
 
 <div hx-get="/partial/activity" hx-trigger="load, every 5s" hx-swap="innerHTML">
-    <p style="color: #71767b;">読み込み中…</p>
+    <p style="color: var(--muted);">読み込み中…</p>
 </div>
 {% endblock %}
