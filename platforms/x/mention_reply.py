@@ -251,6 +251,17 @@ def run_scan() -> dict:
             except Exception as e:
                 print(f"タブクリック失敗(続行): {e}")
 
+            # ページ最上部にスクロールして最新通知を確実に取得
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(2000)
+
+            # スクリーンショット for debug
+            try:
+                from core.paths import data_dir
+                page.screenshot(path=str(data_dir() / "scan_all_tab.png"))
+            except Exception:
+                pass
+
             # スクロールして件数を増やす
             for _ in range(3):
                 page.mouse.wheel(0, 2000)
