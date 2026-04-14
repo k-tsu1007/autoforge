@@ -18,10 +18,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-
 def _setup_instance(instance_name: str):
     os.environ["AC_INSTANCE"] = instance_name
     from core.instance import set_active_instance

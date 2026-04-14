@@ -10,7 +10,6 @@ from pathlib import Path
 from urllib.parse import quote
 
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 ROOT = Path(__file__).resolve().parent.parent
 from core.paths import x_session_path as _xsp; X_SESSION_JSON = _xsp()
