@@ -177,10 +177,17 @@
           {% else %}{{ row.what }}
           {% endif %}
         </div>
-        {% if row.time and ' / ' in row.time and state != 'done' %}
+        {% if row.time and ' / ' in row.time %}
         <div class="tl-slots">
           {% for t in row.time.split(' / ') %}
-            <span class="tl-slot {% if data.next_event and t.strip() == data.next_event.time %}tl-slot-now{% elif t.strip() >= now_hm %}tl-slot-next{% endif %}">{{ t.strip() }}</span>
+            {% set ts = t.strip() %}
+            {% if data.next_event and ts == data.next_event.time %}
+              <span class="tl-slot tl-slot-now">{{ ts }}</span>
+            {% elif ts < now_hm %}
+              <span class="tl-slot tl-slot-done">{{ ts }}</span>
+            {% else %}
+              <span class="tl-slot tl-slot-next">{{ ts }}</span>
+            {% endif %}
           {% endfor %}
         </div>
         {% endif %}
