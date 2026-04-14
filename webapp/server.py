@@ -425,11 +425,10 @@ def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(
         ).fetchone()
         if not row:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
-        from platforms.x.mention_reply import _decide_reply
-        decision = _decide_reply(row["mention_text"] or "")
-        new_text = decision.get("reply") or ""
+        from platforms.x.mention_reply import generate_reply_text
+        new_text = generate_reply_text(row["mention_text"] or "")
         if not new_text:
-            return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗（返信不要と判断）</div>')
+            return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         conn.execute("UPDATE mention_reply_queue SET reply_text=? WHERE id=?", (new_text, item_id))
         conn.commit()
         return HTMLResponse(

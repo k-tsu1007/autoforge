@@ -244,6 +244,23 @@ TEXT: （返す場合のみ70字以内の一言、会話の流れを踏まえて
         return {"should_reply": False, "reply": ""}
 
 
+def generate_reply_text(mention_text: str) -> str:
+    """返信テキストだけを強制生成（should_reply 判断をスキップ）。再生成ボタン用。"""
+    try:
+        from core.llm.wrapper import call_llm
+        prompt = f"""あなたは本業をしながらAI・note・SNSの副収入を試している30代です。
+
+以下のツイートへの返信を1つ書いてください。
+70字以内、ハッシュタグなし、URL禁止。自然な一言のみ出力してください。
+
+【相手のツイート】
+{mention_text[:300]}"""
+        return call_llm(prompt, task_type="strategy_evolution", temperature=0.9, max_tokens=150).strip()
+    except Exception as e:
+        print(f"返信生成失敗: {e}")
+        return ""
+
+
 def _like_tweet_playwright(page, tweet_url: str) -> bool:
     """既に開いているページのコンテキストでいいねを実行。"""
     try:
