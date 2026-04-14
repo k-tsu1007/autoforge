@@ -123,4 +123,9 @@ async def start_browser_with_session(session_json_path, headless: bool = False):
     if not ok:
         print("⚠️  Cookie注入失敗 — ログインできない可能性があります")
 
+    # cookie注入後、x.com/home に再移動してセッションを確立する
+    # これがないと search など一部ページで0件になる
+    tab = await browser.get("https://x.com/home")
+    await asyncio.sleep(3)
+
     return browser, tab
