@@ -73,8 +73,12 @@ def _to_cdp_cookies(pw_cookies: list) -> list:
 
 
 def try_chrome_profile(session_path: Path) -> bool:
-    """方法1: 既存Chromeプロファイルから取得。成功したらTrueを返す。"""
-    import glob
+    """方法1: 既存Chromeプロファイルから取得（nodriver版）。"""
+    # WindowsSelectorEventLoopPolicy 適用後は Playwright の subprocess が動かないためスキップ
+    print("[スキップ] Chrome プロファイル取得は nodriver 移行後は未対応 → 直接ログインへ")
+    return False
+
+    import glob  # noqa: unreachable
     user_data_dir = get_chrome_user_data_dir()
     if not os.path.exists(user_data_dir):
         print("[スキップ] Chromeユーザーデータが見つかりません")
