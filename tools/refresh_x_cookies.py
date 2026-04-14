@@ -121,80 +121,81 @@ def try_chrome_profile(session_path: Path) -> bool:
 
 
 async def _get_cookies_via_raw_ws(browser) -> list:
-    """nodriver の debugging WebSocket URL を取得して直接 CDP 接続でcookieを取得する。"""
+    """browser WebSocket に直接接続し、Target.attachToTarget で page session を取り cookie を返す。"""
     import re
-    import urllib.request
-    import json as _json
+    import json as _j
 
-    # browser オブジェクトから WebSocket URL を探す
+    # browser から WebSocket URL を取得
     ws_url = None
     for attr in ("websocket_url", "_ws_url", "ws_url"):
-        try:
-            ws_url = getattr(browser, attr, None)
-            if ws_url:
-                break
-        except Exception:
-            pass
-    # connection 属性経由
+        val = getattr(browser, attr, None)
+        if val:
+            ws_url = str(val)
+            break
     if not ws_url:
         try:
-            ws_url = getattr(browser.connection, "url", None) or getattr(browser.connection, "ws_url", None)
+            ws_url = str(getattr(browser.connection, "url", None) or getattr(browser.connection, "ws_url", ""))
         except Exception:
             pass
-    # config 経由
     if not ws_url:
-        try:
-            port = browser.config.remote_debugging_port
-            ws_url = f"ws://localhost:{port}"
-        except Exception:
-            pass
-
-    if not ws_url:
-        print(f"  [raw_ws] ws_url 取得失敗。browser attrs: {[a for a in dir(browser) if not a.startswith('__')][:30]}")
+        print(f"  [raw_ws] ws_url 取得失敗。attrs={[a for a in dir(browser) if not a.startswith('__')][:20]}")
         return []
-
-    m = re.search(r"localhost:(\d+)", ws_url)
-    if not m:
-        print(f"  [raw_ws] ポート抽出失敗: {ws_url}")
-        return []
-    port = int(m.group(1))
-    print(f"  [raw_ws] Chrome debug port={port}")
-
-    # /json/list でページターゲットのWS URLを取得
-    try:
-        with urllib.request.urlopen(f"http://localhost:{port}/json/list", timeout=5) as r:
-            targets = _json.loads(r.read())
-    except Exception as e:
-        print(f"  [raw_ws] /json/list error: {e}")
-        return []
-
-    x_target = next((t for t in targets if "x.com" in t.get("url", "") and t.get("type") == "page"), None)
-    if not x_target:
-        x_target = next((t for t in targets if t.get("type") == "page"), None)
-    if not x_target:
-        print(f"  [raw_ws] ページターゲットなし: {[t.get('url','') for t in targets]}")
-        return []
-
-    tab_ws = x_target.get("webSocketDebuggerUrl", "")
-    print(f"  [raw_ws] tab ws: {tab_ws}")
-    if not tab_ws:
-        return []
+    print(f"  [raw_ws] browser ws: {ws_url}")
 
     try:
         import websockets
-        async with websockets.connect(tab_ws, max_size=None) as ws:
-            await ws.send(_json.dumps({"id": 1, "method": "Network.enable", "params": {}}))
-            await asyncio.wait_for(ws.recv(), timeout=5)
-            await ws.send(_json.dumps({"id": 2, "method": "Network.getAllCookies", "params": {}}))
-            for _ in range(20):
-                msg = _json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
-                if msg.get("id") == 2:
-                    cookies = msg.get("result", {}).get("cookies", [])
-                    print(f"  [raw_ws] {len(cookies)}件取得")
-                    return cookies
+
+        async def _send_recv(ws, method, params=None, session_id=None, cmd_id=1, timeout=8):
+            msg = {"id": cmd_id, "method": method, "params": params or {}}
+            if session_id:
+                msg["sessionId"] = session_id
+            await ws.send(_j.dumps(msg))
+            # 対応するid のレスポンスを待つ（イベントメッセージは読み飛ばす）
+            for _ in range(100):
+                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                data = _j.loads(raw)
+                if data.get("id") == cmd_id:
+                    if not session_id or data.get("sessionId") == session_id:
+                        return data
+            return {}
+
+        async with websockets.connect(ws_url, max_size=None) as ws:
+            # Step1: 全ターゲット取得
+            r1 = await _send_recv(ws, "Target.getTargets", cmd_id=1)
+            target_infos = r1.get("result", {}).get("targetInfos", [])
+            print(f"  [raw_ws] targets: {[(t.get('type'), t.get('url','')[:40]) for t in target_infos]}")
+
+            x_info = next(
+                (t for t in target_infos if "x.com" in t.get("url", "") and t.get("type") == "page"),
+                next((t for t in target_infos if t.get("type") == "page"), None),
+            )
+            if not x_info:
+                print("  [raw_ws] page target なし")
+                return []
+            target_id = x_info["targetId"]
+            print(f"  [raw_ws] page target_id={target_id}")
+
+            # Step2: page target にアタッチ（flattened session）
+            r2 = await _send_recv(ws, "Target.attachToTarget",
+                                  {"targetId": target_id, "flatten": True}, cmd_id=2)
+            session_id = r2.get("result", {}).get("sessionId")
+            if not session_id:
+                print(f"  [raw_ws] sessionId 取得失敗: {r2}")
+                return []
+            print(f"  [raw_ws] session_id={session_id}")
+
+            # Step3: Network.enable (page session 経由)
+            await _send_recv(ws, "Network.enable", session_id=session_id, cmd_id=3)
+
+            # Step4: Network.getAllCookies (page session 経由)
+            r4 = await _send_recv(ws, "Network.getAllCookies", session_id=session_id, cmd_id=4)
+            cookies = r4.get("result", {}).get("cookies", [])
+            print(f"  [raw_ws] {len(cookies)}件取得")
+            return cookies
+
     except Exception as e:
-        print(f"  [raw_ws] WS error: {type(e).__name__}: {e}")
-    return []
+        print(f"  [raw_ws] error: {type(e).__name__}: {e}")
+        return []
 
 
 def _cookie_obj_to_dict(c) -> dict:
