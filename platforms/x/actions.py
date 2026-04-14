@@ -1,44 +1,19 @@
 """X (Twitter) アクション — nodriverで検索・いいねを実行する。
 
-x_post_local.py と同じCookie (x_session.json) を使用する。
+persistent Chrome profile (chrome_profile_x) を使用する。
 """
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
-from core.paths import x_session_path as _xsp; X_SESSION_JSON = _xsp()
 
 
-def _load_cookies():
-    if not X_SESSION_JSON.exists():
-        return None
-    return json.loads(X_SESSION_JSON.read_text(encoding="utf-8"))
-
-
-def _to_cdp_cookies(pw_cookies: list) -> list:
-    """Playwright cookie format → nodriver/CDP format."""
-    result = []
-    for c in pw_cookies:
-        cc = {
-            "name": c.get("name", ""),
-            "value": c.get("value", ""),
-            "domain": c.get("domain", ""),
-            "path": c.get("path", "/"),
-            "secure": c.get("secure", False),
-            "httpOnly": c.get("httpOnly", False),
-        }
-        exp = c.get("expires", -1)
-        if exp and exp > 0:
-            cc["expires"] = int(exp)
-        ss = c.get("sameSite")
-        if ss:
-            cc["sameSite"] = ss
-        result.append(cc)
-    return result
+def _get_profile_dir():
+    from core.paths import x_chrome_profile_dir
+    return x_chrome_profile_dir()
 
 
 async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
@@ -48,8 +23,7 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         print("nodriverが未インストール。")
         return []
 
-    from core.paths import x_chrome_profile_dir
-    profile_dir = x_chrome_profile_dir()
+    profile_dir = _get_profile_dir()
     if not profile_dir.exists():
         print("❌ Chrome profile なし。refresh_x_cookies を実行してください。")
         return []
@@ -73,7 +47,7 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
             await asyncio.sleep(1.5)
 
         tweets = await tab.evaluate("""
-            () => {
+            (() => {
                 const arts = [...document.querySelectorAll('article')];
                 return arts.map(art => {
                     const link = art.querySelector('a[href*="/status/"]');
@@ -84,7 +58,7 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
                         text: art.innerText.substring(0, 500)
                     };
                 }).filter(t => t.url);
-            }
+            })()
         """)
 
         seen = set()
@@ -100,10 +74,6 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
                 "user": t.get("user", ""),
                 "text": t.get("text", ""),
             })
-
-        # cookies 更新保存
-        new_cookies = await browser.cookies.get_all()
-        X_SESSION_JSON.write_text(json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8")
 
     except Exception as e:
         print(f"❌ 検索エラー: {e}")
@@ -127,37 +97,35 @@ async def _like_tweet_async(tweet_url: str) -> bool:
     except ImportError:
         return False
 
-    cookies = _load_cookies()
-    if not cookies:
+    profile_dir = _get_profile_dir()
+    if not profile_dir.exists():
+        print("❌ Chrome profile なし。")
         return False
 
     browser = None
     try:
-        browser = await uc.start(headless=True)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
         tab = await browser.get(tweet_url)
         await asyncio.sleep(7)
 
         if "/login" in tab.url:
             return False
 
-        # article が表示されるまで少し待つ
         await asyncio.sleep(1)
 
         # unlike ボタンがあれば既にいいね済み
         unlike_count = await tab.evaluate(
-            "() => document.querySelectorAll('button[data-testid=\"unlike\"]').length"
+            "(() => document.querySelectorAll('button[data-testid=\"unlike\"]').length)()"
         )
         if unlike_count and unlike_count > 0:
             print("  既にいいね済み")
             return False
 
         like_count = await tab.evaluate(
-            "() => document.querySelectorAll('button[data-testid=\"like\"]').length"
+            "(() => document.querySelectorAll('button[data-testid=\"like\"]').length)()"
         )
         if not like_count or like_count == 0:
             print("  likeボタン見つからず")
-            # デバッグスクショ
             try:
                 from datetime import datetime as _dt
                 p_path = ROOT / "data" / "debug_screenshots" / f"like_fail_{_dt.now().strftime('%H%M%S')}.png"
@@ -170,10 +138,6 @@ async def _like_tweet_async(tweet_url: str) -> bool:
 
         await tab.evaluate("document.querySelector('button[data-testid=\"like\"]').click()")
         await asyncio.sleep(2.5)
-
-        # cookies 更新保存
-        new_cookies = await browser.cookies.get_all()
-        X_SESSION_JSON.write_text(json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8")
 
         return True
     except Exception as e:
@@ -195,14 +159,13 @@ async def _quote_tweet_async(tweet_url: str, comment: str) -> bool:
     except ImportError:
         return False
 
-    cookies = _load_cookies()
-    if not cookies:
+    profile_dir = _get_profile_dir()
+    if not profile_dir.exists():
         return False
 
     browser = None
     try:
-        browser = await uc.start(headless=True)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
 
         from urllib.parse import quote as urlq
         intent = f"https://x.com/intent/tweet?url={urlq(tweet_url)}&text={urlq(comment)}"
@@ -213,17 +176,13 @@ async def _quote_tweet_async(tweet_url: str, comment: str) -> bool:
             return False
 
         btn_count = await tab.evaluate(
-            "() => document.querySelectorAll('button[data-testid=\"tweetButton\"]').length"
+            "(() => document.querySelectorAll('button[data-testid=\"tweetButton\"]').length)()"
         )
         if not btn_count or btn_count == 0:
             return False
 
         await tab.evaluate("document.querySelector('button[data-testid=\"tweetButton\"]').click()")
         await asyncio.sleep(4)
-
-        # cookies 更新保存
-        new_cookies = await browser.cookies.get_all()
-        X_SESSION_JSON.write_text(json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8")
 
         return True
     except Exception as e:
@@ -245,18 +204,16 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
     except ImportError:
         return False
 
-    cookies = _load_cookies()
-    if not cookies:
+    profile_dir = _get_profile_dir()
+    if not profile_dir.exists():
         return False
 
     browser = None
     try:
-        browser = await uc.start(headless=True)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=True, user_data_dir=str(profile_dir))
         tab = await browser.get(tweet_url)
         await asyncio.sleep(5)
 
-        # デバッグスクショ用のフォルダ
         from datetime import datetime as _dt
         debug_dir = ROOT / "data" / "debug_screenshots"
         debug_dir.mkdir(parents=True, exist_ok=True)
@@ -274,16 +231,14 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
             await _snap("01_login_redirect")
             return False
 
-        # URLのステータスIDに対応するreplyボタンを探す
         import re as _re
         status_id_match = _re.search(r"/status/(\d+)", tweet_url)
         status_id = status_id_match.group(1) if status_id_match else None
 
-        # reply ボタンをクリック
         clicked_reply = False
         if status_id:
             clicked_reply = await tab.evaluate(f"""
-                () => {{
+                (() => {{
                     const arts = [...document.querySelectorAll('article')];
                     for (const art of arts) {{
                         const timeLink = art.querySelector('time');
@@ -297,19 +252,18 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
                         }}
                     }}
                     return false;
-                }}
+                }})()
             """)
         if not clicked_reply:
-            # フォールバック: 最後のarticleのreplyボタン
             clicked_reply = await tab.evaluate("""
-                () => {
+                (() => {
                     const arts = [...document.querySelectorAll('article')];
                     if (!arts.length) return false;
                     const last = arts[arts.length - 1];
                     const btn = last.querySelector('button[data-testid="reply"]');
                     if (btn) { btn.click(); return true; }
                     return false;
-                }
+                })()
             """)
 
         if not clicked_reply:
@@ -320,19 +274,17 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
         await asyncio.sleep(3)
         await _snap("04_after_reply_click")
 
-        # エディタにフォーカスしてテキスト入力
         await tab.evaluate("""
-            () => {
+            (() => {
                 const els = [...document.querySelectorAll('div[data-testid^="tweetTextarea_"]')];
                 if (els.length > 0) els[els.length - 1].focus();
-            }
+            })()
         """)
         await asyncio.sleep(0.3)
 
-        # テキスト入力: send_keys を使う
-        editor_els = await tab.evaluate("""
-            () => document.querySelectorAll('div[data-testid^="tweetTextarea_"]').length
-        """)
+        editor_els = await tab.evaluate(
+            "(() => document.querySelectorAll('div[data-testid^=\"tweetTextarea_\"]').length)()"
+        )
         if not editor_els or editor_els == 0:
             await _snap("05_no_editor")
             print("❌ リプライエディタ未表示 — 送信中止")
@@ -345,15 +297,14 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
         await asyncio.sleep(2)
         await _snap("06_after_type")
 
-        # 送信ボタンをクリック
         posted_ok = False
         for sel in ['button[data-testid="tweetButton"]', 'button[data-testid="tweetButtonInline"]']:
             is_disabled = await tab.evaluate(f"""
-                () => {{
+                (() => {{
                     const btn = document.querySelector('{sel}');
                     if (!btn) return null;
                     return btn.getAttribute('aria-disabled') === 'true' || btn.disabled;
-                }}
+                }})()
             """)
             if is_disabled is None:
                 continue
@@ -371,13 +322,13 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
         if not posted_ok:
             try:
                 await tab.evaluate("""
-                    () => {
+                    (() => {
                         const els = [...document.querySelectorAll('div[data-testid^="tweetTextarea_"]')];
                         if (els.length > 0) {
                             const e = new KeyboardEvent('keydown', {key: 'Enter', ctrlKey: true, bubbles: true});
                             els[els.length - 1].dispatchEvent(e);
                         }
-                    }
+                    })()
                 """)
                 posted_ok = True
                 print("  ✓ Ctrl+Enter (JS)")
@@ -387,19 +338,18 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
         await asyncio.sleep(5)
         await _snap("07_after_submit")
 
-        # テキスト残留チェック
         try:
             still = await tab.evaluate("""
-                () => {
+                (() => {
                     const el = document.querySelector('div[data-testid="tweetTextarea_0"]');
                     return el ? el.innerText.trim() : '';
-                }
+                })()
             """)
             if still and text[:20] in still:
                 await _snap("08_text_remain")
                 try:
                     html_path = debug_dir / f"reply_{ts}_08.html"
-                    html_content = await tab.evaluate("() => document.documentElement.outerHTML")
+                    html_content = await tab.evaluate("(() => document.documentElement.outerHTML)()")
                     html_path.write_text(html_content or "", encoding="utf-8")
                     print(f"  📄 {html_path.name}")
                 except Exception:
@@ -409,9 +359,6 @@ async def _reply_tweet_async(tweet_url: str, text: str) -> bool:
         except Exception:
             pass
 
-        # cookies 更新保存
-        new_cookies = await browser.cookies.get_all()
-        X_SESSION_JSON.write_text(json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
     except Exception as e:
         print(f"❌ リプライエラー: {e}")

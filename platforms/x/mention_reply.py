@@ -464,15 +464,7 @@ async def _run_scan_async() -> dict:
                 print(f"  処理エラー: {e}")
                 continue
 
-        # セッション更新
-        try:
-            from core.paths import x_session_path
-            new_cookies = await browser.cookies.get_all()
-            x_session_path().write_text(
-                json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        except Exception:
-            pass
+        # persistent profile が自動でセッション保持するため cookie 保存不要
 
     except Exception as e:
         print(f"スキャンエラー: {e}")

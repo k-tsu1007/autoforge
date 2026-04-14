@@ -287,10 +287,6 @@ async def _post_to_x_async(text: str):
             print(f"❌ 投稿失敗: コンポーズページから離れませんでした")
             return False
 
-        # Cookieを更新保存
-        new_cookies = await browser.cookies.get_all()
-        X_SESSION_JSON.write_text(json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8")
-
         print(f"✅ 投稿成功: {text[:60]}")
         if tweet_url:
             print(f"  URL: {tweet_url}")
@@ -322,16 +318,15 @@ async def _post_thread_async(tweets: list) -> str | bool:
         print("nodriver未インストール")
         return False
 
-    if not X_SESSION_JSON.exists():
-        print("❌ x_session.json なし")
+    from core.paths import x_chrome_profile_dir
+    profile_dir = x_chrome_profile_dir()
+    if not profile_dir.exists():
+        print("❌ Chrome profile が見つかりません。refresh_x_cookies を実行してください。")
         return False
-
-    cookies = json.loads(X_SESSION_JSON.read_text(encoding="utf-8"))
 
     browser = None
     try:
-        browser = await uc.start(headless=False)
-        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        browser = await uc.start(headless=False, user_data_dir=str(profile_dir))
 
         tab = await browser.get("https://x.com/compose/post")
         await asyncio.sleep(5)
@@ -404,9 +399,6 @@ async def _post_thread_async(tweets: list) -> str | bool:
                 """) or ""
         except Exception as e:
             print(f"  URL取得失敗: {e}")
-
-        new_cookies = await browser.cookies.get_all()
-        X_SESSION_JSON.write_text(json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8")
 
         print(f"✅ スレッド投稿成功 ({len(tweets)}ツイート)")
         return tweet_url or True
