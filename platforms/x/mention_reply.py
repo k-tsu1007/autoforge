@@ -225,9 +225,9 @@ def run_scan() -> dict:
             page.set_default_timeout(20000)
             page.set_default_navigation_timeout(25000)
 
-            # メンション通知ページへ
-            page.goto("https://x.com/notifications/mentions")
-            page.wait_for_timeout(5000)
+            # 通知ページ（全タブ）— mentions タブは @mention のみ、replies は全タブに出る
+            page.goto("https://x.com/notifications")
+            page.wait_for_timeout(6000)
 
             if "/login" in page.url or "/flow/login" in page.url:
                 print("セッション切れ")
