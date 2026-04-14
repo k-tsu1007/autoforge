@@ -408,14 +408,16 @@ def run_scan() -> dict:
                         _queue_reply(mention_url, mention_text, author, decision["reply"])
                         queued += 1
                     else:
-                        # 返信しない場合は通知ページに戻っていいねはできないのでAPIいいねを試みる
+                        # 返信しない → ツイートページで既存pageを使っていいね
                         try:
-                            from platforms.x.actions import like_tweet
-                            like_tweet(mention_url)
-                            liked += 1
-                            print(f"    ❤️ いいね（返信なし）")
-                        except Exception:
-                            pass
+                            like_btn = page.locator('[data-testid="like"]').first
+                            if like_btn.count() > 0:
+                                like_btn.click()
+                                page.wait_for_timeout(1000)
+                                liked += 1
+                                print(f"    ❤️ いいね（返信なし）")
+                        except Exception as le:
+                            print(f"❌ いいね失敗: {le}")
                         _record_like(mention_url, mention_text, author)
                         skipped += 1
                         print(f"    ⏭ 返信なし（会話終了 or 不要と判断）")
