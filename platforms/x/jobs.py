@@ -228,7 +228,7 @@ def register_jobs(scheduler, jst, inst=None):
     )
     scheduler.add_job(
         job_mention_scan,
-        IntervalTrigger(hours=3),
+        IntervalTrigger(minutes=10),
         id="x_mention_scan",
         name="X: Mention Scan",
         max_instances=1,
