@@ -196,127 +196,130 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         try:
             uname = username or email.split("@")[0]
             print(f"  ユーザー名確認ステップ確認中... (username={uname})")
+            escaped_uname = uname.replace("'", "\\'")
 
-            # どの input が表示されているか JS でスキャン
-            ocf_input = None
-            for attempt in range(4):
+            for attempt in range(6):
                 await asyncio.sleep(3)
+                print(f"  OCF attempt {attempt+1}/6, URL={tab.url}")
 
-                # JS で現在 visible な input の情報を取得
-                scan = await tab.evaluate("""
-                    () => {
-                        const pw = document.querySelector('input[name="password"]');
-                        if (pw && pw.offsetParent !== null) return 'PASSWORD';
-                        const ocf = document.querySelector('input[data-testid="ocfEnterTextTextInput"]');
-                        if (ocf && ocf.offsetParent !== null) return 'OCF';
-                        const named = document.querySelector('input[name="text"]');
-                        if (named && named.offsetParent !== null) return 'TEXT';
-                        const inputs = [...document.querySelectorAll('input:not([type="hidden"])')];
-                        const vis = inputs.find(i => i.offsetParent !== null);
-                        if (vis) return 'GENERIC:' + (vis.getAttribute('data-testid') || vis.getAttribute('name') || '?');
-                        return 'NONE';
-                    }
-                """)
-                print(f"  JS scan [{attempt+1}]: {scan}")
-
-                if scan == 'PASSWORD':
-                    print("  パスワード欄が出現 → ユーザー名ステップ不要")
-                    break
-
-                if scan in ('OCF', 'TEXT') or (scan and scan.startswith('GENERIC')):
-                    # セレクタを決定
-                    if scan == 'OCF':
-                        sel = 'input[data-testid="ocfEnterTextTextInput"]'
-                    elif scan == 'TEXT':
-                        sel = 'input[name="text"]'
-                    else:
-                        sel = 'input:not([type="hidden"])'
-
-                    try:
-                        ocf_input = await tab.select(sel, timeout=3)
-                    except Exception:
-                        ocf_input = None
-
-                    if ocf_input:
-                        print(f"  input found ({sel}), typing: {uname}")
-                        await ocf_input.click()
-                        await asyncio.sleep(1)
-
-                        # execCommand('insertText') はReactのsynthetic eventsを正しくトリガーする
-                        escaped_uname = uname.replace("'", "\\'")
-                        js_code = (
-                            "() => {"
-                            "  const el = document.querySelector('input[data-testid=\"ocfEnterTextTextInput\"]')"
-                            "           || document.querySelector('input[name=\"text\"]');"
-                            "  if (!el) return 'NOT_FOUND';"
-                            "  el.focus();"
-                            "  el.click();"
-                            "  document.execCommand('selectAll', false, null);"
-                            "  document.execCommand('delete', false, null);"
-                            f"  const ok = document.execCommand('insertText', false, '{escaped_uname}');"
-                            "  return 'execCmd:' + ok + ':' + el.value;"
-                            "}"
-                        )
-                        set_ok = await tab.evaluate(js_code)
-                        print(f"  JS execCommand: {set_ok}")
-                        await asyncio.sleep(1)
-
-                        # 値確認
-                        val_check = await tab.evaluate(
-                            "() => { const el = document.querySelector('input[data-testid=\"ocfEnterTextTextInput\"]')"
-                            "     || document.querySelector('input[name=\"text\"]');"
-                            "  return el ? el.value : ''; }"
-                        )
-                        print(f"  current value: '{val_check}'")
-                        if not val_check:
-                            # フォールバック: クリックしてsend_keys
-                            print("  send_keys フォールバック")
-                            await ocf_input.click()
-                            await asyncio.sleep(0.5)
-                            await ocf_input.send_keys(uname)
-                            await asyncio.sleep(1)
-
-                        await asyncio.sleep(1)
-                        snap_ocf = data_dir / f"login_ocf_{attempt}.png"
-                        await tab.save_screenshot(str(snap_ocf))
-                        print(f"  入力後スクリーンショット: {snap_ocf}")
-
-                        # 「次へ」ボタンをクリック
-                        next_clicked = False
-                        for btn_sel in [
-                            'button[data-testid="ocfEnterTextNextButton"]',
-                            'button[data-testid="LoginForm_Login_Button"]',
-                        ]:
-                            try:
-                                btn = await tab.select(btn_sel, timeout=3)
-                                if btn:
-                                    await btn.click()
-                                    next_clicked = True
-                                    print(f"  次へクリック: {btn_sel}")
-                                    break
-                            except Exception:
-                                continue
-                        if not next_clicked:
-                            try:
-                                btn = await tab.find('次へ', timeout=3)
-                                if btn:
-                                    await btn.click()
-                                    next_clicked = True
-                                    print("  次へクリック: text search")
-                            except Exception:
-                                pass
-                        if not next_clicked:
-                            await ocf_input.send_keys('\n')
-                            print("  Enterキー送信")
-
-                        await asyncio.sleep(6)
-                        snap_after = data_dir / "login_step4.png"
-                        await tab.save_screenshot(str(snap_after))
-                        print(f"  次へ後スクリーンショット: {snap_after}")
+                # パスワード欄が出たらOCFスキップ
+                try:
+                    pw_check = await tab.select('input[name="password"]', timeout=1)
+                    if pw_check:
+                        print("  パスワード欄検出 → OCFスキップ")
                         break
-                    else:
-                        print(f"  select失敗({sel}), リトライ...")
+                except Exception:
+                    pass
+
+                # OCF inputを JS scan なしで直接探す
+                # (offsetParent は position:fixed 要素でNULLになるため使わない)
+                ocf_input = None
+                found_sel = None
+                for ocf_sel in [
+                    'input[data-testid="ocfEnterTextTextInput"]',
+                    'input[name="text"]',
+                ]:
+                    try:
+                        el = await tab.select(ocf_sel, timeout=2)
+                        if el:
+                            ocf_input = el
+                            found_sel = ocf_sel
+                            print(f"  OCF input found: {ocf_sel}")
+                            break
+                    except Exception:
                         continue
+
+                if not ocf_input:
+                    # DOM上の全inputを列挙してデバッグ
+                    debug_info = await tab.evaluate(
+                        "() => [...document.querySelectorAll('input')]"
+                        ".map(i => i.getAttribute('data-testid') + '|' + i.getAttribute('name') + '|' + i.type)"
+                        ".join(', ')"
+                    )
+                    print(f"  DOM inputs: {debug_info}")
+                    print(f"  OCF input not found, retry...")
+                    continue
+
+                # クリックでフォーカス
+                await ocf_input.click()
+                await asyncio.sleep(1)
+
+                # execCommand で入力（React synthetic events対応）
+                js_type = (
+                    "() => {"
+                    "  const el = document.activeElement;"
+                    "  if (!el || el.tagName !== 'INPUT') return 'NO_ACTIVE_INPUT:' + document.activeElement.tagName;"
+                    "  document.execCommand('selectAll', false, null);"
+                    "  document.execCommand('delete', false, null);"
+                    f"  const ok = document.execCommand('insertText', false, '{escaped_uname}');"
+                    "  return 'execCmd:' + ok + ':' + el.value;"
+                    "}"
+                )
+                set_ok = await tab.evaluate(js_type)
+                print(f"  execCommand result: {set_ok}")
+                await asyncio.sleep(1)
+
+                # 値確認
+                val_check = await tab.evaluate(
+                    f"() => {{ const el = document.querySelector('{found_sel}');"
+                    "  return el ? el.value : 'NOT_FOUND'; }"
+                )
+                print(f"  value after exec: '{val_check}'")
+
+                if not val_check or val_check == 'NOT_FOUND':
+                    # send_keys フォールバック
+                    print("  send_keys フォールバック")
+                    await ocf_input.click()
+                    await asyncio.sleep(0.5)
+                    await ocf_input.send_keys(uname)
+                    await asyncio.sleep(1)
+
+                snap_ocf = data_dir / f"login_ocf_{attempt}.png"
+                await tab.save_screenshot(str(snap_ocf))
+                print(f"  screenshot: {snap_ocf}")
+
+                # 「次へ」ボタンをクリック
+                next_clicked = False
+                for btn_sel in [
+                    'button[data-testid="ocfEnterTextNextButton"]',
+                    'button[data-testid="LoginForm_Login_Button"]',
+                ]:
+                    try:
+                        btn = await tab.select(btn_sel, timeout=3)
+                        if btn:
+                            await btn.click()
+                            next_clicked = True
+                            print(f"  次へクリック: {btn_sel}")
+                            break
+                    except Exception:
+                        continue
+                if not next_clicked:
+                    try:
+                        btn = await tab.find('次へ', timeout=3)
+                        if btn:
+                            await btn.click()
+                            next_clicked = True
+                            print("  次へクリック: text search")
+                    except Exception:
+                        pass
+                if not next_clicked:
+                    await ocf_input.send_keys('\n')
+                    print("  Enter送信")
+
+                await asyncio.sleep(5)
+                snap_after = data_dir / f"login_step4_{attempt}.png"
+                await tab.save_screenshot(str(snap_after))
+                print(f"  after 次へ: {snap_after}")
+
+                # パスワード欄が出たら突破成功
+                try:
+                    pw_ok = await tab.select('input[name="password"]', timeout=3)
+                    if pw_ok:
+                        print("  OCF突破 → パスワードへ")
+                        break
+                except Exception:
+                    pass
+                print(f"  OCF未突破, retry...")
 
         except Exception as e:
             print(f"  ユーザー名ステップ例外（続行）: {e}")
