@@ -123,9 +123,14 @@ def try_chrome_profile(session_path: Path) -> bool:
 async def _get_cookies(browser) -> list:
     """browser.cookies.get_all() で取得した Cookie オブジェクトを dict リストに変換して返す。"""
     try:
-        raw = await browser.cookies.get_all()
+        print("  [debug] cookies.get_all() 呼び出し中...")
+        raw = await asyncio.wait_for(browser.cookies.get_all(), timeout=10)
+        print(f"  [debug] 取得完了: type={type(raw).__name__}, count={len(raw) if raw else 0}")
         if not raw:
             return []
+        # 最初のアイテムの型と属性を表示
+        first = raw[0]
+        print(f"  [debug] first item: type={type(first).__name__}, repr={repr(first)[:150]}")
         result = []
         for c in raw:
             if isinstance(c, dict):
@@ -147,6 +152,7 @@ async def _get_cookies(browser) -> list:
             if ss is not None:
                 entry["sameSite"] = ss.value if hasattr(ss, "value") else str(ss)
             result.append(entry)
+        print(f"  [debug] 変換後: {len(result)}件, auth_token={'YES' if any(r['name']=='auth_token' for r in result) else 'no'}")
         return result
     except Exception as e:
         print(f"  [cookie取得エラー] {type(e).__name__}: {e}")
