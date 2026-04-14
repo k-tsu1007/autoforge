@@ -79,6 +79,7 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
             })()
         """)
 
+        print(f"  [search] tweets type={type(tweets)}, len={len(tweets) if tweets else 0}, raw={repr(tweets)[:200] if tweets else tweets}")
         seen = set()
         for t in (tweets or []):
             if len(results) >= max_results:
