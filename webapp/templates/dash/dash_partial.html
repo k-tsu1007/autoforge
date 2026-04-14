@@ -134,7 +134,7 @@
       <div class="rs-label">Goal</div>
       <div style="display:flex;align-items:baseline;gap:.3rem;margin-bottom:.1rem;">
         <span class="rs-goal-days">{{ data.goal.days_left }}</span>
-        <span style="font-size:.74rem;color:var(--muted);">日</span>
+        <span style="font-size:.82rem;color:var(--muted);">日</span>
       </div>
       <div class="rs-goal-desc">月{{ data.goal.target_revenue|int }}円 — {{ data.goal.target_date }}</div>
       <div class="rs-goal-bar"><div class="rs-goal-fill" style="width:{{ data.goal.elapsed_pct }}%;"></div></div>
@@ -150,7 +150,7 @@
       <div style="height:2px;background:var(--border);border-radius:999px;overflow:hidden;margin:.4rem 0 .18rem;">
         <div style="height:100%;{% if gr.pct >= 100 %}background:#4ade80;{% else %}background:#60a5fa;{% endif %};width:{{ gr.pct }}%;transition:width .5s;border-radius:999px;"></div>
       </div>
-      <div style="font-size:.65rem;color:var(--muted);">目標 {{ gr.target }}件</div>
+      <div style="font-size:.75rem;color:var(--muted);">目標 {{ gr.target }}件</div>
     </div>
 
   </div>
@@ -194,9 +194,9 @@
       </span>
     </div>
   {% endfor %}
-  <p style="margin-top:.6rem;font-size:.68rem;color:var(--muted);">
+  <p style="margin-top:.6rem;font-size:.75rem;color:var(--muted);">
     累計 記事&nbsp;{{ data.metrics.article_count }}本 / TW&nbsp;{{ data.metrics.tweet_count }}件
-    &nbsp;·&nbsp;<a href="/activity" style="color:var(--dim);">⚡ ログ</a>
+    &nbsp;·&nbsp;<a href="/activity" style="color:var(--muted);">⚡ ログ</a>
   </p>
 </div>
 
@@ -217,7 +217,7 @@
         <tr><td>{{ al.get(k,k) }}</td><td>{{ v }}</td></tr>
         {% endif %}{% endfor %}
         </table>
-        <div style="color:var(--dim);font-size:.67rem;margin-top:.4rem;">最終判断: {{ data.advisor.updated_at[:16] if data.advisor.updated_at else '不明' }}</div>
+        <div style="color:var(--dim);font-size:.75rem;margin-top:.4rem;">最終判断: {{ data.advisor.updated_at[:16] if data.advisor.updated_at else '不明' }}</div>
         {% else %}
         <div class="fmuted">まだ判断データがありません。翌 06:00 に実行されます。</div>
         {% endif %}
@@ -258,7 +258,7 @@
       <summary>⚡ 何が効いているか</summary>
       <div class="fold-body">
         {% if winners %}
-        <div style="font-size:.63rem;color:#4ade80;letter-spacing:.05em;margin-bottom:.3rem;">✅ 効いている</div>
+        <div style="font-size:.72rem;color:#4ade80;letter-spacing:.05em;margin-bottom:.3rem;">✅ 効いている</div>
         {% for w in winners|sort(attribute='m',reverse=True) %}
         <div class="flift-row">
           <span><span class="flift-k">{{ pl.get(w.p,w.p) }}&nbsp;</span><span class="flift-v">{{ w.v }}</span></span>
@@ -267,7 +267,7 @@
         {% endfor %}
         {% endif %}
         {% if losers %}
-        <div style="font-size:.63rem;color:#f87171;letter-spacing:.05em;margin:.45rem 0 .3rem;">❌ 効いていない</div>
+        <div style="font-size:.72rem;color:#f87171;letter-spacing:.05em;margin:.45rem 0 .3rem;">❌ 効いていない</div>
         {% for l in losers|sort(attribute='m') %}
         <div class="flift-row">
           <span><span class="flift-k">{{ pl.get(l.p,l.p) }}&nbsp;</span><span class="flift-v">{{ l.v }}</span></span>
@@ -284,7 +284,7 @@
     <details>
       <summary>📈 30日推移・コスト</summary>
       <div class="fold-body">
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem;">
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem;">
           AIコスト 7日 <strong style="color:#888;">${{ "%.2f"|format(data.cost7.total_cost or 0) }}</strong>
           / 30日 <strong style="color:#888;">${{ "%.2f"|format(data.cost30.total_cost or 0) }}</strong>
           （{{ data.cost7.total_calls or 0 }}回 / {{ data.cost30.total_calls or 0 }}回）
