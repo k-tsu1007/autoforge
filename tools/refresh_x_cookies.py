@@ -1,13 +1,14 @@
 """X セッション取得ツール。
 
 方法1: 既存のChromeプロファイルからCookieを読み取る（Chrome 126以前向け）
-方法2: Playwrightで直接ログインしてCookieを取得（Chrome 127+のApp-Bound Encryption対策）
+方法2: nodriverで直接ログインしてCookieを取得（Chrome 127+のApp-Bound Encryption対策 / bot検知回避）
 
 使い方:
     python -m tools.refresh_x_cookies --instance ai_bento
     python -m tools.refresh_x_cookies --instance fuku_ai_sns
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -16,6 +17,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def _setup_instance(instance_name: str):
@@ -44,6 +48,28 @@ def get_chrome_user_data_dir() -> str:
         return os.path.expanduser("~/AppData/Local/Google/Chrome/User Data")
     else:
         return os.path.expanduser("~/.config/google-chrome")
+
+
+def _to_cdp_cookies(pw_cookies: list) -> list:
+    """Playwright cookie format → nodriver/CDP format."""
+    result = []
+    for c in pw_cookies:
+        cc = {
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+            "secure": c.get("secure", False),
+            "httpOnly": c.get("httpOnly", False),
+        }
+        exp = c.get("expires", -1)
+        if exp and exp > 0:
+            cc["expires"] = int(exp)
+        ss = c.get("sameSite")
+        if ss:
+            cc["sameSite"] = ss
+        result.append(cc)
+    return result
 
 
 def try_chrome_profile(session_path: Path) -> bool:
@@ -94,8 +120,8 @@ def try_chrome_profile(session_path: Path) -> bool:
     return False
 
 
-def try_direct_login(session_path: Path) -> bool:
-    """方法2: Playwrightで直接ログイン。成功したらTrueを返す。"""
+async def _try_direct_login_async(session_path: Path) -> bool:
+    """方法2: nodriverで直接ログイン。成功したらTrueを返す。"""
     email    = os.environ.get("X_EMAIL", "")
     password = os.environ.get("X_PASSWORD", "")
     username = os.environ.get("X_USERNAME", "")
@@ -107,141 +133,159 @@ def try_direct_login(session_path: Path) -> bool:
     print(f"直接ログインを試みます: {email}")
 
     try:
-        from playwright.sync_api import sync_playwright, TimeoutError as PwTimeout
+        import nodriver as uc
     except ImportError:
-        print("[NG] Playwright未インストール: pip install playwright")
+        print("[NG] nodriver未インストール: pip install nodriver")
         return False
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-            ],
+    _inst0 = os.environ.get("AC_INSTANCE", "default")
+    data_dir = ROOT / "instances" / _inst0 / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    browser = await uc.start(headless=False)
+    try:
+        tab = await browser.get("https://x.com/i/flow/login")
+
+        # ステップ1: ログインフォーム表示待ち
+        await asyncio.sleep(5)
+
+        snap0 = data_dir / "login_step1.png"
+        await tab.save_screenshot(str(snap0))
+        print(f"  step1 screenshot: {snap0} / URL: {tab.url}")
+
+        # メール入力: JS でネイティブイベントを発火しながら値をセット
+        await tab.evaluate(f"""
+            () => {{
+                const inp = document.querySelector('input');
+                if (!inp) return;
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value').set;
+                setter.call(inp, {json.dumps(email)});
+                inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+            }}
+        """)
+        await asyncio.sleep(1)
+
+        snap1 = data_dir / "login_step2.png"
+        await tab.save_screenshot(str(snap1))
+
+        # Enter キーで次へ進む
+        await tab.evaluate("""
+            () => {
+                const inp = document.querySelector('input');
+                if (inp) inp.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', keyCode: 13, bubbles: true}));
+            }
+        """)
+        # Enterキーの代替としてsend_keysも試す
+        editor = await tab.select('input')
+        if editor:
+            await editor.send_keys('\n')
+        await asyncio.sleep(3)
+
+        snap2 = data_dir / "login_step3.png"
+        await tab.save_screenshot(str(snap2))
+        print(f"  step3 URL: {tab.url}")
+
+        # ユーザー名確認ステップ（出る場合）
+        ocf_count = await tab.evaluate(
+            "() => document.querySelectorAll('input[data-testid=\"ocfEnterTextTextInput\"]').length"
         )
-        context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            viewport={"width": 1280, "height": 800},
-        )
-        # bot検知回避: webdriverプロパティを隠す
-        context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-            "Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});"
-            "window.chrome = {runtime: {}};"
-        )
-        page = context.new_page()
+        if ocf_count and ocf_count > 0:
+            print("  ユーザー名確認ステップ...")
+            uname = username or email.split("@")[0]
+            await tab.evaluate(f"""
+                () => {{
+                    const inp = document.querySelector('input[data-testid="ocfEnterTextTextInput"]');
+                    if (!inp) return;
+                    const setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(inp, {json.dumps(uname)});
+                    inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                }}
+            """)
+            await asyncio.sleep(0.5)
+            ocf_input = await tab.select('input[data-testid="ocfEnterTextTextInput"]')
+            if ocf_input:
+                await ocf_input.send_keys('\n')
+            await asyncio.sleep(3)
 
-        try:
-            page.goto("https://x.com/i/flow/login", timeout=60000)
-            # メール入力欄が出るまで待つ
-            def react_fill(sel: str, value: str):
-                """ReactのinputにJSでネイティブイベントを発火しながら値をセット。"""
-                page.evaluate(
-                    """([sel, val]) => {
-                        var inp = document.querySelector(sel);
-                        if (!inp) return;
-                        var setter = Object.getOwnPropertyDescriptor(
-                            window.HTMLInputElement.prototype, 'value').set;
-                        setter.call(inp, val);
-                        inp.dispatchEvent(new Event('input', {bubbles: true}));
-                        inp.dispatchEvent(new Event('change', {bubbles: true}));
-                    }""",
-                    [sel, value],
-                )
-
-            # ログインフォーム表示待ち
-            page.wait_for_selector("input", timeout=20000)
-            page.wait_for_timeout(1500)
-
-            # デバッグ: メール入力前のスクリーンショット
-            _inst0 = os.environ.get("AC_INSTANCE", "default")
-            _snap0 = ROOT / "instances" / _inst0 / "data" / "login_step1.png"
-            _snap0.parent.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(_snap0))
-            print(f"  step1 screenshot: {_snap0} / URL: {page.url}")
-
-            react_fill("input", email)
-            page.wait_for_timeout(1000)
-
-            # デバッグ: メール入力後のスクリーンショット
-            page.screenshot(path=str(ROOT / "instances" / _inst0 / "data" / "login_step2.png"))
-
-            # Enterキーで次へ進む
-            page.keyboard.press("Enter")
-            page.wait_for_timeout(3000)
-
-            # デバッグ: Enter後のスクリーンショット
-            page.screenshot(path=str(ROOT / "instances" / _inst0 / "data" / "login_step3.png"))
-            print(f"  step3 URL: {page.url}")
-
-            # ユーザー名確認ステップ（出る場合）
-            try:
-                inp = page.locator("input[data-testid='ocfEnterTextTextInput']")
-                if inp.is_visible(timeout=5000):
-                    print("  ユーザー名確認ステップ...")
-                    react_fill("input[data-testid='ocfEnterTextTextInput']",
-                               username or email.split("@")[0])
-                    page.wait_for_timeout(500)
-                    page.keyboard.press("Enter")
-                    page.wait_for_timeout(3000)
-            except PwTimeout:
-                pass
-
-            # パスワード欄が出るまで待つ（先にcookieチェック）
-            try:
-                page.wait_for_selector("input[name='password']", timeout=20000)
-            except PwTimeout:
-                # パスワード不要でログイン済みの可能性をチェック
-                cookies_now = context.cookies("https://x.com")
-                if any(c["name"] == "auth_token" for c in cookies_now):
-                    print("  パスワード不要でログイン済み！")
-                    session_path.parent.mkdir(parents=True, exist_ok=True)
-                    session_path.write_text(
-                        json.dumps(cookies_now, ensure_ascii=False, indent=2),
-                        encoding="utf-8",
-                    )
-                    print(f"[OK] {len(cookies_now)}件のCookieを保存: {session_path}")
-                    browser.close()
-                    return True
-                _inst = os.environ.get("AC_INSTANCE", "default")
-                snap = ROOT / "instances" / _inst / "data" / "login_debug.png"
-                snap.parent.mkdir(parents=True, exist_ok=True)
-                page.screenshot(path=str(snap))
-                print(f"  パスワード欄が見つかりません。スクリーンショット: {snap}")
-                print(f"  現在URL: {page.url}")
-                browser.close()
-                return False
-
-            react_fill("input[name='password']", password)
-            page.wait_for_timeout(500)
-            page.keyboard.press("Enter")
-            page.wait_for_timeout(5000)
-
-            cookies = context.cookies("https://x.com")
-            has_auth = any(c["name"] == "auth_token" for c in cookies)
-
-            if has_auth:
+        # パスワード欄を探す（タイムアウト付きで待機）
+        pw_found = False
+        for _ in range(10):
+            pw_count = await tab.evaluate(
+                "() => document.querySelectorAll('input[name=\"password\"]').length"
+            )
+            if pw_count and pw_count > 0:
+                pw_found = True
+                break
+            # パスワード不要でログイン済みの可能性をチェック
+            cookies_now = await browser.cookies.get_all()
+            if any(c.get("name") == "auth_token" for c in (cookies_now or [])):
+                print("  パスワード不要でログイン済み！")
                 session_path.parent.mkdir(parents=True, exist_ok=True)
                 session_path.write_text(
-                    json.dumps(cookies, ensure_ascii=False, indent=2),
+                    json.dumps(cookies_now, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
-                print(f"[OK] ログイン成功。{len(cookies)}件のCookieを保存: {session_path}")
-                browser.close()
+                print(f"[OK] {len(cookies_now)}件のCookieを保存: {session_path}")
                 return True
-            else:
-                print("[NG] auth_tokenが取得できませんでした（パスワードが違うか2FA有効の可能性）")
-                browser.close()
-                return False
+            await asyncio.sleep(2)
 
-        except Exception as e:
-            print(f"[NG] ログインエラー: {e}")
-            browser.close()
+        if not pw_found:
+            snap_fail = data_dir / "login_debug.png"
+            await tab.save_screenshot(str(snap_fail))
+            print(f"  パスワード欄が見つかりません。スクリーンショット: {snap_fail}")
+            print(f"  現在URL: {tab.url}")
             return False
+
+        # パスワード入力
+        await tab.evaluate(f"""
+            () => {{
+                const inp = document.querySelector('input[name="password"]');
+                if (!inp) return;
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value').set;
+                setter.call(inp, {json.dumps(password)});
+                inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+            }}
+        """)
+        await asyncio.sleep(0.5)
+        pw_input = await tab.select('input[name="password"]')
+        if pw_input:
+            await pw_input.send_keys('\n')
+        await asyncio.sleep(5)
+
+        cookies = await browser.cookies.get_all()
+        has_auth = any(c.get("name") == "auth_token" for c in (cookies or []))
+
+        if has_auth:
+            session_path.parent.mkdir(parents=True, exist_ok=True)
+            session_path.write_text(
+                json.dumps(cookies, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"[OK] ログイン成功。{len(cookies)}件のCookieを保存: {session_path}")
+            return True
+        else:
+            print("[NG] auth_tokenが取得できませんでした（パスワードが違うか2FA有効の可能性）")
+            snap_fail2 = data_dir / "login_fail.png"
+            await tab.save_screenshot(str(snap_fail2))
+            print(f"  スクリーンショット: {snap_fail2}")
+            return False
+
+    except Exception as e:
+        print(f"[NG] ログインエラー: {e}")
+        return False
+    finally:
+        browser.stop()
+
+
+def try_direct_login(session_path: Path) -> bool:
+    """方法2: nodriverで直接ログイン。成功したらTrueを返す。"""
+    return asyncio.run(_try_direct_login_async(session_path))
 
 
 def main():

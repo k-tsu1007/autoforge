@@ -8,6 +8,7 @@
 2. run_send(): キューの中で send_after を過ぎたものをリプライ送信
 """
 
+import asyncio
 import json
 import os
 import random
@@ -20,6 +21,7 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 ROOT = Path(__file__).resolve().parents[2]
 JST = timezone(timedelta(hours=9))
@@ -47,6 +49,28 @@ _END_PATTERNS = [
 MAX_SCAN_PER_RUN = 20  # 一度に処理するメンション上限
 DELAY_MIN_MIN = 15     # 最小遅延（分）
 DELAY_MAX_MIN = 45     # 最大遅延（分）
+
+
+def _to_cdp_cookies(pw_cookies: list) -> list:
+    """Playwright cookie format → nodriver/CDP format."""
+    result = []
+    for c in pw_cookies:
+        cc = {
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+            "secure": c.get("secure", False),
+            "httpOnly": c.get("httpOnly", False),
+        }
+        exp = c.get("expires", -1)
+        if exp and exp > 0:
+            cc["expires"] = int(exp)
+        ss = c.get("sameSite")
+        if ss:
+            cc["sameSite"] = ss
+        result.append(cc)
+    return result
 
 
 def _load_cookies():
@@ -80,7 +104,6 @@ def _already_processed(mention_url: str, author: str = "") -> bool:
         if row:
             return True
         # 同一著者に対して直近24時間以内にメンション返信済みならスキップ
-        # （同じ人との会話スレッドに何度も返信しない）
         if author:
             row = conn.execute(
                 "SELECT id FROM growth_actions WHERE target_user = ? AND action_type = 'mention_reply' "
@@ -130,7 +153,7 @@ def _queue_reply(mention_url: str, mention_text: str, author: str, reply_text: s
         print(f"キュー追加失敗: {e}")
 
 
-def _fetch_tweet_context(page, tweet_url: str) -> dict:
+async def _fetch_tweet_context_async(tab, tweet_url: str) -> dict:
     """ツイートページに遷移して会話スレッド・引用ツイートのテキストを取得。
 
     Returns: {
@@ -140,34 +163,35 @@ def _fetch_tweet_context(page, tweet_url: str) -> dict:
     """
     ctx = {"thread_texts": [], "quoted_text": ""}
     try:
-        page.goto(tweet_url)
-        page.wait_for_timeout(4000)
+        await tab.get(tweet_url)
+        await asyncio.sleep(4)
 
-        # スレッド上の親ツイート（ターゲットより上の記事）
-        articles = page.locator("article").all()
-        thread_texts = []
-        for a in articles:
-            try:
-                text_el = a.locator('[data-testid="tweetText"]').first
-                if text_el.count() == 0:
-                    continue
-                txt = text_el.inner_text().strip()
-                if txt:
-                    thread_texts.append(txt)
-            except Exception:
-                continue
-        # 最後の記事がメンション本体なので除き、直近3件だけ残す
-        ctx["thread_texts"] = thread_texts[:-1][-3:] if len(thread_texts) > 1 else []
-
-        # 引用ツイート: article 内にネストした article（引用ブロック）
-        try:
-            quote_articles = page.locator("article article").all()
-            if quote_articles:
-                q_text_el = quote_articles[0].locator('[data-testid="tweetText"]').first
-                if q_text_el.count() > 0:
-                    ctx["quoted_text"] = q_text_el.inner_text().strip()
-        except Exception:
-            pass
+        # スレッド上の親ツイートと引用ツイートを JS で取得
+        result = await tab.evaluate("""
+            () => {
+                const arts = [...document.querySelectorAll('article')];
+                const threads = [];
+                for (const a of arts) {
+                    const textEl = a.querySelector('[data-testid="tweetText"]');
+                    if (!textEl) continue;
+                    const txt = textEl.innerText.trim();
+                    if (txt) threads.push(txt);
+                }
+                // 引用ツイート: article 内にネストした article
+                let quotedText = '';
+                const quoteArts = [...document.querySelectorAll('article article')];
+                if (quoteArts.length > 0) {
+                    const qEl = quoteArts[0].querySelector('[data-testid="tweetText"]');
+                    if (qEl) quotedText = qEl.innerText.trim();
+                }
+                return { threads, quotedText };
+            }
+        """)
+        if result:
+            thread_texts = result.get("threads") or []
+            # 最後の記事がメンション本体なので除き、直近3件だけ残す
+            ctx["thread_texts"] = thread_texts[:-1][-3:] if len(thread_texts) > 1 else []
+            ctx["quoted_text"] = result.get("quotedText") or ""
 
     except Exception as e:
         print(f"  コンテキスト取得失敗: {e}")
@@ -254,28 +278,21 @@ TEXT: （返す場合のみ70字以内の一言）"""
         return {"should_reply": False, "reply": ""}
 
 
-def generate_reply_text(mention_text: str, mention_url: str = "") -> str:
-    """返信テキストだけを強制生成（should_reply 判断をスキップ）。再生成ボタン用。
-
-    mention_url が渡された場合はスレッドコンテキストを取得して
-    _decide_reply() と同じプロンプトで生成する。
-    """
+async def _generate_reply_text_async(mention_text: str, mention_url: str = "") -> str:
     tweet_ctx = {"thread_texts": [], "quoted_text": ""}
 
     if mention_url:
         try:
-            from playwright.sync_api import sync_playwright
-            import json
+            import nodriver as uc
             cookies = _load_cookies()
             if cookies:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True)
-                    ctx_b = browser.new_context()
-                    ctx_b.add_cookies(cookies)
-                    page = ctx_b.new_page()
-                    page.set_default_timeout(20000)
-                    tweet_ctx = _fetch_tweet_context(page, mention_url)
-                    browser.close()
+                browser = await uc.start(headless=True)
+                try:
+                    await browser.cookies.set_all(_to_cdp_cookies(cookies))
+                    tab = await browser.get("about:blank")
+                    tweet_ctx = await _fetch_tweet_context_async(tab, mention_url)
+                finally:
+                    browser.stop()
         except Exception as e:
             print(f"  コンテキスト取得失敗（再生成）: {e}")
 
@@ -283,26 +300,21 @@ def generate_reply_text(mention_text: str, mention_url: str = "") -> str:
     return result.get("reply", "")
 
 
-def _like_tweet_playwright(page, tweet_url: str) -> bool:
-    """既に開いているページのコンテキストでいいねを実行。"""
-    try:
-        # いいねボタン (data-testid="like" または "unlike" で判定)
-        like_btn = page.locator('[data-testid="like"]').first
-        if like_btn.count() == 0:
-            return False  # すでにいいね済み or 見つからない
-        like_btn.click()
-        page.wait_for_timeout(1500)
-        return True
-    except Exception:
-        return False
+def generate_reply_text(mention_text: str, mention_url: str = "") -> str:
+    """返信テキストだけを強制生成（should_reply 判断をスキップ）。再生成ボタン用。
+
+    mention_url が渡された場合はスレッドコンテキストを取得して
+    _decide_reply() と同じプロンプトで生成する。
+    """
+    return asyncio.run(_generate_reply_text_async(mention_text, mention_url))
 
 
-def run_scan() -> dict:
+async def _run_scan_async() -> dict:
     """通知ページをスキャンしてメンションをいいね＆返信キューに積む。"""
     try:
-        from playwright.sync_api import sync_playwright
+        import nodriver as uc
     except ImportError:
-        print("playwright が見つかりません")
+        print("nodriver が見つかりません")
         return {"liked": 0, "queued": 0}
 
     cookies = _load_cookies()
@@ -315,181 +327,169 @@ def run_scan() -> dict:
     skipped = 0
     pending_mentions: list[dict] = []
 
+    browser = None
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context()
-            context.add_cookies(cookies)
-            page = context.new_page()
-            page.set_default_timeout(20000)
-            page.set_default_navigation_timeout(25000)
+        browser = await uc.start(headless=True)
+        await browser.cookies.set_all(_to_cdp_cookies(cookies))
 
-            # 通知ページ（全タブ）— mentions タブは @mention のみ、replies は全タブに出る
-            # Chromium を使用: WebKit は x.com/notifications をレンダリングできない場合がある
-            page.goto("https://x.com/notifications")
+        tab = await browser.get("https://x.com/notifications")
+        await asyncio.sleep(5)
+
+        if "/login" in tab.url or "/flow/login" in tab.url:
+            print("セッション切れ")
+            return {"liked": 0, "queued": 0}
+
+        # 「@メンション」タブをクリック
+        try:
+            tab_clicked = await tab.evaluate("""
+                () => {
+                    const tabs = [...document.querySelectorAll('[role="tab"]')];
+                    const labels = ['Mentions', '@メンション', 'メンション'];
+                    for (const label of labels) {
+                        const t = tabs.find(el => el.innerText.includes(label));
+                        if (t) { t.click(); return label; }
+                    }
+                    return null;
+                }
+            """)
+            if tab_clicked:
+                await asyncio.sleep(3)
+                print(f"「{tab_clicked}」タブをクリック")
+            else:
+                print("Mentionsタブ未発見 — デフォルトタブで続行")
+        except Exception as e:
+            print(f"タブクリック失敗(続行): {e}")
+
+        # 通知記事一覧を JS で取得
+        my_user = os.environ.get("X_USERNAME", "fuku_ai07").lower()
+        articles_data = await tab.evaluate(f"""
+            () => {{
+                const arts = [...document.querySelectorAll('article')];
+                const my_user = '{my_user}';
+                const results = [];
+                for (const art of arts.slice(0, {MAX_SCAN_PER_RUN})) {{
+                    try {{
+                        const timeEl = art.querySelector('time');
+                        if (!timeEl) continue;
+                        const datetime = timeEl.getAttribute('datetime') || '';
+                        const parentA = timeEl.closest('a');
+                        const href = parentA ? parentA.getAttribute('href') : null;
+                        if (!href) continue;
+                        const mention_url = 'https://x.com' + href;
+                        const userEl = art.querySelector('[data-testid="User-Name"]');
+                        const author_full = userEl ? userEl.innerText : '';
+                        const author = author_full.split('\\n')[0] || 'unknown';
+                        if (author_full.toLowerCase().includes('@' + my_user) ||
+                            author_full.toLowerCase().includes(my_user)) continue;
+                        if (mention_url.toLowerCase().includes('/' + my_user + '/')) continue;
+                        const textEl = art.querySelector('[data-testid="tweetText"]');
+                        const mention_text = textEl ? textEl.innerText : '';
+                        if (!mention_text) continue;
+                        results.push({{ mention_url, author, mention_text, datetime }});
+                    }} catch(e) {{}}
+                }}
+                return results;
+            }}
+        """)
+
+        print(f"メンション取得: {len(articles_data) if articles_data else 0}件")
+
+        # 24時間以上前のメンションをフィルタ & 処理済みチェック
+        now_utc = datetime.now(timezone.utc)
+        for item in (articles_data or []):
+            mention_url = item.get("mention_url", "")
+            author = item.get("author", "unknown")
+            mention_text = item.get("mention_text", "")
+            time_dt_str = item.get("datetime", "")
+
+            if time_dt_str:
+                try:
+                    tweet_time = datetime.fromisoformat(time_dt_str.replace("Z", "+00:00"))
+                    age = now_utc - tweet_time
+                    if age.total_seconds() > 86400:
+                        print(f"  ⏭ 古い ({int(age.total_seconds()/3600)}時間前): {time_dt_str[:16]}")
+                        continue
+                except Exception:
+                    pass
+
+            if _already_processed(mention_url, author=author):
+                print(f"  ⏭ 処理済み: @{author} {mention_url[-40:]}")
+                continue
+
+            pending_mentions.append({
+                "url": mention_url,
+                "text": mention_text,
+                "author": author,
+            })
+
+        # ── フェーズ2: 各ツイートに遷移してコンテキスト取得 → 返信判断 ──
+        print(f"  処理対象: {len(pending_mentions)}件")
+        for m in pending_mentions:
             try:
-                page.wait_for_selector('[data-testid="primaryColumn"]', timeout=20000)
-            except Exception:
-                pass
-            page.wait_for_timeout(2000)
+                mention_url = m["url"]
+                mention_text = m["text"]
+                author = m["author"]
+                print(f"  処理: @{author} — {mention_text[:50]}")
 
-            if "/login" in page.url or "/flow/login" in page.url:
-                print("セッション切れ")
-                browser.close()
-                return {"liked": 0, "queued": 0}
+                # ツイートページへ遷移してスレッド・引用コンテキスト取得
+                tweet_ctx = await _fetch_tweet_context_async(tab, mention_url)
+                if tweet_ctx["thread_texts"]:
+                    print(f"    スレッド{len(tweet_ctx['thread_texts'])}件取得")
+                if tweet_ctx["quoted_text"]:
+                    print(f"    引用元ツイート取得: {tweet_ctx['quoted_text'][:40]}")
 
-            # 「@メンション」タブをクリック（@mentions/replies のみに絞る）
-            # All タブにはいいね・フォロー通知も混在するため Mentions タブを優先する
-            try:
-                tab_clicked = False
-                for label in ["Mentions", "@メンション", "メンション"]:
-                    tab = page.locator("[role='tab']").filter(has_text=label).first
-                    if tab.count() > 0:
-                        tab.click()
-                        page.wait_for_timeout(3000)
-                        print(f"「{label}」タブをクリック")
-                        tab_clicked = True
-                        break
-                if not tab_clicked:
-                    print("Mentionsタブ未発見 — デフォルトタブで続行")
+                # 返信判断（コンテキスト付き）
+                decision = _decide_reply(mention_text, context=tweet_ctx)
+                if decision["should_reply"] and decision["reply"]:
+                    _queue_reply(mention_url, mention_text, author, decision["reply"])
+                    queued += 1
+                else:
+                    # 返信しない → ツイートページで既存tabを使っていいね
+                    try:
+                        like_count = await tab.evaluate(
+                            "() => document.querySelectorAll('[data-testid=\"like\"]').length"
+                        )
+                        if like_count and like_count > 0:
+                            await tab.evaluate("document.querySelector('[data-testid=\"like\"]').click()")
+                            await asyncio.sleep(1)
+                            liked += 1
+                            print(f"    ❤️ いいね（返信なし）")
+                    except Exception as le:
+                        print(f"❌ いいね失敗: {le}")
+                    _record_like(mention_url, mention_text, author)
+                    skipped += 1
+                    print(f"    ⏭ 返信なし（会話終了 or 不要と判断）")
+
+                await asyncio.sleep(0.8)
             except Exception as e:
-                print(f"タブクリック失敗(続行): {e}")
+                print(f"  処理エラー: {e}")
+                continue
 
-            # スクロールしない — X通知ページはスクロールで古いコンテンツが混入する
-            # 初回ロードの記事（最新順）だけを対象にする
-
-            articles = page.locator("article").all()
-            print(f"メンション取得: {len(articles)}件")
-
-            my_user = os.environ.get("X_USERNAME", "fuku_ai07").lower()
-
-            for article in articles[:MAX_SCAN_PER_RUN]:
-                try:
-                    # ツイートURLを取得
-                    time_link = article.locator("time").first
-                    if time_link.count() == 0:
-                        # time要素がない記事はグループ通知等の可能性あり
-                        try:
-                            snippet = article.inner_text()[:60].replace("\n", " ")
-                        except Exception:
-                            snippet = "(取得不可)"
-                        print(f"  ⏭ time要素なし: {snippet}")
-                        continue
-
-                    # 24時間以上前のメンションはスキップ
-                    time_dt = time_link.get_attribute("datetime") or ""
-                    if time_dt:
-                        try:
-                            from datetime import datetime, timezone
-                            tweet_time = datetime.fromisoformat(time_dt.replace("Z", "+00:00"))
-                            age = datetime.now(timezone.utc) - tweet_time
-                            if age.total_seconds() > 86400:  # 24時間
-                                print(f"  ⏭ 古い ({int(age.total_seconds()/3600)}時間前): {time_dt[:16]}")
-                                continue
-                        except Exception:
-                            pass
-
-                    parent_link = time_link.locator("..").first
-                    href = parent_link.get_attribute("href") if parent_link.count() > 0 else None
-                    if not href:
-                        print(f"  ⏭ URL取得失敗")
-                        continue
-                    mention_url = f"https://x.com{href}" if href.startswith("/") else href
-
-                    # 著者取得（User-Name要素の全テキストから@usernameを抽出）
-                    user_el = article.locator('[data-testid="User-Name"]').first
-                    author_full = user_el.inner_text() if user_el.count() > 0 else ""
-                    author = author_full.split("\n")[0] if author_full else "unknown"
-
-                    # 自分自身の投稿はスキップ
-                    if f"@{my_user}" in author_full.lower() or my_user in author_full.lower():
-                        print(f"  ⏭ 自分の投稿: {mention_url[-40:]}")
-                        continue
-                    if f"/{my_user}/" in mention_url.lower():
-                        print(f"  ⏭ 自分のURL: {mention_url[-40:]}")
-                        continue
-
-                    # 処理済み or 同一著者に直近24時間以内にリプライ済みならスキップ
-                    if _already_processed(mention_url, author=author):
-                        print(f"  ⏭ 処理済み: @{author} {mention_url[-40:]}")
-                        continue
-
-                    # テキスト取得
-                    text_el = article.locator('[data-testid="tweetText"]').first
-                    mention_text = text_el.inner_text() if text_el.count() > 0 else ""
-                    if not mention_text:
-                        continue
-
-                    pending_mentions.append({
-                        "url": mention_url,
-                        "text": mention_text,
-                        "author": author,
-                    })
-
-                except Exception as e:
-                    print(f"  記事処理エラー: {e}")
-                    continue
-
-            # ── フェーズ2: 各ツイートに遷移してコンテキスト取得 → 返信判断 ──
-            print(f"  処理対象: {len(pending_mentions)}件")
-            for m in pending_mentions:
-                try:
-                    mention_url = m["url"]
-                    mention_text = m["text"]
-                    author = m["author"]
-                    print(f"  処理: @{author} — {mention_text[:50]}")
-
-                    # ツイートページへ遷移してスレッド・引用コンテキスト取得
-                    tweet_ctx = _fetch_tweet_context(page, mention_url)
-                    if tweet_ctx["thread_texts"]:
-                        print(f"    スレッド{len(tweet_ctx['thread_texts'])}件取得")
-                    if tweet_ctx["quoted_text"]:
-                        print(f"    引用元ツイート取得: {tweet_ctx['quoted_text'][:40]}")
-
-                    # 返信判断（コンテキスト付き）
-                    decision = _decide_reply(mention_text, context=tweet_ctx)
-                    if decision["should_reply"] and decision["reply"]:
-                        _queue_reply(mention_url, mention_text, author, decision["reply"])
-                        queued += 1
-                    else:
-                        # 返信しない → ツイートページで既存pageを使っていいね
-                        try:
-                            like_btn = page.locator('[data-testid="like"]').first
-                            if like_btn.count() > 0:
-                                like_btn.click()
-                                page.wait_for_timeout(1000)
-                                liked += 1
-                                print(f"    ❤️ いいね（返信なし）")
-                        except Exception as le:
-                            print(f"❌ いいね失敗: {le}")
-                        _record_like(mention_url, mention_text, author)
-                        skipped += 1
-                        print(f"    ⏭ 返信なし（会話終了 or 不要と判断）")
-
-                    page.wait_for_timeout(800)
-                except Exception as e:
-                    print(f"  処理エラー: {e}")
-                    continue
-
-            # セッション更新
-            try:
-                from core.paths import x_session_path
-                new_cookies = context.cookies()
-                x_session_path().write_text(
-                    json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-            except Exception:
-                pass
-
-            browser.close()
+        # セッション更新
+        try:
+            from core.paths import x_session_path
+            new_cookies = await browser.cookies.get_all()
+            x_session_path().write_text(
+                json.dumps(new_cookies, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"スキャンエラー: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        if browser:
+            browser.stop()
 
     print(f"スキャン完了: いいね={liked} キュー追加={queued} スキップ={skipped}")
     return {"liked": liked, "queued": queued, "skipped": skipped}
+
+
+def run_scan() -> dict:
+    """通知ページをスキャンしてメンションをいいね＆返信キューに積む。"""
+    return asyncio.run(_run_scan_async())
 
 
 MAX_FAIL_COUNT = 3        # これ以上失敗したら放棄

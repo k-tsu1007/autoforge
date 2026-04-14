@@ -1,10 +1,11 @@
 """X アカウントの健全性チェック。
 
-- Cookie 失効検知 (Playwright でプロフィールを開いてログイン状態を確認)
+- Cookie 失効検知 (nodriver でプロフィールを開いてログイン状態を確認)
 - imp 急落検知 (直近7日 vs その前7日)
 - 結果は data/x_health.json に保存し、必要なら Discord 通知
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -16,6 +17,7 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 ROOT = Path(__file__).resolve().parent
 JST = timezone(timedelta(hours=9))
@@ -25,33 +27,59 @@ from core.paths import x_session_path as _xsp; X_SESSION_JSON = _xsp()
 IMP_DROP_THRESHOLD = 0.5  # 直近7日 imp が前週の50%未満ならアラート
 
 
-def check_cookie_alive() -> dict:
-    """Playwright で X プロフィールを開きログイン状態を確認。"""
+def _to_cdp_cookies(pw_cookies: list) -> list:
+    """Playwright cookie format → nodriver/CDP format."""
+    result = []
+    for c in pw_cookies:
+        cc = {
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+            "secure": c.get("secure", False),
+            "httpOnly": c.get("httpOnly", False),
+        }
+        exp = c.get("expires", -1)
+        if exp and exp > 0:
+            cc["expires"] = int(exp)
+        ss = c.get("sameSite")
+        if ss:
+            cc["sameSite"] = ss
+        result.append(cc)
+    return result
+
+
+async def _check_cookie_alive_async() -> dict:
     try:
-        from playwright.sync_api import sync_playwright
+        import nodriver as uc
     except ImportError:
-        return {"ok": False, "reason": "playwright未インストール"}
+        return {"ok": False, "reason": "nodriver未インストール"}
 
     if not X_SESSION_JSON.exists():
         return {"ok": False, "reason": "x_session.jsonなし"}
 
+    browser = None
     try:
         cookies = json.loads(X_SESSION_JSON.read_text(encoding="utf-8"))
         username = os.environ.get("X_USERNAME", "")
-        with sync_playwright() as p:
-            b = p.webkit.launch(headless=True)
-            ctx = b.new_context()
-            ctx.add_cookies(cookies)
-            pg = ctx.new_page()
-            pg.goto(f"https://x.com/{username}")
-            pg.wait_for_timeout(5000)
-            url = pg.url
-            b.close()
-            if "/login" in url or "/flow/login" in url:
-                return {"ok": False, "reason": "cookie失効 (login画面に遷移)"}
-            return {"ok": True, "reason": "alive"}
+        browser = await uc.start(headless=True)
+        await browser.cookies.set_all(_to_cdp_cookies(cookies))
+        tab = await browser.get(f"https://x.com/{username}")
+        await asyncio.sleep(5)
+        url = tab.url
+        if "/login" in url or "/flow/login" in url:
+            return {"ok": False, "reason": "cookie失効 (login画面に遷移)"}
+        return {"ok": True, "reason": "alive"}
     except Exception as e:
         return {"ok": False, "reason": f"例外: {e}"}
+    finally:
+        if browser:
+            browser.stop()
+
+
+def check_cookie_alive() -> dict:
+    """nodriver で X プロフィールを開きログイン状態を確認。"""
+    return asyncio.run(_check_cookie_alive_async())
 
 
 def check_imp_drop() -> dict:
