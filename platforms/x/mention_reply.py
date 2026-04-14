@@ -364,7 +364,7 @@ def run_send() -> dict:
         pending = conn.execute(
             "SELECT id, mention_url, mention_text, mention_author, reply_text, "
             "COALESCE(fail_count, 0) as fail_count FROM mention_reply_queue "
-            "WHERE sent = 0 AND COALESCE(approved, 1) = 1 AND send_after <= ?",
+            "WHERE sent = 0 AND approved = 1 AND send_after <= ?",
             (now_str,)
         ).fetchall()
     except Exception as e:

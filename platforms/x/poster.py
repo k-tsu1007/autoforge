@@ -393,7 +393,7 @@ def post_next_from_db(dry_run: bool = False) -> dict:
     now_iso = datetime.now(timezone(timedelta(hours=9))).isoformat()
     rows = conn.execute(
         "SELECT id, type, text FROM tweet_queue "
-        "WHERE posted=0 AND COALESCE(fail_count,0) < 3 AND COALESCE(approved,1)=1 "
+        "WHERE posted=0 AND COALESCE(fail_count,0) < 3 AND approved=1 "
         "AND (scheduled_at IS NULL OR scheduled_at <= ?) "
         "ORDER BY CASE WHEN type='リンク付き' THEN 0 ELSE 1 END, id DESC",
         (now_iso,),

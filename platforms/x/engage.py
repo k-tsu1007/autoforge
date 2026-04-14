@@ -275,7 +275,7 @@ def run_send() -> dict:
         conn = get_connection()
         pending = conn.execute(
             "SELECT id, action_type, target_url, target_text, comment, COALESCE(fail_count,0) "
-            "FROM engage_queue WHERE sent=0 AND COALESCE(approved,1)=1 AND scheduled_at <= ?",
+            "FROM engage_queue WHERE sent=0 AND approved=1 AND scheduled_at <= ?",
             (now_str,)
         ).fetchall()
     except Exception as e:
