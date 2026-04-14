@@ -121,28 +121,38 @@ def try_chrome_profile(session_path: Path) -> bool:
 
 
 async def _get_cookies(tab) -> list:
-    """CDP経由でcookieを取得してdictリストで返す（nodriver Cookie objectを使わない）。"""
+    """Cookie を dict リストで返す。nodriver の Cookie オブジェクトに依存しない。"""
+    # storage.get_cookies は Network domain の有効化不要で全 cookie を返す
     try:
-        import nodriver.cdp.network as cdp_net
+        import nodriver.cdp.storage as cdp_storage
         raw = await asyncio.wait_for(
-            tab.send(cdp_net.get_cookies(urls=["https://x.com", "https://twitter.com"])),
-            timeout=5,
+            tab.send(cdp_storage.get_cookies()),
+            timeout=8,
         )
-        return [
-            {
-                "name": c.name,
-                "value": c.value,
-                "domain": c.domain,
-                "path": c.path,
-                "secure": bool(c.secure),
-                "httpOnly": bool(c.http_only),
-                "expires": int(c.expires) if c.expires and c.expires > 0 else -1,
-                "sameSite": c.same_site.value if c.same_site else None,
-            }
-            for c in (raw or [])
-        ]
+        result = []
+        for c in (raw or []):
+            try:
+                result.append({
+                    "name": c.name,
+                    "value": c.value,
+                    "domain": c.domain,
+                    "path": c.path,
+                    "secure": bool(c.secure),
+                    "httpOnly": bool(c.http_only),
+                    "expires": int(c.expires) if c.expires and c.expires > 0 else -1,
+                    "sameSite": c.same_site.value if c.same_site else None,
+                })
+            except Exception:
+                # フォールバック: getattr で安全に取る
+                result.append({
+                    "name": getattr(c, "name", ""),
+                    "value": getattr(c, "value", ""),
+                    "domain": getattr(c, "domain", ""),
+                    "path": getattr(c, "path", "/"),
+                })
+        return result
     except Exception as e:
-        print(f"  [cookie取得エラー] {e}")
+        print(f"  [cookie取得エラー] {type(e).__name__}: {e}")
         return []
 
 
