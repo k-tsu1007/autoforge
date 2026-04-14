@@ -37,7 +37,7 @@ def search_tweets(keyword: str, max_results: int = 15) -> list[dict]:
     results = []
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -99,7 +99,7 @@ def like_tweet(tweet_url: str) -> bool:
 
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -173,7 +173,7 @@ def quote_tweet(tweet_url: str, comment: str) -> bool:
         return False
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()
@@ -212,7 +212,7 @@ def reply_tweet(tweet_url: str, text: str) -> bool:
         return False
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+            browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_cookies(cookies)
             page = context.new_page()

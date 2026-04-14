@@ -302,6 +302,14 @@ def run_send() -> dict:
             if ok:
                 with transaction() as c:
                     c.execute("UPDATE engage_queue SET sent=1 WHERE id=?", (row_id,))
+                # 送信成功後にいいねも付ける
+                try:
+                    from platforms.x.actions import like_tweet
+                    liked = like_tweet(target_url)
+                    if liked:
+                        print(f"    ❤️ いいね")
+                except Exception as e:
+                    print(f"    いいね失敗（投稿は成功）: {e}")
                 try:
                     from core.db import record_growth_action
                     record_growth_action(
