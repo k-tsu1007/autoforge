@@ -123,18 +123,41 @@ def job_x_growth():
         traceback.print_exc()
 
 
-def job_x_engage():
-    """engage — 1回1引用 or 1リプまで。1日合計は advisor 連動。"""
+def job_x_engage_generate():
+    """engage 生成 — advisor のスロット時刻に合わせて検索→生成→キュー投入。"""
     now = datetime.now(JST)
     if now.hour < 8 or now.hour > 22:
         return
-    _log("💬 engage 開始")
     try:
-        from platforms.x.engage import run
-        result = run(max_quote_per_call=1, max_reply_per_call=2)
-        _log(f"💬 engage 完了: {result}")
+        from core.learning.advisor import get_advice
+        from platforms.x.engage import _is_in_slot, run_generate
+        adv = get_advice()
+        q_slots = adv.get("quote_post_slots") or []
+        r_slots = adv.get("reply_post_slots") or []
+
+        if _is_in_slot(now, q_slots):
+            _log("🔁 engage 引用RT生成")
+            result = run_generate("quote_tweet")
+            _log(f"🔁 engage 引用RT生成完了: {result}")
+
+        if _is_in_slot(now, r_slots):
+            _log("💬 engage リプライ生成")
+            result = run_generate("reply")
+            _log(f"💬 engage リプライ生成完了: {result}")
+
     except Exception as e:
-        _log(f"❌ engage エラー: {e}")
+        _log(f"❌ engage 生成エラー: {e}")
+
+
+def job_x_engage_send():
+    """engage 送信 — engage_queue の承認済みアイテムを送信する。"""
+    try:
+        from platforms.x.engage import run_send
+        result = run_send()
+        if result.get("sent", 0) > 0:
+            _log(f"📤 engage 送信: {result}")
+    except Exception as e:
+        _log(f"❌ engage 送信エラー: {e}")
 
 
 def job_mention_scan():
@@ -186,13 +209,22 @@ def register_jobs(scheduler, jst, inst=None):
         next_run_time=now + timedelta(seconds=30),
     )
     scheduler.add_job(
-        job_x_engage,
+        job_x_engage_generate,
         IntervalTrigger(minutes=10),
-        id="x_engage",
-        name="X: Engage Agent",
+        id="x_engage_generate",
+        name="X: Engage Generate",
         max_instances=1,
         coalesce=True,
         next_run_time=now + timedelta(seconds=45),
+    )
+    scheduler.add_job(
+        job_x_engage_send,
+        IntervalTrigger(minutes=5),
+        id="x_engage_send",
+        name="X: Engage Send",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=now + timedelta(seconds=60),
     )
     scheduler.add_job(
         job_mention_scan,

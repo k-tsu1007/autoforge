@@ -149,6 +149,42 @@
 </div>
 {% endfor %}
 
+{# ─── Engage ─── #}
+<div class="rv-section-title">Engage — 引用RT / リプライ ({{ engages | length }}件 承認待ち)</div>
+
+{% if not engages %}
+<div class="rv-empty">承認待ちの engage コンテンツはありません。</div>
+{% endif %}
+
+{% for e in engages %}
+<div class="rv-card" id="eg-{{ e.id }}">
+  <div class="rv-card-body">
+    <div class="rv-meta">
+      #{{ e.id }} &nbsp;·&nbsp;
+      {% if e.action_type == 'quote_tweet' %}🔁 引用RT{% else %}💬 リプライ{% endif %}
+      &nbsp;·&nbsp; {{ e.scheduled_at[:16] if e.scheduled_at else '—' }}
+    </div>
+    <div class="rv-sub">
+      <strong>対象:</strong> {{ e.target_text[:120] if e.target_text else '—' }}{% if e.target_text and e.target_text | length > 120 %}…{% endif %}
+      <br><a href="{{ e.target_url }}" target="_blank" style="color:#555;font-size:.65rem;">{{ e.target_url[:60] }}…</a>
+    </div>
+    <div class="rv-text" style="margin-top:.5rem;">{{ e.comment }}</div>
+  </div>
+  <div class="rv-actions">
+    <button class="rv-btn rv-btn-ok"
+      hx-post="/review/engage/{{ e.id }}/approve"
+      hx-on::after-request="document.getElementById('eg-{{ e.id }}').classList.add('rv-done'); this.textContent='✓ 承認'">
+      承認
+    </button>
+    <button class="rv-btn rv-btn-ng"
+      hx-post="/review/engage/{{ e.id }}/reject"
+      hx-on::after-request="document.getElementById('eg-{{ e.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
+      却下
+    </button>
+  </div>
+</div>
+{% endfor %}
+
 {# ─── Replies ─── #}
 <div class="rv-section-title">メンション返信 ({{ replies | length }}件 承認待ち)</div>
 

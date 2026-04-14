@@ -257,10 +257,17 @@ def review_page(request: Request, user: str = Depends(check_auth)):
         "SELECT id, mention_author, mention_text, reply_text, send_after FROM mention_reply_queue "
         "WHERE sent=0 AND approved IS NULL ORDER BY id DESC"
     ).fetchall()]
+    try:
+        engages = [dict(r) for r in conn.execute(
+            "SELECT id, action_type, target_url, target_text, comment, scheduled_at FROM engage_queue "
+            "WHERE sent=0 AND approved IS NULL ORDER BY id DESC"
+        ).fetchall()]
+    except Exception:
+        engages = []
     review_on = review_mode_enabled()
     return templates.TemplateResponse(
         request=request, name="review.html",
-        context={"tweets": tweets, "replies": replies, "review_on": review_on}
+        context={"tweets": tweets, "replies": replies, "engages": engages, "review_on": review_on}
     )
 
 
@@ -278,6 +285,25 @@ def review_tweet_reject(item_id: int, request: Request, user: str = Depends(chec
     from core.db import get_connection
     conn = get_connection()
     conn.execute("UPDATE tweet_queue SET approved=0, posted=1 WHERE id=?", (item_id,))
+    conn.commit()
+    return HTMLResponse("")
+
+
+@app.post("/review/engage/{item_id}/approve", response_class=HTMLResponse)
+def review_engage_approve(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    now_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute("UPDATE engage_queue SET approved=1, scheduled_at=? WHERE id=?", (now_str, item_id))
+    conn.commit()
+    return HTMLResponse("")
+
+
+@app.post("/review/engage/{item_id}/reject", response_class=HTMLResponse)
+def review_engage_reject(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE engage_queue SET approved=0, sent=2 WHERE id=?", (item_id,))
     conn.commit()
     return HTMLResponse("")
 

@@ -78,7 +78,6 @@ pipelines:
     - x_analytics
     - x_health
     - tweet_generator
-    - engage
     - optimize_post_time
     - advisor
     - evolve

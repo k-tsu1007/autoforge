@@ -1,13 +1,12 @@
 """Engage Agent — 関連ツイートに引用RT・リプライで絡みに行く。
 
-毎日 morning と afternoon に実行:
-- advisor の growth_search_keywords でキーワード検索
-- ヒットしたツイートから 3件 を Claude が選定
-- 引用RT 1件 + リプライ 2件 を実行
-- 重複防止のため DB の growth_actions に記録
+スロット駆動フロー:
+- advisor の quote_post_slots / reply_post_slots の時刻に合わせて実行
+- 各スロット時刻: キーワード検索 → スコアリング → コメント生成 → engage_queue に積む
+- 送信ジョブ(5分ごと): engage_queue の承認済みアイテムを送信
+- レビューモード時: approved=NULL で保留 → /review で承認後に送信
 """
 
-import json
 import os
 import sys
 from datetime import datetime, timezone, timedelta
@@ -19,10 +18,9 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 JST = timezone(timedelta(hours=9))
 
-# .env から ANTHROPIC キー等を読み込む (直接実行時用)
 _env_path = ROOT / ".env"
 if _env_path.exists():
     for _line in _env_path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -37,22 +35,21 @@ if _env_path.exists():
 
 
 SKIP_KEYWORDS = [
-    # 日本語: 広告/宣伝/案件
     "広告", "[PR]", "【PR】", "案件", "プレゼント企画", "応募", "懸賞", "アフィリエイト",
     "登録で", "無料登録", "期間限定", "セール", "クーポン", "特別オファー", "今だけ",
     "詳細はリプ", "DM待ってます", "DMください", "公式LINE", "公式アカウント",
     "プレゼント", "抽選", "RTで", "リツイートで", "フォロー&", "フォロー＆",
-    # 英語: ads/promo/spam
     "Sponsored", "Promoted", "[Ad]", "#ad", "#sponsored", "#PR",
     "follow for follow", "f4f", "DM me", "link in bio", "click the link",
     "limited offer", "sign up", "register now", "buy now",
     "giveaway", "GIVEAWAY", "win a", "free trial",
 ]
 MIN_RELEVANCE = 6
+# スロット判定の許容幅（分）: 前後この時間内なら「スロット内」とみなす
+SLOT_WINDOW_MIN = 8
 
 
 def _should_skip(tweet: dict) -> str | None:
-    """広告・宣伝・自分自身のツイートをスキップ判定。"""
     text = tweet.get("text", "")
     for kw in SKIP_KEYWORDS:
         if kw in text:
@@ -69,7 +66,6 @@ def _should_skip(tweet: dict) -> str | None:
 
 
 def _score_relevance(text: str) -> int:
-    """Claude が 0-10 で関連度を返す。失敗時は 5 (中立)。"""
     try:
         from core.llm.wrapper import call_llm
         prompt = f"""次のツイートが「SNS運用・副業・AI活用・個人発信」と関連する度合いを 0-10 で評価し、数字のみ返してください。
@@ -91,44 +87,6 @@ def _score_relevance(text: str) -> int:
         return 5
 
 
-def _targets() -> tuple[int, int]:
-    """advisor から quote/reply 目標を読む。今日既にやった分を引く。"""
-    try:
-        from core.learning.advisor import get_advice
-        adv = get_advice()
-        q_target = int(adv.get("quote_daily_target", 4))
-        r_target = int(adv.get("reply_daily_target", 8))
-    except Exception:
-        q_target, r_target = 4, 8
-    try:
-        from core.db import get_connection
-        c = get_connection()
-        q_done = c.execute(
-            "SELECT COUNT(*) FROM growth_actions WHERE action_type='quote_tweet' AND date(executed_at)=date('now','+9 hours')"
-        ).fetchone()[0]
-        r_done = c.execute(
-            "SELECT COUNT(*) FROM growth_actions WHERE action_type='reply' AND date(executed_at)=date('now','+9 hours')"
-        ).fetchone()[0]
-    except Exception:
-        q_done = r_done = 0
-    return max(0, q_target - q_done), max(0, r_target - r_done)
-
-
-def _slot_match() -> tuple[bool, bool]:
-    """advisor の quote_post_slots/reply_post_slots に現在時刻が含まれるか。"""
-    try:
-        from core.learning.advisor import get_advice
-        from core.slot_utils import is_now_in_slots
-        from datetime import datetime, timezone, timedelta
-        now = datetime.now(timezone(timedelta(hours=9)))
-        adv = get_advice()
-        q_slots = adv.get("quote_post_slots") or []
-        r_slots = adv.get("reply_post_slots") or []
-        return bool(is_now_in_slots(now, q_slots)), bool(is_now_in_slots(now, r_slots))
-    except Exception:
-        return True, True
-
-
 def _get_keywords() -> list[str]:
     try:
         from core.learning.advisor import get_advice
@@ -141,10 +99,7 @@ def _get_keywords() -> list[str]:
 
 
 def _generate_comment(tweet_text: str, mode: str) -> str:
-    """Claudeに引用 or リプ用のコメントを生成させる。"""
     from core.llm.wrapper import call_llm
-
-    # インスタンスのプロンプトファイルを優先読み込み
     prompt = ""
     try:
         from core.paths import load_prompt
@@ -152,9 +107,7 @@ def _generate_comment(tweet_text: str, mode: str) -> str:
         prompt = load_prompt(fname, tweet_text=tweet_text[:300])
     except Exception:
         pass
-
     if not prompt:
-        # フォールバック
         prompt = f"""あなたは本業をしながらAI・note・SNSの副収入を試している30代です。
 以下のツイートに{'引用RT' if mode == 'quote' else 'リプライ'}します。一言書いてください。
 元ツイート: {tweet_text[:300]}
@@ -167,67 +120,127 @@ def _generate_comment(tweet_text: str, mode: str) -> str:
 
 
 def _already_acted(url: str) -> bool:
+    """growth_actions または engage_queue に既に登録済みか確認。"""
     try:
         from core.db import get_connection
+        conn = get_connection()
+        if conn.execute("SELECT id FROM growth_actions WHERE target_url=?", (url,)).fetchone():
+            return True
+        if conn.execute("SELECT id FROM engage_queue WHERE target_url=?", (url,)).fetchone():
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _daily_quota_remaining(action_type: str) -> int:
+    """今日の残り枠 = advisor目標 - (送信済み + キュー内保留)。"""
+    try:
+        from core.learning.advisor import get_advice
+        adv = get_advice()
+        if action_type == "quote_tweet":
+            target = int(adv.get("quote_daily_target", 4))
+        else:
+            target = int(adv.get("reply_daily_target", 8))
+    except Exception:
+        target = 4 if action_type == "quote_tweet" else 8
+
+    try:
+        from core.db import get_connection
+        conn = get_connection()
+        done = conn.execute(
+            "SELECT COUNT(*) FROM growth_actions WHERE action_type=? AND date(executed_at)=date('now','+9 hours')",
+            (action_type,)
+        ).fetchone()[0]
+        queued = conn.execute(
+            "SELECT COUNT(*) FROM engage_queue WHERE action_type=? AND sent=0 AND COALESCE(approved,1)!=0"
+            " AND date(created_at)=date('now','+9 hours')",
+            (action_type,)
+        ).fetchone()[0]
+    except Exception:
+        done = queued = 0
+
+    return max(0, target - done - queued)
+
+
+def _is_in_slot(now: datetime, slots: list[str]) -> bool:
+    """現在時刻がいずれかのスロット時刻の前後 SLOT_WINDOW_MIN 分以内か。"""
+    now_min = now.hour * 60 + now.minute
+    for slot in slots:
+        try:
+            h, m = int(slot[:2]), int(slot[3:])
+            slot_min = h * 60 + m
+            if abs(now_min - slot_min) <= SLOT_WINDOW_MIN:
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _already_generated_this_slot(action_type: str) -> bool:
+    """直近 SLOT_WINDOW_MIN*2 分以内に同 action_type のキューアイテムを生成済みか。"""
+    try:
+        from core.db import get_connection
+        cutoff = (datetime.now(JST) - timedelta(minutes=SLOT_WINDOW_MIN * 2)).strftime("%Y-%m-%d %H:%M:%S")
         row = get_connection().execute(
-            "SELECT id FROM growth_actions WHERE target_url = ?", (url,)
+            "SELECT id FROM engage_queue WHERE action_type=? AND created_at >= ?",
+            (action_type, cutoff)
         ).fetchone()
         return bool(row)
     except Exception:
         return False
 
 
-def _record(action_type: str, url: str, text: str) -> None:
+def _enqueue(action_type: str, target_url: str, target_text: str, comment: str) -> bool:
+    """engage_queue にアイテムを追加。レビューモード時は approved=NULL。"""
     try:
-        from core.db import record_growth_action
-        record_growth_action(action_type=action_type, target_url=url, target_text=text[:500], success=True)
+        from core.db import get_connection, review_mode_enabled
+        approved = None if review_mode_enabled() else 1
+        now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+        conn = get_connection()
+        conn.execute(
+            "INSERT INTO engage_queue (action_type, target_url, target_text, comment, scheduled_at, approved) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (action_type, target_url, target_text[:500], comment, now_str, approved)
+        )
+        conn.commit()
+        label = "レビュー待ちキュー" if approved is None else "キュー"
+        print(f"  📋 {label}追加 ({action_type}): {comment[:40]}")
+        return True
     except Exception as e:
-        print(f"記録失敗: {e}")
+        print(f"キュー追加失敗: {e}")
+        return False
 
 
-def _notify(action_type: str, url: str, text: str) -> None:
-    try:
-        from core.notify import send_discord
-        emoji = "🔁" if action_type == "quote_tweet" else "💬"
-        label = "引用RT" if action_type == "quote_tweet" else "リプライ"
-        send_discord(content=f"{emoji} {label} → {url}")
-    except Exception as e:
-        print(f"Discord通知失敗: {e}")
+def run_generate(action_type: str) -> dict:
+    """スロット時刻に呼ばれる生成処理: 検索→スコアリング→コメント生成→キュー投入。
 
+    action_type: 'quote_tweet' または 'reply'
+    """
+    from platforms.x.actions import search_tweets
 
-def run(max_quote_per_call: int = 1, max_reply_per_call: int = 1,
-        enforce_slots: bool = True, enforce_reply_slots: bool = False) -> dict:
-    """引用RTはスロット制、リプライは日次上限だけ見て適宜実施。"""
-    from platforms.x.actions import search_tweets, quote_tweet, reply_tweet
+    now = datetime.now(JST)
+    if now.hour < 8 or now.hour > 22:
+        return {"queued": 0, "reason": "out of hours"}
 
-    q_need, r_need = _targets()
-    q_need = min(q_need, max_quote_per_call)
-    r_need = min(r_need, max_reply_per_call)
+    remaining = _daily_quota_remaining(action_type)
+    if remaining <= 0:
+        print(f"  日次上限達成のためスキップ ({action_type})")
+        return {"queued": 0, "reason": "daily quota reached"}
 
-    # 引用RT: スロット制を維持
-    if enforce_slots:
-        q_in_slot, _ = _slot_match()
-        if not q_in_slot:
-            q_need = 0
+    if _already_generated_this_slot(action_type):
+        print(f"  このスロットは生成済みのためスキップ ({action_type})")
+        return {"queued": 0, "reason": "already generated this slot"}
 
-    # リプライ: enforce_reply_slots=True の場合のみスロット制（デフォルト=適宜実施）
-    if enforce_reply_slots:
-        _, r_in_slot = _slot_match()
-        if not r_in_slot:
-            r_need = 0
-
-    if q_need == 0 and r_need == 0:
-        return {"quoted": 0, "replied": 0, "skipped": True}
-
+    mode = "quote" if action_type == "quote_tweet" else "reply"
     keywords = _get_keywords()
-    quoted = 0
-    replied = 0
-    seen_urls = set()
+    queued = 0
+    seen_urls: set[str] = set()
 
     for kw in keywords:
-        if quoted >= q_need and replied >= r_need:
+        if queued >= 1:
             break
-        print(f"検索: {kw}")
+        print(f"検索 ({action_type}): {kw}")
         tweets = search_tweets(kw, max_results=15)
         for t in tweets:
             url = t.get("url")
@@ -244,23 +257,107 @@ def run(max_quote_per_call: int = 1, max_reply_per_call: int = 1,
                 print(f"  ⏭ low relevance ({score}): {text[:50]}")
                 continue
             print(f"  ✓ score={score}: {text[:50]}")
-            if quoted < q_need:
-                comment = _generate_comment(text, "quote")
-                if comment and quote_tweet(url, comment):
-                    _record("quote_tweet", url, comment)
-                    _notify("quote_tweet", url, comment)
-                    quoted += 1
-                    print(f"  ✅ 引用RT: {comment[:40]}")
-                    continue
-            if replied < r_need:
-                reply = _generate_comment(text, "reply")
-                if reply and reply_tweet(url, reply):
-                    _record("reply", url, reply)
-                    _notify("reply", url, reply)
-                    replied += 1
-                    print(f"  ✅ リプライ: {reply[:40]}")
-    return {"quoted": quoted, "replied": replied, "target_q": q_need, "target_r": r_need}
+            comment = _generate_comment(text, mode)
+            if comment and _enqueue(action_type, url, text, comment):
+                queued += 1
+                break
+
+    return {"queued": queued, "action_type": action_type}
+
+
+def run_send() -> dict:
+    """engage_queue の承認済みアイテムを送信する（5分ごとに呼ばれる）。"""
+    from platforms.x.actions import quote_tweet, reply_tweet
+
+    now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        from core.db import get_connection, transaction
+        conn = get_connection()
+        pending = conn.execute(
+            "SELECT id, action_type, target_url, target_text, comment, COALESCE(fail_count,0) "
+            "FROM engage_queue WHERE sent=0 AND COALESCE(approved,1)=1 AND scheduled_at <= ?",
+            (now_str,)
+        ).fetchall()
+    except Exception as e:
+        print(f"engage_queue取得失敗: {e}")
+        return {"sent": 0}
+
+    sent = 0
+    for row in pending:
+        row_id, action_type, target_url, target_text, comment, fail_count = row
+
+        if fail_count >= 3:
+            with transaction() as c:
+                c.execute("UPDATE engage_queue SET sent=2 WHERE id=?", (row_id,))
+            print(f"  ⏭ 放棄 (失敗{fail_count}回): {comment[:40]}")
+            continue
+
+        print(f"  送信 ({action_type}): {comment[:40]}")
+        try:
+            if action_type == "quote_tweet":
+                ok = quote_tweet(target_url, comment)
+            else:
+                ok = reply_tweet(target_url, comment)
+
+            if ok:
+                with transaction() as c:
+                    c.execute("UPDATE engage_queue SET sent=1 WHERE id=?", (row_id,))
+                try:
+                    from core.db import record_growth_action
+                    record_growth_action(
+                        action_type=action_type,
+                        target_url=target_url,
+                        target_text=comment[:500],
+                        success=True,
+                    )
+                except Exception:
+                    pass
+                try:
+                    from core.notify import send_discord
+                    emoji = "🔁" if action_type == "quote_tweet" else "💬"
+                    label = "引用RT" if action_type == "quote_tweet" else "リプライ"
+                    send_discord(content=f"{emoji} {label} → {target_url}")
+                except Exception:
+                    pass
+                sent += 1
+                print(f"    ✅ 送信完了")
+            else:
+                retry_after = (datetime.now(JST) + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+                with transaction() as c:
+                    c.execute(
+                        "UPDATE engage_queue SET fail_count=COALESCE(fail_count,0)+1, scheduled_at=? WHERE id=?",
+                        (retry_after, row_id)
+                    )
+                print(f"    ❌ 送信失敗 (失敗{fail_count+1}回目)")
+        except Exception as e:
+            retry_after = (datetime.now(JST) + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                with transaction() as c:
+                    c.execute(
+                        "UPDATE engage_queue SET fail_count=COALESCE(fail_count,0)+1, scheduled_at=? WHERE id=?",
+                        (retry_after, row_id)
+                    )
+            except Exception:
+                pass
+            print(f"    送信エラー: {e}")
+
+    print(f"engage送信完了: {sent}件")
+    return {"sent": sent}
+
+
+def run(max_quote_per_call: int = 1, max_reply_per_call: int = 1,
+        enforce_slots: bool = True, enforce_reply_slots: bool = False) -> dict:
+    """後方互換用: プラグインから呼ばれる場合は何もしない（スロット駆動に移行済み）。"""
+    print("engage.run() はスキップ（スロット駆動ジョブに移行済み）")
+    return {"queued": 0, "skipped": True}
 
 
 if __name__ == "__main__":
-    print(run())
+    import sys
+    mode = sys.argv[1] if len(sys.argv) > 1 else "send"
+    if mode == "quote":
+        print(run_generate("quote_tweet"))
+    elif mode == "reply":
+        print(run_generate("reply"))
+    else:
+        print(run_send())

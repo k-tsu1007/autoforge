@@ -200,6 +200,19 @@ CREATE TABLE IF NOT EXISTS mention_reply_queue (
     sent INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', '+9 hours'))
 );
+
+CREATE TABLE IF NOT EXISTS engage_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_type TEXT,
+    target_url TEXT,
+    target_text TEXT,
+    comment TEXT,
+    scheduled_at TEXT,
+    sent INTEGER DEFAULT 0,
+    approved INTEGER DEFAULT 1,
+    fail_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', '+9 hours'))
+);
 """
 
 
