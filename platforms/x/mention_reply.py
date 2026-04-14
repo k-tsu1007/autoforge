@@ -316,20 +316,20 @@ def run_scan() -> dict:
                 browser.close()
                 return {"liked": 0, "queued": 0}
 
-            # 「すべて」タブをクリック（デフォルトが「おすすめ」の場合があるため）
+            # 「@メンション」タブをクリック（@mentions/replies のみに絞る）
+            # All タブにはいいね・フォロー通知も混在するため Mentions タブを優先する
             try:
-                all_tab = page.locator("[role='tab']").filter(has_text="すべて").first
-                if all_tab.count() > 0:
-                    all_tab.click()
-                    page.wait_for_timeout(3000)
-                    print("「すべて」タブをクリック")
-                else:
-                    # 英語UI: "All" tab
-                    all_tab_en = page.locator("[role='tab']").filter(has_text="All").first
-                    if all_tab_en.count() > 0:
-                        all_tab_en.click()
+                tab_clicked = False
+                for label in ["Mentions", "@メンション", "メンション"]:
+                    tab = page.locator("[role='tab']").filter(has_text=label).first
+                    if tab.count() > 0:
+                        tab.click()
                         page.wait_for_timeout(3000)
-                        print("「All」タブをクリック")
+                        print(f"「{label}」タブをクリック")
+                        tab_clicked = True
+                        break
+                if not tab_clicked:
+                    print("Mentionsタブ未発見 — デフォルトタブで続行")
             except Exception as e:
                 print(f"タブクリック失敗(続行): {e}")
 
