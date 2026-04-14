@@ -160,6 +160,14 @@ def call_claude_cli(
 
         if data.get("is_error"):
             err_msg = data.get("result", "") or ""
+            # 未ログイン → API にフォールバック
+            if "Not logged in" in err_msg or "Please run /login" in err_msg:
+                print(f"⚠ claude CLI未ログイン → API にフォールバック")
+                return call_claude_api(prompt, {
+                    "haiku": "claude-haiku-4-5-20251001",
+                    "sonnet": "claude-sonnet-4-6",
+                    "opus": "claude-opus-4-6",
+                }.get(model, "claude-sonnet-4-6"), system, max_tokens, temperature)
             # overloaded_error の場合は opus にフォールバック (1回だけ)
             if not _fallback_attempted and "overloaded_error" in err_msg and model != "opus":
                 _OVERLOADED_UNTIL[model] = _t.time() + 900
