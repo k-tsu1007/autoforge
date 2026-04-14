@@ -37,14 +37,21 @@ async def _search_tweets_async(keyword: str, max_results: int = 15) -> list:
         tab = await browser.get(url)
         await asyncio.sleep(7)
 
+        print(f"  [search] URL: {tab.url}")
         if "/login" in tab.url or "/flow/login" in tab.url:
             print("❌ Cookie 切れ")
             return []
+
+        art_count = await tab.evaluate("(() => document.querySelectorAll('article').length)()")
+        print(f"  [search] article数(スクロール前): {art_count}")
 
         # スクロールして読み込む
         for _ in range(3):
             await tab.evaluate("window.scrollBy(0, 2000)")
             await asyncio.sleep(1.5)
+
+        art_count2 = await tab.evaluate("(() => document.querySelectorAll('article').length)()")
+        print(f"  [search] article数(スクロール後): {art_count2}")
 
         tweets = await tab.evaluate("""
             (() => {
