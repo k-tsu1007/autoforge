@@ -232,9 +232,9 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                 if not ocf_input:
                     # DOM上の全inputを列挙してデバッグ
                     debug_info = await tab.evaluate(
-                        "() => [...document.querySelectorAll('input')]"
+                        "(() => [...document.querySelectorAll('input')]"
                         ".map(i => i.getAttribute('data-testid') + '|' + i.getAttribute('name') + '|' + i.type)"
-                        ".join(', ')"
+                        ".join(', '))()"
                     )
                     print(f"  DOM inputs: {debug_info}")
                     print(f"  OCF input not found, retry...")
@@ -245,24 +245,25 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                 await asyncio.sleep(1)
 
                 # execCommand で入力（React synthetic events対応）
+                # ※ tab.evaluate には IIFE "(() => { ... })()" 形式が必要
                 js_type = (
-                    "() => {"
+                    "(() => {"
                     "  const el = document.activeElement;"
                     "  if (!el || el.tagName !== 'INPUT') return 'NO_ACTIVE_INPUT:' + document.activeElement.tagName;"
                     "  document.execCommand('selectAll', false, null);"
                     "  document.execCommand('delete', false, null);"
                     f"  const ok = document.execCommand('insertText', false, '{escaped_uname}');"
                     "  return 'execCmd:' + ok + ':' + el.value;"
-                    "}"
+                    "})()"
                 )
                 set_ok = await tab.evaluate(js_type)
                 print(f"  execCommand result: {set_ok}")
                 await asyncio.sleep(1)
 
-                # 値確認
+                # 値確認（IIFE形式）
                 val_check = await tab.evaluate(
-                    f"() => {{ const el = document.querySelector('{found_sel}');"
-                    "  return el ? el.value : 'NOT_FOUND'; }"
+                    f"(() => {{ const el = document.querySelector('{found_sel}');"
+                    "  return el ? el.value : 'NOT_FOUND'; }})()"
                 )
                 print(f"  value after exec: '{val_check}'")
 
