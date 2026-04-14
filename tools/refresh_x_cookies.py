@@ -172,19 +172,55 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         print(f"  step3 URL: {tab.url}")
 
         # ユーザー名確認ステップ（出る場合）
+        # X が「通常とは異なるログイン操作」として電話番号/ユーザー名を要求することがある
         try:
-            ocf_input = await tab.select('input[data-testid="ocfEnterTextTextInput"]', timeout=5)
+            # data-testid="ocfEnterTextTextInput" または通常の input
+            ocf_input = None
+            for sel in ['input[data-testid="ocfEnterTextTextInput"]', 'input']:
+                try:
+                    ocf_input = await tab.select(sel, timeout=4)
+                    if ocf_input:
+                        break
+                except Exception:
+                    continue
+
             if ocf_input:
                 print("  ユーザー名確認ステップ...")
                 uname = username or email.split("@")[0]
                 await ocf_input.click()
                 await asyncio.sleep(0.3)
                 await ocf_input.send_keys(uname)
-                await asyncio.sleep(0.5)
-                await ocf_input.send_keys('\n')
+                await asyncio.sleep(0.8)
+
+                # 「次へ」ボタンをクリック（Enter より確実）
+                next_clicked = False
+                for btn_sel in [
+                    'button[data-testid="ocfEnterTextNextButton"]',
+                    'button[data-testid="LoginForm_Login_Button"]',
+                ]:
+                    try:
+                        btn = await tab.select(btn_sel, timeout=3)
+                        if btn:
+                            await btn.click()
+                            next_clicked = True
+                            break
+                    except Exception:
+                        continue
+                if not next_clicked:
+                    # テキストで「次へ」ボタンを探す
+                    try:
+                        btn = await tab.find('次へ', timeout=3)
+                        if btn:
+                            await btn.click()
+                            next_clicked = True
+                    except Exception:
+                        pass
+                if not next_clicked:
+                    await ocf_input.send_keys('\n')
+
                 await asyncio.sleep(3)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  ユーザー名ステップ例外（続行）: {e}")
 
         # パスワード欄を待機
         pw_found = False
