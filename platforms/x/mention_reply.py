@@ -130,9 +130,54 @@ def _queue_reply(mention_url: str, mention_text: str, author: str, reply_text: s
         print(f"キュー追加失敗: {e}")
 
 
-def _decide_reply(mention_text: str) -> dict:
+def _fetch_tweet_context(page, tweet_url: str) -> dict:
+    """ツイートページに遷移して会話スレッド・引用ツイートのテキストを取得。
+
+    Returns: {
+        "thread_texts": [...],   # 親ツイート群（古い順）
+        "quoted_text": str,      # 引用元ツイート（あれば）
+    }
+    """
+    ctx = {"thread_texts": [], "quoted_text": ""}
+    try:
+        page.goto(tweet_url)
+        page.wait_for_timeout(4000)
+
+        # スレッド上の親ツイート（ターゲットより上の記事）
+        articles = page.locator("article").all()
+        thread_texts = []
+        for a in articles:
+            try:
+                text_el = a.locator('[data-testid="tweetText"]').first
+                if text_el.count() == 0:
+                    continue
+                txt = text_el.inner_text().strip()
+                if txt:
+                    thread_texts.append(txt)
+            except Exception:
+                continue
+        # 最後の記事がメンション本体なので除き、直近3件だけ残す
+        ctx["thread_texts"] = thread_texts[:-1][-3:] if len(thread_texts) > 1 else []
+
+        # 引用ツイート: article 内にネストした article（引用ブロック）
+        try:
+            quote_articles = page.locator("article article").all()
+            if quote_articles:
+                q_text_el = quote_articles[0].locator('[data-testid="tweetText"]').first
+                if q_text_el.count() > 0:
+                    ctx["quoted_text"] = q_text_el.inner_text().strip()
+        except Exception:
+            pass
+
+    except Exception as e:
+        print(f"  コンテキスト取得失敗: {e}")
+    return ctx
+
+
+def _decide_reply(mention_text: str, context: dict | None = None) -> dict:
     """Claudeが返信すべきか判断し、返すなら文章も生成。
 
+    context: _fetch_tweet_context の戻り値（スレッド履歴・引用ツイート）
     Returns: {"should_reply": bool, "reply": str}
     """
     # 明らかな会話終了は即スキップ
@@ -144,17 +189,31 @@ def _decide_reply(mention_text: str) -> dict:
     try:
         from core.llm.wrapper import call_llm
 
+        # コンテキスト文字列を組み立て
+        ctx_section = ""
+        if context:
+            thread = context.get("thread_texts") or []
+            quoted = context.get("quoted_text") or ""
+            if thread:
+                ctx_section += "\n【会話の流れ（古い順）】\n"
+                ctx_section += "\n".join(f"- {t[:150]}" for t in thread)
+            if quoted:
+                ctx_section += f"\n【引用元ツイート】\n{quoted[:200]}"
+
         # インスタンスのプロンプトファイルを優先読み込み
         prompt = ""
         try:
             from core.paths import load_prompt
             prompt = load_prompt("mention_reply.txt", mention_text=mention_text[:300])
+            # プロンプトファイルがある場合はコンテキストを末尾に追記
+            if prompt and ctx_section:
+                prompt = prompt.rstrip() + f"\n{ctx_section}"
         except Exception:
             pass
 
         if not prompt:
             prompt = f"""あなたは本業をしながらAI・note・SNSの副収入を試している30代です。
-
+{ctx_section}
 以下は自分のツイートへの返信です。「自然に会話を続けるべきか」「ここで終えるべきか」を判断してください。
 
 【相手の返信】
@@ -167,7 +226,7 @@ def _decide_reply(mention_text: str) -> dict:
 
 【出力フォーマット】
 REPLY: yes または no
-TEXT: （返す場合のみ70字以内の一言）"""
+TEXT: （返す場合のみ70字以内の一言、会話の流れを踏まえて自然に）"""
 
         raw = call_llm(prompt, task_type="strategy_evolution", temperature=0.8, max_tokens=150).strip()
 
@@ -215,6 +274,7 @@ def run_scan() -> dict:
     liked = 0
     queued = 0
     skipped = 0
+    pending_mentions: list[dict] = []
 
     try:
         with sync_playwright() as p:
@@ -316,29 +376,53 @@ def run_scan() -> dict:
                     if not mention_text:
                         continue
 
+                    pending_mentions.append({
+                        "url": mention_url,
+                        "text": mention_text,
+                        "author": author,
+                    })
+
+                except Exception as e:
+                    print(f"  記事処理エラー: {e}")
+                    continue
+
+            # ── フェーズ2: 各ツイートに遷移してコンテキスト取得 → 返信判断 ──
+            print(f"  処理対象: {len(pending_mentions)}件")
+            for m in pending_mentions:
+                try:
+                    mention_url = m["url"]
+                    mention_text = m["text"]
+                    author = m["author"]
                     print(f"  処理: @{author} — {mention_text[:50]}")
 
-                    # 返信判断（いいねは送信時に同時実行）
-                    decision = _decide_reply(mention_text)
+                    # ツイートページへ遷移してスレッド・引用コンテキスト取得
+                    tweet_ctx = _fetch_tweet_context(page, mention_url)
+                    if tweet_ctx["thread_texts"]:
+                        print(f"    スレッド{len(tweet_ctx['thread_texts'])}件取得")
+                    if tweet_ctx["quoted_text"]:
+                        print(f"    引用元ツイート取得: {tweet_ctx['quoted_text'][:40]}")
+
+                    # 返信判断（コンテキスト付き）
+                    decision = _decide_reply(mention_text, context=tweet_ctx)
                     if decision["should_reply"] and decision["reply"]:
                         _queue_reply(mention_url, mention_text, author, decision["reply"])
                         queued += 1
                     else:
-                        # 返信しない場合はスキャン時にいいねだけ付ける
-                        like_btn = article.locator('[data-testid="like"]').first
-                        if like_btn.count() > 0:
-                            like_btn.click()
-                            page.wait_for_timeout(1200)
+                        # 返信しない場合は通知ページに戻っていいねはできないのでAPIいいねを試みる
+                        try:
+                            from platforms.x.actions import like_tweet
+                            like_tweet(mention_url)
                             liked += 1
                             print(f"    ❤️ いいね（返信なし）")
+                        except Exception:
+                            pass
                         _record_like(mention_url, mention_text, author)
                         skipped += 1
                         print(f"    ⏭ 返信なし（会話終了 or 不要と判断）")
 
                     page.wait_for_timeout(800)
-
                 except Exception as e:
-                    print(f"  記事処理エラー: {e}")
+                    print(f"  処理エラー: {e}")
                     continue
 
             # セッション更新

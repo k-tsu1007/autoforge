@@ -10,11 +10,12 @@ import json
 import os
 import secrets
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
@@ -271,12 +272,32 @@ def review_page(request: Request, user: str = Depends(check_auth)):
     )
 
 
+def _bg(fn, *args, **kwargs):
+    """バックグラウンドスレッドで fn を実行。"""
+    threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True).start()
+
+
 @app.post("/review/tweet/{item_id}/approve", response_class=HTMLResponse)
 def review_tweet_approve(item_id: int, request: Request, user: str = Depends(check_auth)):
     from core.db import get_connection
     conn = get_connection()
     conn.execute("UPDATE tweet_queue SET approved=1 WHERE id=?", (item_id,))
     conn.commit()
+
+    def _post():
+        try:
+            from platforms.x.poster import post_next_from_db
+            result = post_next_from_db()
+            if result.get("posted"):
+                try:
+                    from core.notify import send_discord
+                    send_discord(content=f"🐦 X投稿 (手動承認) → {result.get('url','')}")
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[review] 即時投稿エラー: {e}")
+
+    _bg(_post)
     return HTMLResponse("")
 
 
@@ -289,6 +310,26 @@ def review_tweet_reject(item_id: int, request: Request, user: str = Depends(chec
     return HTMLResponse("")
 
 
+@app.post("/review/tweet/{item_id}/regenerate", response_class=HTMLResponse)
+def review_tweet_regenerate(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    try:
+        from platforms.x.tweet_generator import generate_batch
+        new_tweets = generate_batch(n=1)
+        if not new_tweets:
+            return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
+        new_text = new_tweets[0]
+        conn.execute("UPDATE tweet_queue SET text=? WHERE id=?", (new_text, item_id))
+        conn.commit()
+        return HTMLResponse(
+            f'<div class="rv-text" id="tw-text-{item_id}">'
+            f'{new_text.replace("<","&lt;").replace(">","&gt;")}</div>'
+        )
+    except Exception as e:
+        return HTMLResponse(f'<div class="rv-text" style="color:#f87171;">エラー: {e}</div>')
+
+
 @app.post("/review/engage/{item_id}/approve", response_class=HTMLResponse)
 def review_engage_approve(item_id: int, request: Request, user: str = Depends(check_auth)):
     from core.db import get_connection
@@ -296,6 +337,15 @@ def review_engage_approve(item_id: int, request: Request, user: str = Depends(ch
     now_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S")
     conn.execute("UPDATE engage_queue SET approved=1, scheduled_at=? WHERE id=?", (now_str, item_id))
     conn.commit()
+
+    def _send():
+        try:
+            from platforms.x.engage import run_send
+            run_send()
+        except Exception as e:
+            print(f"[review] engage即時送信エラー: {e}")
+
+    _bg(_send)
     return HTMLResponse("")
 
 
@@ -308,12 +358,51 @@ def review_engage_reject(item_id: int, request: Request, user: str = Depends(che
     return HTMLResponse("")
 
 
+@app.post("/review/engage/{item_id}/regenerate", response_class=HTMLResponse)
+def review_engage_regenerate(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT action_type, target_text FROM engage_queue WHERE id=?", (item_id,)
+        ).fetchone()
+        if not row:
+            return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
+        mode = "quote" if row["action_type"] == "quote_tweet" else "reply"
+        from platforms.x.engage import _generate_comment
+        new_comment = _generate_comment(row["target_text"] or "", mode)
+        if not new_comment:
+            return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
+        conn.execute("UPDATE engage_queue SET comment=? WHERE id=?", (new_comment, item_id))
+        conn.commit()
+        return HTMLResponse(
+            f'<div class="rv-text" style="margin-top:.5rem;" id="eg-text-{item_id}">'
+            f'{new_comment.replace("<","&lt;").replace(">","&gt;")}</div>'
+        )
+    except Exception as e:
+        return HTMLResponse(f'<div class="rv-text" style="color:#f87171;">エラー: {e}</div>')
+
+
 @app.post("/review/reply/{item_id}/approve", response_class=HTMLResponse)
 def review_reply_approve(item_id: int, request: Request, user: str = Depends(check_auth)):
     from core.db import get_connection
     conn = get_connection()
-    conn.execute("UPDATE mention_reply_queue SET approved=1 WHERE id=?", (item_id,))
+    now_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S")
+    # 承認時に send_after を現在時刻にセット（遅延解除）
+    conn.execute(
+        "UPDATE mention_reply_queue SET approved=1, send_after=? WHERE id=?",
+        (now_str, item_id)
+    )
     conn.commit()
+
+    def _send():
+        try:
+            from platforms.x.mention_reply import run_send
+            run_send()
+        except Exception as e:
+            print(f"[review] reply即時送信エラー: {e}")
+
+    _bg(_send)
     return HTMLResponse("")
 
 
@@ -324,6 +413,31 @@ def review_reply_reject(item_id: int, request: Request, user: str = Depends(chec
     conn.execute("UPDATE mention_reply_queue SET approved=0, sent=2 WHERE id=?", (item_id,))
     conn.commit()
     return HTMLResponse("")
+
+
+@app.post("/review/reply/{item_id}/regenerate", response_class=HTMLResponse)
+def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT mention_text FROM mention_reply_queue WHERE id=?", (item_id,)
+        ).fetchone()
+        if not row:
+            return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
+        from platforms.x.mention_reply import _decide_reply
+        decision = _decide_reply(row["mention_text"] or "")
+        new_text = decision.get("reply") or ""
+        if not new_text:
+            return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗（返信不要と判断）</div>')
+        conn.execute("UPDATE mention_reply_queue SET reply_text=? WHERE id=?", (new_text, item_id))
+        conn.commit()
+        return HTMLResponse(
+            f'<div class="rv-text" style="margin-top:.5rem;" id="rp-text-{item_id}">'
+            f'{new_text.replace("<","&lt;").replace(">","&gt;")}</div>'
+        )
+    except Exception as e:
+        return HTMLResponse(f'<div class="rv-text" style="color:#f87171;">エラー: {e}</div>')
 
 
 @app.get("/activity", response_class=HTMLResponse)

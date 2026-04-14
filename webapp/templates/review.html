@@ -78,6 +78,7 @@
   .rv-btn:hover { opacity: .8; }
   .rv-btn-ok   { background: #16a34a; color: #fff; }
   .rv-btn-ng   { background: #222; color: #f87171; border: 1px solid #f8717144; }
+  .rv-btn-regen { background: #1a2744; color: #60a5fa; border: 1px solid #60a5fa44; }
 
   .rv-done {
     opacity: .35;
@@ -132,7 +133,7 @@
     <div class="rv-meta">
       #{{ t.id }} &nbsp;·&nbsp; {{ t.type }} &nbsp;·&nbsp; {{ t.added_at[:16] if t.added_at else '—' }}
     </div>
-    <div class="rv-text">{{ t.text }}</div>
+    <div class="rv-text" id="tw-text-{{ t.id }}">{{ t.text }}</div>
   </div>
   <div class="rv-actions">
     <button class="rv-btn rv-btn-ok"
@@ -144,6 +145,15 @@
       hx-post="/review/tweet/{{ t.id }}/reject"
       hx-on::after-request="document.getElementById('tw-{{ t.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
       却下
+    </button>
+    <button class="rv-btn rv-btn-regen"
+      hx-post="/review/tweet/{{ t.id }}/regenerate"
+      hx-target="#tw-text-{{ t.id }}"
+      hx-swap="outerHTML"
+      hx-indicator="#tw-regen-spin-{{ t.id }}"
+      hx-on::before-request="this.textContent='…'"
+      hx-on::after-request="this.textContent='🔄'">
+      🔄
     </button>
   </div>
 </div>
@@ -168,7 +178,7 @@
       <strong>対象:</strong> {{ e.target_text[:120] if e.target_text else '—' }}{% if e.target_text and e.target_text | length > 120 %}…{% endif %}
       <br><a href="{{ e.target_url }}" target="_blank" style="color:#555;font-size:.65rem;">{{ e.target_url[:60] }}…</a>
     </div>
-    <div class="rv-text" style="margin-top:.5rem;">{{ e.comment }}</div>
+    <div class="rv-text" style="margin-top:.5rem;" id="eg-text-{{ e.id }}">{{ e.comment }}</div>
   </div>
   <div class="rv-actions">
     <button class="rv-btn rv-btn-ok"
@@ -180,6 +190,14 @@
       hx-post="/review/engage/{{ e.id }}/reject"
       hx-on::after-request="document.getElementById('eg-{{ e.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
       却下
+    </button>
+    <button class="rv-btn rv-btn-regen"
+      hx-post="/review/engage/{{ e.id }}/regenerate"
+      hx-target="#eg-text-{{ e.id }}"
+      hx-swap="outerHTML"
+      hx-on::before-request="this.textContent='…'"
+      hx-on::after-request="this.textContent='🔄'">
+      🔄
     </button>
   </div>
 </div>
@@ -201,7 +219,7 @@
     <div class="rv-sub">
       <strong>相手:</strong> {{ r.mention_text[:120] if r.mention_text else '—' }}{% if r.mention_text and r.mention_text | length > 120 %}…{% endif %}
     </div>
-    <div class="rv-text" style="margin-top:.5rem;">{{ r.reply_text }}</div>
+    <div class="rv-text" style="margin-top:.5rem;" id="rp-text-{{ r.id }}">{{ r.reply_text }}</div>
   </div>
   <div class="rv-actions">
     <button class="rv-btn rv-btn-ok"
@@ -213,6 +231,14 @@
       hx-post="/review/reply/{{ r.id }}/reject"
       hx-on::after-request="document.getElementById('rp-{{ r.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
       却下
+    </button>
+    <button class="rv-btn rv-btn-regen"
+      hx-post="/review/reply/{{ r.id }}/regenerate"
+      hx-target="#rp-text-{{ r.id }}"
+      hx-swap="outerHTML"
+      hx-on::before-request="this.textContent='…'"
+      hx-on::after-request="this.textContent='🔄'">
+      🔄
     </button>
   </div>
 </div>
