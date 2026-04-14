@@ -168,7 +168,7 @@
     {% else %}{% set state = 'future' %}
     {% endif %}
     <div class="tl-row tl-{{ state }}">
-      <span class="tl-t">{{ ft if ft not in ('—','') else '—' }}</span>
+      <span class="tl-t">{{ '—' if ' / ' in row.time else (ft if ft not in ('—','') else '—') }}</span>
       <span class="tl-ico">{{ row.icon }}</span>
       <span>
         <div class="tl-bd">
