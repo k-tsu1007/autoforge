@@ -26,12 +26,15 @@ git add <files>
 git commit -m "..."
 git push origin main
 
-# 2. Windows に反映
-ssh windows-pc "cd C:/Users/Tsubasa/autoforge && git pull"
+# 2. Windows にデプロイ（git pull + デーモン再起動）
+ssh windows-pc "cd C:/Users/Tsubasa/autoforge && deploy.bat"
 
 # 3. Windows でテスト実行
 ssh windows-pc "cd C:/Users/Tsubasa/autoforge && python <test_script>.py"
 ```
+
+> **deploy.bat を必ず使うこと。** `git pull` だけでは動いているプロセスに変更が反映されない。
+> Python はモジュールをインポート時にキャッシュするため、**コードを変更したら必ずデーモンを再起動する必要がある。**
 
 ### git 管理外ファイルの同期（必要時のみ）
 
@@ -55,14 +58,23 @@ scp instances/fuku_ai_sns/cookies/session.json \
 > - `.env` — 全インスタンス共通の設定（`USE_CLAUDE_CLI` など）
 > - 新しいインスタンスを追加する場合は `instances/<name>/.env` に認証情報を記載する
 
-### デーモン操作
+### デプロイ（コード変更後は必ずこれを使う）
+
+```bash
+# git pull + デーモン・webapp を再起動（これ1本でOK）
+ssh windows-pc "cd C:/Users/Tsubasa/autoforge && deploy.bat"
+```
+
+deploy.bat の中身: `git pull` → 既存 python プロセスを全停止 → daemon/webapp を再起動。
+
+### デーモン操作（個別に操作したい場合）
 
 ```bash
 # 起動確認
 ssh windows-pc "tasklist | findstr python"
 
-# デーモン起動（バックグラウンド）
-ssh windows-pc "cd C:/Users/Tsubasa/autoforge && start /B python -m tools.run_daemon --instance fuku_ai_sns"
+# 再起動のみ（git pull 不要なとき）
+ssh windows-pc "cd C:/Users/Tsubasa/autoforge && restart.bat"
 ```
 
 ---
