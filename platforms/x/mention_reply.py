@@ -277,6 +277,12 @@ def run_scan() -> dict:
                     # ツイートURLを取得
                     time_link = article.locator("time").first
                     if time_link.count() == 0:
+                        # time要素がない記事はグループ通知等の可能性あり
+                        try:
+                            snippet = article.inner_text()[:60].replace("\n", " ")
+                        except Exception:
+                            snippet = "(取得不可)"
+                        print(f"  ⏭ time要素なし: {snippet}")
                         continue
 
                     # 24時間以上前のメンションはスキップ
