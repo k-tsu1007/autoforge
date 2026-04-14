@@ -123,7 +123,7 @@
       <div class="rs-next-m">あと {{ data.next_event.minutes_left }} 分</div>
       {% endif %}
       {% else %}
-      <div class="rs-next-t" style="font-size:1.3rem;color:#222;">—</div>
+      <div class="rs-next-t" style="font-size:1.3rem;color:var(--muted);">—</div>
       <div class="rs-next-w">今日は終了</div>
       {% endif %}
     </div>
@@ -134,7 +134,7 @@
       <div class="rs-label">Goal</div>
       <div style="display:flex;align-items:baseline;gap:.3rem;margin-bottom:.1rem;">
         <span class="rs-goal-days">{{ data.goal.days_left }}</span>
-        <span style="font-size:.74rem;color:#555;">日</span>
+        <span style="font-size:.74rem;color:var(--muted);">日</span>
       </div>
       <div class="rs-goal-desc">月{{ data.goal.target_revenue|int }}円 — {{ data.goal.target_date }}</div>
       <div class="rs-goal-bar"><div class="rs-goal-fill" style="width:{{ data.goal.elapsed_pct }}%;"></div></div>
@@ -147,10 +147,10 @@
     <div class="rs-cell">
       <div class="rs-label">Engage</div>
       <div style="font-family:var(--font-mono);font-size:2rem;font-weight:900;line-height:1;{% if gr.pct >= 100 %}color:#4ade80;{% else %}color:#60a5fa;{% endif %}">{{ gr.actual }}</div>
-      <div style="height:2px;background:#1a1a1a;border-radius:999px;overflow:hidden;margin:.4rem 0 .18rem;">
+      <div style="height:2px;background:var(--border);border-radius:999px;overflow:hidden;margin:.4rem 0 .18rem;">
         <div style="height:100%;{% if gr.pct >= 100 %}background:#4ade80;{% else %}background:#60a5fa;{% endif %};width:{{ gr.pct }}%;transition:width .5s;border-radius:999px;"></div>
       </div>
-      <div style="font-size:.65rem;color:#333;">目標 {{ gr.target }}件</div>
+      <div style="font-size:.65rem;color:var(--muted);">目標 {{ gr.target }}件</div>
     </div>
 
   </div>
@@ -194,9 +194,9 @@
       </span>
     </div>
   {% endfor %}
-  <p style="margin-top:.6rem;font-size:.68rem;color:#222;">
+  <p style="margin-top:.6rem;font-size:.68rem;color:var(--muted);">
     累計 記事&nbsp;{{ data.metrics.article_count }}本 / TW&nbsp;{{ data.metrics.tweet_count }}件
-    &nbsp;·&nbsp;<a href="/activity" style="color:#333;">⚡ ログ</a>
+    &nbsp;·&nbsp;<a href="/activity" style="color:var(--dim);">⚡ ログ</a>
   </p>
 </div>
 
@@ -217,7 +217,7 @@
         <tr><td>{{ al.get(k,k) }}</td><td>{{ v }}</td></tr>
         {% endif %}{% endfor %}
         </table>
-        <div style="color:#2a2a2a;font-size:.67rem;margin-top:.4rem;">最終判断: {{ data.advisor.updated_at[:16] if data.advisor.updated_at else '不明' }}</div>
+        <div style="color:var(--dim);font-size:.67rem;margin-top:.4rem;">最終判断: {{ data.advisor.updated_at[:16] if data.advisor.updated_at else '不明' }}</div>
         {% else %}
         <div class="fmuted">まだ判断データがありません。翌 06:00 に実行されます。</div>
         {% endif %}
@@ -284,7 +284,7 @@
     <details>
       <summary>📈 30日推移・コスト</summary>
       <div class="fold-body">
-        <div style="font-size:.72rem;color:#444;margin-bottom:.5rem;">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem;">
           AIコスト 7日 <strong style="color:#888;">${{ "%.2f"|format(data.cost7.total_cost or 0) }}</strong>
           / 30日 <strong style="color:#888;">${{ "%.2f"|format(data.cost30.total_cost or 0) }}</strong>
           （{{ data.cost7.total_calls or 0 }}回 / {{ data.cost30.total_calls or 0 }}回）
