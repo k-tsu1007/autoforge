@@ -259,6 +259,7 @@ def run_scan() -> dict:
                             tweet_time = datetime.fromisoformat(time_dt.replace("Z", "+00:00"))
                             age = datetime.now(timezone.utc) - tweet_time
                             if age.total_seconds() > 86400:  # 24時間
+                                print(f"  ⏭ 古い ({int(age.total_seconds()/3600)}時間前): {time_dt[:16]}")
                                 continue
                         except Exception:
                             pass
@@ -266,6 +267,7 @@ def run_scan() -> dict:
                     parent_link = time_link.locator("..").first
                     href = parent_link.get_attribute("href") if parent_link.count() > 0 else None
                     if not href:
+                        print(f"  ⏭ URL取得失敗")
                         continue
                     mention_url = f"https://x.com{href}" if href.startswith("/") else href
 
@@ -274,15 +276,17 @@ def run_scan() -> dict:
                     author_full = user_el.inner_text() if user_el.count() > 0 else ""
                     author = author_full.split("\n")[0] if author_full else "unknown"
 
-                    # 自分自身の投稿はスキップ（@username がテキスト内に含まれるか）
+                    # 自分自身の投稿はスキップ
                     if f"@{my_user}" in author_full.lower() or my_user in author_full.lower():
+                        print(f"  ⏭ 自分の投稿: {mention_url[-40:]}")
                         continue
-                    # URLにも自分のユーザー名が含まれていたらスキップ
                     if f"/{my_user}/" in mention_url.lower():
+                        print(f"  ⏭ 自分のURL: {mention_url[-40:]}")
                         continue
 
                     # 処理済み or 同一著者に直近24時間以内にリプライ済みならスキップ
                     if _already_processed(mention_url, author=author):
+                        print(f"  ⏭ 処理済み: @{author} {mention_url[-40:]}")
                         continue
 
                     # テキスト取得
