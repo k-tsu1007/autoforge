@@ -242,8 +242,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                         await ocf_input.click()
                         await asyncio.sleep(1)
 
-                        # 方法A: JS nativeInputValueSetter（React対応）
-                        # f-string内でバックスラッシュ不可のため事前に変数化
+                        # execCommand('insertText') はReactのsynthetic eventsを正しくトリガーする
                         escaped_uname = uname.replace("'", "\\'")
                         js_code = (
                             "() => {"
@@ -251,30 +250,29 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                             "           || document.querySelector('input[name=\"text\"]');"
                             "  if (!el) return 'NOT_FOUND';"
                             "  el.focus();"
-                            "  try {"
-                            "    const setter = Object.getOwnPropertyDescriptor("
-                            "      window.HTMLInputElement.prototype, 'value').set;"
-                            f"    setter.call(el, '{escaped_uname}');"
-                            "    el.dispatchEvent(new Event('input', {bubbles: true}));"
-                            "    el.dispatchEvent(new Event('change', {bubbles: true}));"
-                            "    return 'JS_OK:' + el.value;"
-                            "  } catch(e) { return 'JS_ERR:' + e.message; }"
+                            "  el.click();"
+                            "  document.execCommand('selectAll', false, null);"
+                            "  document.execCommand('delete', false, null);"
+                            f"  const ok = document.execCommand('insertText', false, '{escaped_uname}');"
+                            "  return 'execCmd:' + ok + ':' + el.value;"
                             "}"
                         )
                         set_ok = await tab.evaluate(js_code)
-                        print(f"  JS setValue: {set_ok}")
+                        print(f"  JS execCommand: {set_ok}")
                         await asyncio.sleep(1)
 
-                        # 値が入っていなければ send_keys でフォールバック
-                        val_check = await tab.evaluate("""
-                            () => {
-                                const el = document.activeElement;
-                                return el ? el.value : '';
-                            }
-                        """)
+                        # 値確認
+                        val_check = await tab.evaluate(
+                            "() => { const el = document.querySelector('input[data-testid=\"ocfEnterTextTextInput\"]')"
+                            "     || document.querySelector('input[name=\"text\"]');"
+                            "  return el ? el.value : ''; }"
+                        )
                         print(f"  current value: '{val_check}'")
                         if not val_check:
+                            # フォールバック: クリックしてsend_keys
                             print("  send_keys フォールバック")
+                            await ocf_input.click()
+                            await asyncio.sleep(0.5)
                             await ocf_input.send_keys(uname)
                             await asyncio.sleep(1)
 
