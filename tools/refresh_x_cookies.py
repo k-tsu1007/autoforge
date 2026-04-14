@@ -120,6 +120,83 @@ def try_chrome_profile(session_path: Path) -> bool:
     return False
 
 
+async def _get_cookies_via_raw_ws(browser) -> list:
+    """nodriver の debugging WebSocket URL を取得して直接 CDP 接続でcookieを取得する。"""
+    import re
+    import urllib.request
+    import json as _json
+
+    # browser オブジェクトから WebSocket URL を探す
+    ws_url = None
+    for attr in ("websocket_url", "_ws_url", "ws_url"):
+        try:
+            ws_url = getattr(browser, attr, None)
+            if ws_url:
+                break
+        except Exception:
+            pass
+    # connection 属性経由
+    if not ws_url:
+        try:
+            ws_url = getattr(browser.connection, "url", None) or getattr(browser.connection, "ws_url", None)
+        except Exception:
+            pass
+    # config 経由
+    if not ws_url:
+        try:
+            port = browser.config.remote_debugging_port
+            ws_url = f"ws://localhost:{port}"
+        except Exception:
+            pass
+
+    if not ws_url:
+        print(f"  [raw_ws] ws_url 取得失敗。browser attrs: {[a for a in dir(browser) if not a.startswith('__')][:30]}")
+        return []
+
+    m = re.search(r"localhost:(\d+)", ws_url)
+    if not m:
+        print(f"  [raw_ws] ポート抽出失敗: {ws_url}")
+        return []
+    port = int(m.group(1))
+    print(f"  [raw_ws] Chrome debug port={port}")
+
+    # /json/list でページターゲットのWS URLを取得
+    try:
+        with urllib.request.urlopen(f"http://localhost:{port}/json/list", timeout=5) as r:
+            targets = _json.loads(r.read())
+    except Exception as e:
+        print(f"  [raw_ws] /json/list error: {e}")
+        return []
+
+    x_target = next((t for t in targets if "x.com" in t.get("url", "") and t.get("type") == "page"), None)
+    if not x_target:
+        x_target = next((t for t in targets if t.get("type") == "page"), None)
+    if not x_target:
+        print(f"  [raw_ws] ページターゲットなし: {[t.get('url','') for t in targets]}")
+        return []
+
+    tab_ws = x_target.get("webSocketDebuggerUrl", "")
+    print(f"  [raw_ws] tab ws: {tab_ws}")
+    if not tab_ws:
+        return []
+
+    try:
+        import websockets
+        async with websockets.connect(tab_ws, max_size=None) as ws:
+            await ws.send(_json.dumps({"id": 1, "method": "Network.enable", "params": {}}))
+            await asyncio.wait_for(ws.recv(), timeout=5)
+            await ws.send(_json.dumps({"id": 2, "method": "Network.getAllCookies", "params": {}}))
+            for _ in range(20):
+                msg = _json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+                if msg.get("id") == 2:
+                    cookies = msg.get("result", {}).get("cookies", [])
+                    print(f"  [raw_ws] {len(cookies)}件取得")
+                    return cookies
+    except Exception as e:
+        print(f"  [raw_ws] WS error: {type(e).__name__}: {e}")
+    return []
+
+
 def _cookie_obj_to_dict(c) -> dict:
     """nodriver/CDP Cookie オブジェクト → dict 変換。"""
     if isinstance(c, dict):
@@ -141,22 +218,27 @@ def _cookie_obj_to_dict(c) -> dict:
     return entry
 
 
-async def _get_cookies(tab) -> list:
-    """Network.getAllCookies (CDP標準) でcookieを取得する。"""
+async def _get_cookies(tab, browser=None) -> list:
+    """Cookie を取得する。複数の方法を順番に試みる。"""
     import nodriver.cdp.network as cdp_net
 
-    # Network ドメインを有効化してから全cookieを取得
-    for attempt in range(3):
-        try:
-            await asyncio.wait_for(tab.send(cdp_net.enable()), timeout=5)
-            raw = await asyncio.wait_for(tab.send(cdp_net.get_all_cookies()), timeout=10)
-            cookies = [_cookie_obj_to_dict(c) for c in (raw or [])]
-            has_auth = any(c["name"] == "auth_token" for c in cookies)
-            print(f"  [cookies] {len(cookies)}件取得, auth_token={'YES' if has_auth else 'no'}")
+    # 方法1: tab.send(Network.getAllCookies)
+    try:
+        await asyncio.wait_for(tab.send(cdp_net.enable()), timeout=5)
+        raw = await asyncio.wait_for(tab.send(cdp_net.get_all_cookies()), timeout=8)
+        cookies = [_cookie_obj_to_dict(c) for c in (raw or [])]
+        if cookies:
+            print(f"  [cookies/method1] {len(cookies)}件")
             return cookies
-        except Exception as e:
-            print(f"  [cookie試行{attempt+1}失敗] {type(e).__name__}: {e}")
-            await asyncio.sleep(2)
+    except Exception as e:
+        print(f"  [cookies/method1失敗] {type(e).__name__}: {e}")
+
+    # 方法2: raw WebSocket 直接接続
+    if browser is not None:
+        cookies = await _get_cookies_via_raw_ws(browser)
+        if cookies:
+            return cookies
+
     return []
 
 
@@ -375,7 +457,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
             except Exception:
                 pass
             # パスワード不要でログイン済みの可能性をチェック
-            cookies_now = await _get_cookies(tab)
+            cookies_now = await _get_cookies(tab, browser)
             if any(c["name"] == "auth_token" for c in cookies_now):
                 print("  パスワード不要でログイン済み！")
                 session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -423,7 +505,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         print("  auth_token待機中...")
         for wait_i in range(15):
             await asyncio.sleep(2)
-            cookies = await _get_cookies(tab)
+            cookies = await _get_cookies(tab, browser)
             has_auth = any(c["name"] == "auth_token" for c in cookies)
             print(f"  [{wait_i+1}/15] auth_token={'YES' if has_auth else 'no'}, cookies={len(cookies)}, URL={tab.url}")
             if has_auth:
