@@ -120,6 +120,32 @@ def try_chrome_profile(session_path: Path) -> bool:
     return False
 
 
+async def _get_cookies(tab) -> list:
+    """CDP経由でcookieを取得してdictリストで返す（nodriver Cookie objectを使わない）。"""
+    try:
+        import nodriver.cdp.network as cdp_net
+        raw = await asyncio.wait_for(
+            tab.send(cdp_net.get_cookies(urls=["https://x.com", "https://twitter.com"])),
+            timeout=5,
+        )
+        return [
+            {
+                "name": c.name,
+                "value": c.value,
+                "domain": c.domain,
+                "path": c.path,
+                "secure": bool(c.secure),
+                "httpOnly": bool(c.http_only),
+                "expires": int(c.expires) if c.expires and c.expires > 0 else -1,
+                "sameSite": c.same_site.value if c.same_site else None,
+            }
+            for c in (raw or [])
+        ]
+    except Exception as e:
+        print(f"  [cookie取得エラー] {e}")
+        return []
+
+
 async def _try_direct_login_async(session_path: Path) -> bool:
     """方法2: nodriverで直接ログイン。成功したらTrueを返す。"""
     email    = os.environ.get("X_EMAIL", "")
@@ -335,8 +361,8 @@ async def _try_direct_login_async(session_path: Path) -> bool:
             except Exception:
                 pass
             # パスワード不要でログイン済みの可能性をチェック
-            cookies_now = await browser.cookies.get_all()
-            if any(c.get("name") == "auth_token" for c in (cookies_now or [])):
+            cookies_now = await _get_cookies(tab)
+            if any(c["name"] == "auth_token" for c in cookies_now):
                 print("  パスワード不要でログイン済み！")
                 session_path.parent.mkdir(parents=True, exist_ok=True)
                 session_path.write_text(
@@ -383,9 +409,9 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         print("  auth_token待機中...")
         for wait_i in range(15):
             await asyncio.sleep(2)
-            cookies = await browser.cookies.get_all()
-            has_auth = any(c.get("name") == "auth_token" for c in (cookies or []))
-            print(f"  [{wait_i+1}/15] auth_token={'YES' if has_auth else 'no'}, cookies={len(cookies or [])}, URL={tab.url}")
+            cookies = await _get_cookies(tab)
+            has_auth = any(c["name"] == "auth_token" for c in cookies)
+            print(f"  [{wait_i+1}/15] auth_token={'YES' if has_auth else 'no'}, cookies={len(cookies)}, URL={tab.url}")
             if has_auth:
                 session_path.parent.mkdir(parents=True, exist_ok=True)
                 session_path.write_text(
