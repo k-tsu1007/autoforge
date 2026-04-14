@@ -464,8 +464,42 @@ def post_next_from_db(dry_run: bool = False) -> dict:
 
 
 def main():
-    force = "--force" in sys.argv
-    dry_run = "--dry-run" in sys.argv
+    import argparse as _ap
+    parser = _ap.ArgumentParser(add_help=False)
+    parser.add_argument("--instance", "-i", default=None)
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-delay", action="store_true")
+    args, _ = parser.parse_known_args()
+
+    if args.instance:
+        os.environ["AC_INSTANCE"] = args.instance
+        from core.instance import set_active_instance
+        set_active_instance(args.instance)
+        # .env 読み込み
+        _root = Path(__file__).resolve().parents[2]
+        for _ep in [_root / "instances" / args.instance / ".env", _root / ".env"]:
+            if not _ep.exists():
+                continue
+            for _line in _ep.read_text(encoding="utf-8", errors="replace").splitlines():
+                _line = _line.strip()
+                if not _line or _line.startswith("#") or "=" not in _line:
+                    continue
+                _k, _, _v = _line.partition("=")
+                _k = _k.strip(); _v = _v.strip().strip('"').strip("'")
+                if _k and _k not in os.environ:
+                    os.environ[_k] = _v
+        # パス再解決
+        global X_SESSION_JSON, STRATEGY_JSON, QUEUE_JSON, POSTED_JSON
+        from core.paths import x_session_path, strategy_path, tweet_queue_path, tweet_posted_path
+        X_SESSION_JSON = x_session_path()
+        STRATEGY_JSON = strategy_path()
+        QUEUE_JSON = tweet_queue_path()
+        POSTED_JSON = tweet_posted_path()
+        print(f"[poster] instance={args.instance}")
+
+    force = args.force or "--force" in sys.argv
+    dry_run = args.dry_run or "--dry-run" in sys.argv
 
     # 時間帯チェック
     if not force and not should_post_now():
@@ -473,7 +507,7 @@ def main():
         return
 
     # ランダム遅延（--no-delayで無効化可能）
-    if dry_run or "--no-delay" in sys.argv:
+    if dry_run or args.no_delay or "--no-delay" in sys.argv:
         delay = 0
     else:
         delay = random.randint(5 * 60, 15 * 60)
