@@ -153,34 +153,18 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         await tab.save_screenshot(str(snap0))
         print(f"  step1 screenshot: {snap0} / URL: {tab.url}")
 
-        # メール入力: JS でネイティブイベントを発火しながら値をセット
-        await tab.evaluate(f"""
-            () => {{
-                const inp = document.querySelector('input');
-                if (!inp) return;
-                const setter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value').set;
-                setter.call(inp, {json.dumps(email)});
-                inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-            }}
-        """)
+        # メール入力: nodriver ネイティブ send_keys を使用
+        email_input = await tab.select('input')
+        await email_input.click()
+        await asyncio.sleep(0.5)
+        await email_input.send_keys(email)
         await asyncio.sleep(1)
 
         snap1 = data_dir / "login_step2.png"
         await tab.save_screenshot(str(snap1))
 
-        # Enter キーで次へ進む
-        await tab.evaluate("""
-            () => {
-                const inp = document.querySelector('input');
-                if (inp) inp.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', keyCode: 13, bubbles: true}));
-            }
-        """)
-        # Enterキーの代替としてsend_keysも試す
-        editor = await tab.select('input')
-        if editor:
-            await editor.send_keys('\n')
+        # 「次へ」ボタンをクリック
+        await email_input.send_keys('\n')
         await asyncio.sleep(3)
 
         snap2 = data_dir / "login_step3.png"
@@ -188,38 +172,30 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         print(f"  step3 URL: {tab.url}")
 
         # ユーザー名確認ステップ（出る場合）
-        ocf_count = await tab.evaluate(
-            "() => document.querySelectorAll('input[data-testid=\"ocfEnterTextTextInput\"]').length"
-        )
-        if ocf_count and ocf_count > 0:
-            print("  ユーザー名確認ステップ...")
-            uname = username or email.split("@")[0]
-            await tab.evaluate(f"""
-                () => {{
-                    const inp = document.querySelector('input[data-testid="ocfEnterTextTextInput"]');
-                    if (!inp) return;
-                    const setter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value').set;
-                    setter.call(inp, {json.dumps(uname)});
-                    inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-                }}
-            """)
-            await asyncio.sleep(0.5)
-            ocf_input = await tab.select('input[data-testid="ocfEnterTextTextInput"]')
+        try:
+            ocf_input = await tab.select('input[data-testid="ocfEnterTextTextInput"]', timeout=5)
             if ocf_input:
+                print("  ユーザー名確認ステップ...")
+                uname = username or email.split("@")[0]
+                await ocf_input.click()
+                await asyncio.sleep(0.3)
+                await ocf_input.send_keys(uname)
+                await asyncio.sleep(0.5)
                 await ocf_input.send_keys('\n')
-            await asyncio.sleep(3)
+                await asyncio.sleep(3)
+        except Exception:
+            pass
 
-        # パスワード欄を探す（タイムアウト付きで待機）
+        # パスワード欄を待機
         pw_found = False
         for _ in range(10):
-            pw_count = await tab.evaluate(
-                "() => document.querySelectorAll('input[name=\"password\"]').length"
-            )
-            if pw_count and pw_count > 0:
-                pw_found = True
-                break
+            try:
+                pw_input = await tab.select('input[name="password"]', timeout=2)
+                if pw_input:
+                    pw_found = True
+                    break
+            except Exception:
+                pass
             # パスワード不要でログイン済みの可能性をチェック
             cookies_now = await browser.cookies.get_all()
             if any(c.get("name") == "auth_token" for c in (cookies_now or [])):
@@ -241,21 +217,11 @@ async def _try_direct_login_async(session_path: Path) -> bool:
             return False
 
         # パスワード入力
-        await tab.evaluate(f"""
-            () => {{
-                const inp = document.querySelector('input[name="password"]');
-                if (!inp) return;
-                const setter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value').set;
-                setter.call(inp, {json.dumps(password)});
-                inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-            }}
-        """)
+        await pw_input.click()
+        await asyncio.sleep(0.3)
+        await pw_input.send_keys(password)
         await asyncio.sleep(0.5)
-        pw_input = await tab.select('input[name="password"]')
-        if pw_input:
-            await pw_input.send_keys('\n')
+        await pw_input.send_keys('\n')
         await asyncio.sleep(5)
 
         cookies = await browser.cookies.get_all()
