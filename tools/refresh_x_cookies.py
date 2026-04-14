@@ -146,26 +146,46 @@ async def _try_direct_login_async(session_path: Path) -> bool:
     try:
         tab = await browser.get("https://x.com/i/flow/login")
 
-        # ステップ1: ログインフォーム表示待ち
-        await asyncio.sleep(5)
+        # ステップ1: ログインフォーム表示待ち（X はページ読み込みが遅い）
+        await asyncio.sleep(8)
 
         snap0 = data_dir / "login_step1.png"
         await tab.save_screenshot(str(snap0))
         print(f"  step1 screenshot: {snap0} / URL: {tab.url}")
 
         # メール入力: nodriver ネイティブ send_keys を使用
-        email_input = await tab.select('input')
+        email_input = await tab.select('input[autocomplete="username"]', timeout=10)
+        if not email_input:
+            email_input = await tab.select('input', timeout=5)
         await email_input.click()
-        await asyncio.sleep(0.5)
-        await email_input.send_keys(email)
         await asyncio.sleep(1)
+        await email_input.send_keys(email)
+        await asyncio.sleep(2)
 
         snap1 = data_dir / "login_step2.png"
         await tab.save_screenshot(str(snap1))
 
-        # 「次へ」ボタンをクリック
-        await email_input.send_keys('\n')
-        await asyncio.sleep(3)
+        # 「次へ」ボタンをクリック（Enter より確実）
+        next_btn_clicked = False
+        for btn_sel in [
+            'button[data-testid="LoginForm_Login_Button"]',
+            'div[data-testid="LoginForm_Login_Button"]',
+        ]:
+            try:
+                btn = await tab.select(btn_sel, timeout=3)
+                if btn:
+                    await btn.click()
+                    next_btn_clicked = True
+                    print(f"  メール次へボタンクリック: {btn_sel}")
+                    break
+            except Exception:
+                continue
+        if not next_btn_clicked:
+            await email_input.send_keys('\n')
+            print("  メール次へ: Enter送信")
+
+        # ページ遷移を十分待つ
+        await asyncio.sleep(6)
 
         snap2 = data_dir / "login_step3.png"
         await tab.save_screenshot(str(snap2))
@@ -180,7 +200,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
             # どの input が表示されているか JS でスキャン
             ocf_input = None
             for attempt in range(4):
-                await asyncio.sleep(2)
+                await asyncio.sleep(3)
 
                 # JS で現在 visible な input の情報を取得
                 scan = await tab.evaluate("""
@@ -220,9 +240,9 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                     if ocf_input:
                         print(f"  input found ({sel}), typing: {uname}")
                         await ocf_input.click()
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(1)
                         await ocf_input.send_keys(uname)
-                        await asyncio.sleep(0.8)
+                        await asyncio.sleep(2)
                         snap_ocf = data_dir / f"login_ocf_{attempt}.png"
                         await tab.save_screenshot(str(snap_ocf))
                         print(f"  入力後スクリーンショット: {snap_ocf}")
@@ -255,7 +275,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                             await ocf_input.send_keys('\n')
                             print("  Enterキー送信")
 
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(6)
                         snap_after = data_dir / "login_step4.png"
                         await tab.save_screenshot(str(snap_after))
                         print(f"  次へ後スクリーンショット: {snap_after}")
