@@ -241,8 +241,45 @@ async def _try_direct_login_async(session_path: Path) -> bool:
                         print(f"  input found ({sel}), typing: {uname}")
                         await ocf_input.click()
                         await asyncio.sleep(1)
-                        await ocf_input.send_keys(uname)
-                        await asyncio.sleep(2)
+
+                        # 方法A: JS nativeInputValueSetter（React対応）
+                        set_ok = await tab.evaluate(f"""
+                            () => {{
+                                const el = document.querySelector('{sel.replace("'", "\\'")}')
+                                        || document.querySelector('input[data-testid="ocfEnterTextTextInput"]')
+                                        || document.querySelector('input[name="text"]');
+                                if (!el) return 'NOT_FOUND';
+                                el.focus();
+                                try {{
+                                    const setter = Object.getOwnPropertyDescriptor(
+                                        window.HTMLInputElement.prototype, 'value'
+                                    ).set;
+                                    setter.call(el, '{uname}');
+                                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                    return 'JS_OK:' + el.value;
+                                }} catch(e) {{
+                                    return 'JS_ERR:' + e.message;
+                                }}
+                            }}
+                        """)
+                        print(f"  JS setValue: {set_ok}")
+                        await asyncio.sleep(1)
+
+                        # 値が入っていなければ send_keys でフォールバック
+                        val_check = await tab.evaluate("""
+                            () => {
+                                const el = document.activeElement;
+                                return el ? el.value : '';
+                            }
+                        """)
+                        print(f"  current value: '{val_check}'")
+                        if not val_check:
+                            print("  send_keys フォールバック")
+                            await ocf_input.send_keys(uname)
+                            await asyncio.sleep(1)
+
+                        await asyncio.sleep(1)
                         snap_ocf = data_dir / f"login_ocf_{attempt}.png"
                         await tab.save_screenshot(str(snap_ocf))
                         print(f"  入力後スクリーンショット: {snap_ocf}")
