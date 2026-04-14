@@ -293,22 +293,20 @@ def run_scan() -> dict:
 
                     print(f"  処理: @{author} — {mention_text[:50]}")
 
-                    # いいね（通知ページから直接クリック）
-                    like_btn = article.locator('[data-testid="like"]').first
-                    if like_btn.count() > 0:
-                        like_btn.click()
-                        page.wait_for_timeout(1200)
-                        liked += 1
-                        print(f"    ❤️ いいね")
-
-                    _record_like(mention_url, mention_text, author)
-
-                    # 返信判断
+                    # 返信判断（いいねは送信時に同時実行）
                     decision = _decide_reply(mention_text)
                     if decision["should_reply"] and decision["reply"]:
                         _queue_reply(mention_url, mention_text, author, decision["reply"])
                         queued += 1
                     else:
+                        # 返信しない場合はスキャン時にいいねだけ付ける
+                        like_btn = article.locator('[data-testid="like"]').first
+                        if like_btn.count() > 0:
+                            like_btn.click()
+                            page.wait_for_timeout(1200)
+                            liked += 1
+                            print(f"    ❤️ いいね（返信なし）")
+                        _record_like(mention_url, mention_text, author)
                         skipped += 1
                         print(f"    ⏭ 返信なし（会話終了 or 不要と判断）")
 
@@ -397,6 +395,21 @@ def run_send() -> dict:
             if ok:
                 with transaction() as c:
                     c.execute("UPDATE mention_reply_queue SET sent = 1 WHERE id = ?", (row_id,))
+                # いいねを送信と同時に実行
+                try:
+                    from platforms.x.actions import like_tweet
+                    if like_tweet(mention_url):
+                        print(f"    ❤️ いいね")
+                        from core.db import record_growth_action
+                        record_growth_action(
+                            action_type="mention_like",
+                            target_url=mention_url,
+                            target_user=author,
+                            target_text=reply_text[:500],
+                            success=True,
+                        )
+                except Exception as e:
+                    print(f"    いいね失敗（返信は成功）: {e}")
                 try:
                     from core.db import record_growth_action
                     record_growth_action(
