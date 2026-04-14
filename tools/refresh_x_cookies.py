@@ -120,43 +120,44 @@ def try_chrome_profile(session_path: Path) -> bool:
     return False
 
 
-async def _get_cookies(browser) -> list:
-    """browser.cookies.get_all() で取得した Cookie オブジェクトを dict リストに変換して返す。"""
-    try:
-        print("  [debug] cookies.get_all() 呼び出し中...")
-        raw = await asyncio.wait_for(browser.cookies.get_all(), timeout=10)
-        print(f"  [debug] 取得完了: type={type(raw).__name__}, count={len(raw) if raw else 0}")
-        if not raw:
-            return []
-        # 最初のアイテムの型と属性を表示
-        first = raw[0]
-        print(f"  [debug] first item: type={type(first).__name__}, repr={repr(first)[:150]}")
-        result = []
-        for c in raw:
-            if isinstance(c, dict):
-                result.append(c)
-                continue
-            # Cookie dataclass → dict
-            entry = {
-                "name": getattr(c, "name", ""),
-                "value": getattr(c, "value", ""),
-                "domain": getattr(c, "domain", ""),
-                "path": getattr(c, "path", "/"),
-                "secure": bool(getattr(c, "secure", False)),
-                "httpOnly": bool(getattr(c, "http_only", getattr(c, "httpOnly", False))),
-            }
-            exp = getattr(c, "expires", -1)
-            if exp and exp > 0:
-                entry["expires"] = int(exp)
-            ss = getattr(c, "same_site", getattr(c, "sameSite", None))
-            if ss is not None:
-                entry["sameSite"] = ss.value if hasattr(ss, "value") else str(ss)
-            result.append(entry)
-        print(f"  [debug] 変換後: {len(result)}件, auth_token={'YES' if any(r['name']=='auth_token' for r in result) else 'no'}")
-        return result
-    except Exception as e:
-        print(f"  [cookie取得エラー] {type(e).__name__}: {e}")
-        return []
+def _cookie_obj_to_dict(c) -> dict:
+    """nodriver/CDP Cookie オブジェクト → dict 変換。"""
+    if isinstance(c, dict):
+        return c
+    entry = {
+        "name": getattr(c, "name", ""),
+        "value": getattr(c, "value", ""),
+        "domain": getattr(c, "domain", ""),
+        "path": getattr(c, "path", "/"),
+        "secure": bool(getattr(c, "secure", False)),
+        "httpOnly": bool(getattr(c, "http_only", getattr(c, "httpOnly", False))),
+    }
+    exp = getattr(c, "expires", -1)
+    if exp and exp > 0:
+        entry["expires"] = int(exp)
+    ss = getattr(c, "same_site", getattr(c, "sameSite", None))
+    if ss is not None:
+        entry["sameSite"] = ss.value if hasattr(ss, "value") else str(ss)
+    return entry
+
+
+async def _get_cookies(tab) -> list:
+    """Network.getAllCookies (CDP標準) でcookieを取得する。"""
+    import nodriver.cdp.network as cdp_net
+
+    # Network ドメインを有効化してから全cookieを取得
+    for attempt in range(3):
+        try:
+            await asyncio.wait_for(tab.send(cdp_net.enable()), timeout=5)
+            raw = await asyncio.wait_for(tab.send(cdp_net.get_all_cookies()), timeout=10)
+            cookies = [_cookie_obj_to_dict(c) for c in (raw or [])]
+            has_auth = any(c["name"] == "auth_token" for c in cookies)
+            print(f"  [cookies] {len(cookies)}件取得, auth_token={'YES' if has_auth else 'no'}")
+            return cookies
+        except Exception as e:
+            print(f"  [cookie試行{attempt+1}失敗] {type(e).__name__}: {e}")
+            await asyncio.sleep(2)
+    return []
 
 
 async def _try_direct_login_async(session_path: Path) -> bool:
@@ -374,7 +375,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
             except Exception:
                 pass
             # パスワード不要でログイン済みの可能性をチェック
-            cookies_now = await _get_cookies(browser)
+            cookies_now = await _get_cookies(tab)
             if any(c["name"] == "auth_token" for c in cookies_now):
                 print("  パスワード不要でログイン済み！")
                 session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -422,7 +423,7 @@ async def _try_direct_login_async(session_path: Path) -> bool:
         print("  auth_token待機中...")
         for wait_i in range(15):
             await asyncio.sleep(2)
-            cookies = await _get_cookies(browser)
+            cookies = await _get_cookies(tab)
             has_auth = any(c["name"] == "auth_token" for c in cookies)
             print(f"  [{wait_i+1}/15] auth_token={'YES' if has_auth else 'no'}, cookies={len(cookies)}, URL={tab.url}")
             if has_auth:
