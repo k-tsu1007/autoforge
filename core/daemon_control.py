@@ -132,40 +132,35 @@ def stop_daemon() -> dict:
 
 
 def start_daemon() -> dict:
-    """デーモンを fully detached で起動する。
+    """デーモンを fully detached で起動する (wmic process call create)。
 
-    Windows の CreateProcess に DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    フラグを付けて、親 (webapp) が終了してもデーモンが生き残るようにする。
+    wmic が作った Win32_Process は呼び出し元プロセスの子ではないため、
+    webapp や ssh が終了しても daemon は生き残る。
     """
     if sys.platform != "win32":
         return {"ok": False, "error": "Windows 以外は非対応"}
-    bat = _daemon_bat()
-    if not bat:
-        return {"ok": False, "error": "autoforge_daemon*.bat が見つかりません"}
 
     existing = _find_daemon_pid()
     if existing:
         return {"ok": True, "already_running": True, "pid": existing}
 
-    DETACHED_PROCESS = 0x00000008
-    CREATE_NEW_PROCESS_GROUP = 0x00000200
-    CREATE_NO_WINDOW = 0x08000000
-    flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+    inst = _current_instance()
+    # 現在の webapp と同じ python executable を使う
+    py_exe = sys.executable
+    cmdline = f'"{py_exe}" -m tools.run_daemon --instance {inst}'
 
     try:
-        subprocess.Popen(
-            ["cmd", "/c", str(bat)],
-            cwd=str(ROOT),
-            creationflags=flags,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            close_fds=True,
+        result = subprocess.run(
+            ["wmic", "process", "call", "create", cmdline, str(ROOT)],
+            capture_output=True, text=True, timeout=15,
         )
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-    # 数秒待って確認
+    if result.returncode != 0:
+        return {"ok": False, "error": f"wmic failed: {result.stderr[:200]}"}
+
+    # 数秒待って PID を確認
     import time
     for _ in range(12):
         time.sleep(1)
