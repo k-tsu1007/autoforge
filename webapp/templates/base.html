@@ -65,7 +65,88 @@ html, body {
 }
 
 /* ─── LAYOUT ─── */
-main { max-width: 1100px; margin: 0 auto; padding: 1.4rem; }
+.layout { display: flex; min-height: calc(100vh - 45px); }
+main { flex: 1; max-width: 1100px; margin: 0 auto; padding: 1.4rem; min-width: 0; }
+
+/* ─── SIDEBAR ─── */
+#sidebar {
+  width: 200px; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  padding: 1rem .7rem;
+  position: sticky; top: 45px;
+  height: calc(100vh - 45px);
+  overflow-y: auto;
+}
+#sidebar .sb-label {
+  font-size: .65rem; color: var(--dim); text-transform: uppercase; letter-spacing: .08em;
+  padding: .3rem .5rem .5rem; font-weight: 600;
+}
+#sidebar .sb-card {
+  display: block;
+  padding: .55rem .6rem .5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text);
+  margin-bottom: .2rem;
+  border: 1px solid transparent;
+  transition: background .15s, border-color .15s;
+}
+#sidebar .sb-card:hover { background: var(--surface2); border-color: var(--border); }
+#sidebar .sb-card.active {
+  background: var(--surface2);
+  border-color: var(--border);
+}
+#sidebar .sb-card.active .sb-dot { color: var(--lime); }
+#sidebar .sb-head { display: flex; align-items: center; gap: .35rem; font-size: .82rem; font-weight: 600; }
+#sidebar .sb-dot { color: var(--dim); font-size: .8rem; }
+#sidebar .sb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+#sidebar .sb-status { font-size: .7rem; }
+#sidebar .sb-stats {
+  display: flex; gap: .7rem; margin-top: .2rem; padding-left: 1rem;
+  font-size: .7rem; color: var(--muted);
+  font-family: var(--font-mono);
+}
+#sidebar .sb-stats span b { color: var(--text); font-weight: 700; }
+#sidebar .sb-divider { height: 1px; background: var(--border); margin: .6rem .3rem; }
+#sidebar .sb-link {
+  display: block; padding: .4rem .6rem;
+  font-size: .75rem; color: var(--muted);
+  text-decoration: none; border-radius: 5px;
+}
+#sidebar .sb-link:hover { background: var(--surface2); color: var(--text); }
+
+/* sidebar toggle button (mobile) */
+#sidebar-toggle {
+  display: none;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text); padding: .35rem .6rem;
+  border-radius: 5px; cursor: pointer; font-size: .85rem;
+  line-height: 1;
+}
+
+/* ─── MOBILE ─── */
+@media (max-width: 767px) {
+  #hdr { gap: .6rem; padding: .6rem .9rem; }
+  #hdr nav { overflow-x: auto; scrollbar-width: none; }
+  #hdr nav::-webkit-scrollbar { display: none; }
+  #sidebar-toggle { display: inline-flex; align-items: center; }
+  #sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    height: 100vh; width: 260px; z-index: 200;
+    transform: translateX(-100%);
+    transition: transform .2s ease-out;
+    box-shadow: 2px 0 20px rgba(0,0,0,.5);
+  }
+  #sidebar.open { transform: translateX(0); }
+  #sidebar-backdrop {
+    display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 150;
+  }
+  #sidebar-backdrop.open { display: block; }
+  main { padding: 1rem; }
+}
 
 /* ─── CARD ─── */
 .card {
@@ -165,8 +246,10 @@ a { color: var(--blue); }
 <body>
 
 {% set _path = request.url.path if request else '/' %}
+{% set _instances = sidebar_instances() %}
 
 <div id="hdr">
+  <button id="sidebar-toggle" aria-label="サイドバー" onclick="document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sidebar-backdrop').classList.toggle('open');">☰</button>
   <a href="{% if _path == '/instances' or _path == '/' %}/instances{% else %}/dash{% endif %}" class="hdr-brand">auto<span>forge</span></a>
 
   {% if _path != '/instances' and _path != '/' %}
@@ -189,9 +272,44 @@ a { color: var(--blue); }
   </div>
 </div>
 
+<div id="sidebar-backdrop" onclick="document.getElementById('sidebar').classList.remove('open'); this.classList.remove('open');"></div>
+
+<div class="layout">
+<aside id="sidebar">
+  <div class="sb-label">Accounts</div>
+  {% for inst in _instances %}
+    {% set _active = (inst.name == instance_name) %}
+    {% if _active %}
+      <div class="sb-card active">
+    {% else %}
+      {% set _host = request.url.hostname if request else 'localhost' %}
+      {% set _port = inst.webapp_port or 8502 %}
+      <a class="sb-card" href="//{{ _host }}:{{ _port }}{{ _path }}">
+    {% endif %}
+        <div class="sb-head">
+          <span class="sb-dot">●</span>
+          <span class="sb-name">{{ inst.display_name }}</span>
+          <span class="sb-status">{{ inst.status_icon }}</span>
+        </div>
+        <div class="sb-stats">
+          <span>tweet <b>{{ inst.tweets_today }}</b></span>
+          <span>like <b>{{ inst.likes_today }}</b></span>
+        </div>
+    {% if _active %}
+      </div>
+    {% else %}
+      </a>
+    {% endif %}
+  {% endfor %}
+
+  <div class="sb-divider"></div>
+  <a class="sb-link" href="/instances">全インスタンス概要 →</a>
+</aside>
+
 <main>
   {% block content %}{% endblock %}
 </main>
+</div>
 
 </body>
 </html>

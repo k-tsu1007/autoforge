@@ -82,6 +82,62 @@ def _active_instance_name() -> str:
 # Jinja のグローバルに instance_name を入れて、全テンプレート共通で使えるようにする
 templates.env.globals["instance_name"] = _active_instance_name()
 
+
+# === サイドバー用インスタンス一覧 (30秒キャッシュ) ===
+_sidebar_cache: dict = {"data": None, "expires_at": 0.0}
+
+
+def _sidebar_instances() -> list:
+    """各インスタンスの簡易サマリを返す (sidebar用)。
+
+    キャッシュ30秒。 DBアクセスが発生するため毎回コストを避ける。
+    """
+    import time
+    now = time.time()
+    if _sidebar_cache["data"] is not None and now < _sidebar_cache["expires_at"]:
+        return _sidebar_cache["data"]
+
+    try:
+        from webapp.multi import collect_all_instances
+        summaries = collect_all_instances()
+    except Exception:
+        summaries = []
+
+    # status 絵文字を計算する
+    from datetime import datetime as _dt
+    out = []
+    for s in summaries:
+        status_icon = "💤"  # default: quiet
+        hb = s.get("last_heartbeat")
+        if hb:
+            try:
+                hb_dt = _dt.fromisoformat(hb.replace("Z", "+00:00"))
+                now_dt = _dt.now(hb_dt.tzinfo) if hb_dt.tzinfo else _dt.now()
+                delta_sec = (now_dt - hb_dt).total_seconds()
+                if delta_sec < 300:  # 5分以内
+                    status_icon = "✅"
+                elif delta_sec < 3600:  # 1時間以内
+                    status_icon = "✅"
+                else:
+                    status_icon = "💤"
+            except Exception:
+                pass
+        out.append({
+            "name": s["name"],
+            "display_name": s.get("display_name") or s["name"],
+            "webapp_port": s.get("webapp_port"),
+            "tweets_today": s.get("tweets_today_posted", 0),
+            "likes_today": s.get("growth_actions_today", 0),
+            "status_icon": status_icon,
+        })
+
+    _sidebar_cache["data"] = out
+    _sidebar_cache["expires_at"] = now + 30
+    return out
+
+
+templates.env.globals["sidebar_instances"] = _sidebar_instances
+
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
