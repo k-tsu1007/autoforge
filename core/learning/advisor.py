@@ -204,10 +204,10 @@ def ask_claude(stats: dict) -> dict:
 - thread_length_min: 最小ツイート数
 - thread_length_max: 最大ツイート数
 - thread_weekly_target: 週に投稿するスレッド数（0〜5）
-- single_post_slots: 単発ツイートを投稿する時刻のリスト（"HH:MM" 形式、10分刻み）。**リスト長 = 1日の投稿本数**（システムが100%実行する前提、別 target は設定不要）。目安 **35〜40本**。成長フェーズでは量で学習加速。読者活動時間帯（朝6-9時、昼11-14時、夕17-20時、夜21-23時）中心に、20-40分間隔で均等分散
+- single_post_slots: 単発ツイートを投稿する時刻のリスト（"HH:MM" 形式、10分刻み）。**リスト長 = 1日の投稿本数**。目安 **20〜30本**（Xのスパム判定回避のため35本超は非推奨。ソフトブロックされると数時間〜24時間全投稿停止）。読者活動時間帯（朝6-9時、昼11-14時、夕17-20時、夜21-23時）中心に**35-40分以上の間隔**で分散
 - quote_post_slots: 引用RTする時刻のリスト。目安4〜8本。関連投稿が多い時間帯 (朝・昼・夕) に分散
-- reply_post_slots: リプライする時刻のリスト。目安 **35〜40本**。フォロワー獲得の主軸なので多め。単発スロットと被らない時刻に配置
-- like_post_slots: いいねする時刻のリスト。目安15〜25本。多めに散らすほうが自然
+- reply_post_slots: リプライする時刻のリスト。目安 **15〜25本**（過剰はスパム判定の主因、30本超は非推奨）。単発スロットと被らない時刻に配置
+- like_post_slots: いいねする時刻のリスト。目安15〜25本
 - min_gap_minutes: 連投の最小間隔（分）
 - growth_daily_likes: 1日に自動いいねする数（5〜30）。デフォルト15。多いほどアカウント露出が増えるが、1時間に5件超でスパム判定リスク。trust_building期は積極的に上げて関係構築を加速
 - growth_search_keywords: 関連ユーザー発掘用の検索キーワード5〜8個。【重要】各キーワードは1〜2単語まで。実際のXユーザーが日常的にツイートする自然な口語を選ぶ。例: 「副業 始めたい」「ChatGPT 試した」「フォロワー 増えない」「Instagram フォロワー」「副業 初心者」「個人発信」。3単語以上や「改善策」「検証結果」「収益化」のような硬い言葉は検索ヒット数が極端に減るので禁止
@@ -311,12 +311,13 @@ def _validate(data: dict) -> dict:
     # スロット系: LLM が出した配列をそのまま採用 (normalize + 上限でキャップ)
     from core.slot_utils import normalize_slots
     # (key, hard_max, default_count_cap)
+    # (key, hard_max, default_count_cap) — hard_max はスパム判定回避の上限
     SLOT_SPECS = [
-        ("single_post_slots", 48, 40),
-        ("quote_post_slots",  16, 4),
-        ("reply_post_slots",  48, 40),
-        ("like_post_slots",   48, 20),
-        ("note_post_slots",   8,  1),
+        ("single_post_slots", 32, 25),
+        ("quote_post_slots",  12, 4),
+        ("reply_post_slots",  28, 20),
+        ("like_post_slots",   32, 20),
+        ("note_post_slots",   6,  1),
     ]
     for key, hard_max, default_cap in SLOT_SPECS:
         cleaned = normalize_slots(data.get(key) or [])
