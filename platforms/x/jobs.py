@@ -51,62 +51,6 @@ def _update_x_health(status: str, note: str = ""):
         pass
 
 
-def job_x_post_check():
-    """X投稿チェック。posting_policy が「今投稿すべき」と判断したら投稿する。"""
-    try:
-        from platforms.x.poster import post_next_from_db
-        from platforms.x.policy import PostingPolicy
-
-        policy = PostingPolicy()
-        ok, reason = policy.should_post_now()
-        if not ok:
-            _update_x_health("alive", reason[:80])
-            return
-
-        slot = f"h{datetime.now(JST).hour}"
-        _log(f"🐦 投稿OK ({reason}): 実行")
-        result = post_next_from_db()
-
-        if result["posted"]:
-            tweet_url = result.get("url", "")
-            _log(f"✅ 投稿成功 (slot={slot}) {tweet_url}")
-            _update_x_health("alive", f"slot={slot} (posted)")
-            try:
-                from core.notify import send_discord
-                if tweet_url:
-                    send_discord(content=f"🐦 X投稿 → {tweet_url}")
-                else:
-                    send_discord(content=f"🐦 X投稿しました (slot={slot})")
-            except Exception as e:
-                _log(f"  Discord通知失敗: {e}")
-        else:
-            reason = result.get("reason", "unknown")
-            if reason in ("no target",):
-                _log(f"  対象なし: {reason} → キュー補充を試みる")
-                _update_x_health("alive", f"slot={slot} ({reason})")
-                try:
-                    from platforms.x.tweet_generator import run as _tg_run
-                    _tg_run({})
-                    _log("  ツイートキュー補充完了")
-                except Exception as e:
-                    _log(f"  キュー補充失敗: {e}")
-            else:
-                _log(f"❌ 投稿失敗: {reason}")
-                _update_x_health("error", reason)
-                try:
-                    from core.notify import send_discord
-                    send_discord(embeds=[{
-                        "title": "❌ X投稿失敗",
-                        "description": result.get("text", "")[:500],
-                        "color": 15158332,
-                        "footer": {"text": f"slot={slot} reason={reason}"},
-                    }])
-                except Exception:
-                    pass
-    except Exception as e:
-        _log(f"❌ X投稿チェックエラー: {e}")
-
-
 def job_x_growth():
     """成長エージェント — 1回1いいねまで。1日合計は advisor 連動。"""
     now = datetime.now(JST)
@@ -213,20 +157,58 @@ def job_regen_learn():
         _log(f"❌ 再生成ログ学習エラー: {e}")
 
 
+def job_x_tweet_sweeper():
+    """取りこぼし保険: scheduled_at が過去なのに発火していないツイートを拾う。
+
+    通常は DateTrigger が時刻ピンポイントで発火するので何もしない。
+    webapp 承認後や daemon 再起動の取りこぼし対策として 10 分おきに動く。
+    """
+    try:
+        from platforms.x.schedule import sweep_overdue
+        picked = sweep_overdue(max_items=5)
+        if picked > 0:
+            _log(f"🧹 sweeper: {picked}件投稿")
+    except Exception as e:
+        _log(f"❌ sweeper エラー: {e}")
+
+
 def register_jobs(scheduler, jst, inst=None):
     """APScheduler に X 関連ジョブを登録する。"""
     from apscheduler.triggers.interval import IntervalTrigger
     from apscheduler.triggers.cron import CronTrigger
+    from platforms.x.schedule import (
+        set_scheduler, register_pending_on_startup, migrate_null_scheduled_at,
+    )
 
     now = datetime.now(jst)
 
+    # daemon scheduler をモジュールに注入 → 以降 schedule_tweet() が DateTrigger 登録できる
+    set_scheduler(scheduler)
+
+    # 旧データの scheduled_at=NULL を埋める (1回だけ)
+    try:
+        migrated = migrate_null_scheduled_at()
+        if migrated > 0:
+            _log(f"📋 migration: scheduled_at を {migrated}件埋めた")
+    except Exception as e:
+        _log(f"❌ migration エラー: {e}")
+
+    # 未発火ツイート全件に DateTrigger を再登録
+    try:
+        registered = register_pending_on_startup(scheduler)
+        _log(f"⏰ 起動時スケジュール再登録: {registered}件")
+    except Exception as e:
+        _log(f"❌ 起動時再登録エラー: {e}")
+
+    # 取りこぼし保険: 10分おき
     scheduler.add_job(
-        job_x_post_check,
-        IntervalTrigger(minutes=5),
-        id="x_post_check",
-        name="X: Post Check",
+        job_x_tweet_sweeper,
+        IntervalTrigger(minutes=10),
+        id="x_tweet_sweeper",
+        name="X: Tweet Sweeper",
         max_instances=1,
         coalesce=True,
+        next_run_time=now + timedelta(minutes=1),
     )
     scheduler.add_job(
         job_x_growth,

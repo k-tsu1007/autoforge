@@ -23,11 +23,31 @@
     </div>
 </div>
 
-<h3 style="margin-top:2rem;">これから投稿される予定 ({{ queue|length }}件)</h3>
+<h3 style="margin-top:2rem;">投稿スケジュール ({{ queue|length }}件)</h3>
 <div class="card">
     {% if queue %}
-        {% for q in queue %}
-        <div class="pre">{{ q.text }}</div>
+        <style>
+          .sch-row { display: grid; grid-template-columns: 140px 90px 1fr; gap: .8rem; padding: .5rem .3rem; border-bottom: 1px solid var(--line); align-items: start; }
+          .sch-row:last-child { border-bottom: none; }
+          .sch-time { font-family: var(--font-mono); font-size: .8rem; color: var(--blue); white-space: nowrap; }
+          .sch-time-now { color: #d8b4fe; }
+          .sch-type { font-size: .7rem; color: var(--muted); padding-top: .12rem; }
+          .sch-text { font-size: .85rem; white-space: pre-wrap; line-height: 1.5; }
+          .sch-pending { color: var(--dim); font-size: .7rem; margin-left: .4rem; }
+        </style>
+        {% for q in queue|sort(attribute='scheduled_at') %}
+        <div class="sch-row">
+          <span class="{% if q.scheduled_at == 'immediate' %}sch-time sch-time-now{% else %}sch-time{% endif %}">
+            {% if q.scheduled_at == 'immediate' %}⚡ 即時
+            {% elif q.scheduled_at %}📅 {{ q.scheduled_at[5:16]|replace('T', ' ') }}
+            {% else %}—{% endif %}
+          </span>
+          <span class="sch-type">
+            {{ q.type or '単発' }}
+            {% if q.approved is none %}<span class="sch-pending">(承認待ち)</span>{% endif %}
+          </span>
+          <span class="sch-text">{{ q.text }}</span>
+        </div>
         {% endfor %}
     {% else %}
     <p style="color:var(--muted);">予定なし。次のNote公開時に補充されます。</p>

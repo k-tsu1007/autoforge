@@ -502,6 +502,64 @@ def post_next_from_db(dry_run: bool = False) -> dict:
     return {"posted": False, "reason": "post failed", "tweet_id": target["id"], "url": "", "text": target["text"]}
 
 
+def post_tweet_by_id(tweet_id: int) -> dict:
+    """指定 ID のツイートを 1件だけ投稿する (DateTrigger 発火時の本体)。
+
+    Returns: {"posted": bool, "tweet_id": int, "url": str, "text": str, "reason": str?}
+    """
+    from core.db import (
+        get_connection, mark_tweet_queue_posted, add_posted_tweet,
+        is_already_posted_today, increment_tweet_fail_count,
+    )
+
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, type, text FROM tweet_queue "
+        "WHERE id=? AND posted=0 AND approved=1 AND COALESCE(fail_count,0) < 3",
+        (tweet_id,),
+    ).fetchone()
+    if row is None:
+        return {"posted": False, "reason": "not eligible", "tweet_id": tweet_id, "url": "", "text": ""}
+
+    target = dict(row)
+    print(f"投稿対象 (id={target['id']}, type={target.get('type','')}): {target['text'][:80]}")
+
+    if is_already_posted_today(target["text"]):
+        print("  ⚠️ 今日既に同じ内容を投稿済み → スキップ")
+        mark_tweet_queue_posted(target["id"])
+        return {"posted": False, "reason": "duplicate today", "tweet_id": target["id"], "url": "", "text": target["text"]}
+
+    if target.get("type") == "thread":
+        try:
+            tweets_arr = json.loads(target["text"])
+            if not isinstance(tweets_arr, list) or len(tweets_arr) < 2:
+                raise ValueError("invalid thread payload")
+            result = post_thread(tweets_arr)
+        except Exception as e:
+            print(f"❌ スレッドパース失敗: {e}")
+            increment_tweet_fail_count(target["id"])
+            return {"posted": False, "reason": f"thread parse: {e}", "tweet_id": target["id"], "url": "", "text": target["text"]}
+    else:
+        result = post_to_x(target["text"])
+
+    if result == "DUPLICATE":
+        mark_tweet_queue_posted(target["id"])
+        add_posted_tweet(target["text"])
+        print(f"  ⚠️ 重複のため投稿済みマーク: id={target['id']}")
+        return {"posted": False, "reason": "duplicate", "tweet_id": target["id"], "url": "", "text": target["text"]}
+
+    success = bool(result)
+    tweet_url = result if isinstance(result, str) else ""
+
+    if success:
+        mark_tweet_queue_posted(target["id"])
+        add_posted_tweet(target["text"])
+        return {"posted": True, "tweet_id": target["id"], "url": tweet_url, "text": target["text"]}
+
+    increment_tweet_fail_count(target["id"])
+    return {"posted": False, "reason": "post failed", "tweet_id": target["id"], "url": "", "text": target["text"]}
+
+
 def main():
     import argparse as _ap
     parser = _ap.ArgumentParser(add_help=False)

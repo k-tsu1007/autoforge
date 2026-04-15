@@ -24,7 +24,19 @@
   .rv-done { opacity: .35; pointer-events: none; text-decoration: line-through; }
   .rv-hint { background: #0d1a0d; border: 1px solid #16a34a44; border-radius: 8px; padding: .9rem 1.1rem; font-size: .8rem; color: var(--green); margin-bottom: 1.2rem; }
   .rv-hint code { background: #16a34a22; padding: .1rem .35rem; border-radius: 4px; font-family: monospace; }
+  .rv-schedule { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .7rem; font-family: var(--font-mono); margin-left: .3rem; }
+  .rv-schedule-time { background: #1a2744; color: var(--blue); border: 1px solid #60a5fa44; }
+  .rv-schedule-now  { background: #3a1a44; color: #d8b4fe; border: 1px solid #a855f744; }
 </style>
+
+{# ─── helpers ─── #}
+{% macro schedule_badge(scheduled_at) -%}
+  {% if scheduled_at == 'immediate' %}
+    <span class="rv-schedule rv-schedule-now">⚡ 即時</span>
+  {% elif scheduled_at %}
+    <span class="rv-schedule rv-schedule-time">📅 {{ scheduled_at[5:16] | replace('T', ' ') }}</span>
+  {% endif %}
+{%- endmacro %}
 
 <div class="rv-header">
   <h2 style="margin:0;">レビューキュー</h2>
@@ -56,6 +68,7 @@
   <div class="rv-card-body">
     <div class="rv-meta">
       #{{ t.id }} &nbsp;·&nbsp; {{ t.type }} &nbsp;·&nbsp; {{ t.added_at[:16] if t.added_at else '—' }}
+      {{ schedule_badge(t.scheduled_at) }}
     </div>
     <div class="rv-text" id="tw-text-{{ t.id }}">{{ t.text }}</div>
   </div>
@@ -96,7 +109,7 @@
     <div class="rv-meta">
       #{{ e.id }} &nbsp;·&nbsp;
       {% if e.action_type == 'quote_tweet' %}🔁 引用RT{% else %}💬 リプライ{% endif %}
-      &nbsp;·&nbsp; {{ e.scheduled_at[:16] if e.scheduled_at else '—' }}
+      {{ schedule_badge(e.scheduled_at) }}
     </div>
     <div class="rv-sub">
       <strong>対象:</strong> {{ e.target_text[:120] if e.target_text else '—' }}{% if e.target_text and e.target_text | length > 120 %}…{% endif %}
@@ -138,7 +151,10 @@
 <div class="rv-card" id="rp-{{ r.id }}">
   <div class="rv-card-body">
     <div class="rv-meta">
-      #{{ r.id }} &nbsp;·&nbsp; @{{ r.mention_author }} &nbsp;·&nbsp; 送信予定 {{ r.send_after[:16] if r.send_after else '—' }}
+      #{{ r.id }} &nbsp;·&nbsp; @{{ r.mention_author }}
+      {% if r.send_after %}
+        <span class="rv-schedule rv-schedule-time">📅 {{ r.send_after[5:16] | replace('T', ' ') }}</span>
+      {% endif %}
     </div>
     <div class="rv-sub">
       <strong>相手:</strong> {{ r.mention_text[:120] if r.mention_text else '—' }}{% if r.mention_text and r.mention_text | length > 120 %}…{% endif %}

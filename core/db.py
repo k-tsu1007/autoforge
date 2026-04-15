@@ -436,22 +436,15 @@ def get_tweet_weekly_summary() -> dict:
 # === Tweet Queue ===
 
 def add_to_tweet_queue(tweet_type: str, text: str, scheduled_at: str = None) -> None:
-    """キューにツイートを追加。
-    scheduled_at: ISO形式の文字列 ('2026-04-12T10:00:00+09:00')。
-                  指定すると post_next_from_db がその時刻になるまでスキップする。
-    レビューモード時は approved=NULL（保留）で挿入し、承認後に投稿される。
+    """投稿スケジュールに1件追加する (後方互換 API)。
+
+    内部では platforms.x.schedule.schedule_tweet() に委譲する:
+    - scheduled_at が指定されていなければ advisor.single_post_slots から空き時刻を自動割り当て
+    - 'リンク付き' type は即時 ('immediate') 扱い
+    - レビューモード時は approved=NULL で挿入
     """
-    approved = None if review_mode_enabled() else 1
-    with transaction() as conn:
-        # 列が無い古いDBにも対応
-        try:
-            conn.execute("ALTER TABLE tweet_queue ADD COLUMN scheduled_at TEXT")
-        except Exception:
-            pass
-        conn.execute(
-            "INSERT INTO tweet_queue (type, text, scheduled_at, approved) VALUES (?, ?, ?, ?)",
-            (tweet_type, text, scheduled_at, approved),
-        )
+    from platforms.x.schedule import schedule_tweet
+    schedule_tweet(tweet_type, text, post_time=scheduled_at)
 
 
 def get_unposted_tweets() -> list[dict]:

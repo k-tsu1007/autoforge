@@ -119,24 +119,16 @@ def generate_batch(n: int = None) -> list[str]:
 
 
 def add_to_queue(tweets: list[str]) -> int:
-    from core.db import get_connection, review_mode_enabled
-    conn = get_connection()
-    approved = None if review_mode_enabled() else 1
+    """生成されたツイートをスケジュールに追加する。
+
+    各ツイートに advisor.single_post_slots から空き時刻を割り当てる。
+    slot が枯渇していたら 'immediate' 扱い (= 次の sweep で発火)。
+    """
+    from platforms.x.schedule import schedule_tweet
     added = 0
-    now = datetime.now(JST).isoformat()
     for t in tweets:
-        # 重複チェック
-        exists = conn.execute(
-            "SELECT id FROM tweet_queue WHERE text = ?", (t,)
-        ).fetchone()
-        if exists:
-            continue
-        conn.execute(
-            "INSERT INTO tweet_queue (type, text, added_at, posted, approved) VALUES (?, ?, ?, 0, ?)",
-            ("単発", t, now, approved),
-        )
-        added += 1
-    conn.commit()
+        if schedule_tweet("単発", t) is not None:
+            added += 1
     return added
 
 

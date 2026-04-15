@@ -280,7 +280,7 @@ def review_page(request: Request, user: str = Depends(check_auth)):
     from core.db import get_connection, review_mode_enabled
     conn = get_connection()
     tweets = [dict(r) for r in conn.execute(
-        "SELECT id, type, text, added_at FROM tweet_queue "
+        "SELECT id, type, text, added_at, scheduled_at FROM tweet_queue "
         "WHERE posted=0 AND approved IS NULL ORDER BY id DESC"
     ).fetchall()]
     replies = [dict(r) for r in conn.execute(
