@@ -58,6 +58,13 @@ def job_note_analytics_refresh():
         snapshot_note_followers()
     except Exception as e:
         _log(f"❌ note follower snapshot エラー: {e}")
+    try:
+        from core.learning.revenue import update_articles_revenue
+        result = update_articles_revenue()
+        if result.get("note_updated") or result.get("affiliate_updated"):
+            _log(f"💰 revenue 更新: {result}")
+    except Exception as e:
+        _log(f"❌ revenue 取得エラー: {e}")
 
 
 def register_jobs(scheduler, jst, inst=None):

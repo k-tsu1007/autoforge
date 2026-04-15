@@ -109,6 +109,11 @@
         <div class="sv">{{ data.followers.note.current }}</div>
         {% if data.followers.note.delta_7d %}<div style="font-size:.65rem;color:{% if data.followers.note.delta_7d > 0 %}var(--green){% else %}var(--red){% endif %};">{{ '%+d'|format(data.followers.note.delta_7d) }}/週</div>{% endif %}
       </div>
+      <div class="ns-sub-cell">
+        <div class="sn">月収 (円)</div>
+        <div class="sv">{{ '{:,}'.format(data.metrics.monthly_revenue|int) }}</div>
+        <div style="font-size:.65rem;color:var(--dim);">phase: {{ data.phase }}</div>
+      </div>
     </div>
   </div>
 
