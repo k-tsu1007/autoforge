@@ -53,28 +53,29 @@ def _find_daemon_pid() -> Optional[int]:
     except Exception:
         return None
 
+    def _check(entry: dict) -> Optional[int]:
+        cmd = entry.get("CommandLine", "") or ""
+        if "tools.run_daemon" in cmd and inst in cmd:
+            try:
+                pid = int(entry.get("ProcessId", "0") or "0")
+                if pid > 0:
+                    return pid
+            except Exception:
+                pass
+        return None
+
     current: dict = {}
-    for line in result.stdout.splitlines():
-        line = line.strip()
+    for raw in result.stdout.splitlines():
+        line = raw.strip()
         if not line:
-            cmd = current.get("CommandLine", "") or ""
-            if "tools.run_daemon" in cmd and inst in cmd:
-                try:
-                    return int(current.get("ProcessId", "0"))
-                except Exception:
-                    pass
+            hit = _check(current)
+            if hit:
+                return hit
             current = {}
         elif "=" in line:
             k, _, v = line.partition("=")
-            current[k] = v
-    # 最後のエントリも確認
-    cmd = current.get("CommandLine", "") or ""
-    if "tools.run_daemon" in cmd and inst in cmd:
-        try:
-            return int(current.get("ProcessId", "0"))
-        except Exception:
-            pass
-    return None
+            current[k.strip()] = v.strip()
+    return _check(current)
 
 
 def get_daemon_status() -> dict:
@@ -119,7 +120,7 @@ def get_daemon_status() -> dict:
 def stop_daemon() -> dict:
     """現在インスタンスのデーモンプロセスを kill する。"""
     pid = _find_daemon_pid()
-    if pid is None:
+    if pid is None or pid <= 0:
         return {"ok": True, "already_stopped": True}
     try:
         subprocess.run(
@@ -145,9 +146,9 @@ def start_daemon() -> dict:
         return {"ok": True, "already_running": True, "pid": existing}
 
     inst = _current_instance()
-    # 現在の webapp と同じ python executable を使う
+    # webapp を起動している Python を再利用。path にスペースが無い想定
     py_exe = sys.executable
-    cmdline = f'"{py_exe}" -m tools.run_daemon --instance {inst}'
+    cmdline = f"{py_exe} -m tools.run_daemon --instance {inst}"
 
     try:
         result = subprocess.run(
@@ -157,8 +158,9 @@ def start_daemon() -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-    if result.returncode != 0:
-        return {"ok": False, "error": f"wmic failed: {result.stderr[:200]}"}
+    out = (result.stdout or "") + (result.stderr or "")
+    if result.returncode != 0 or "失敗" in out or "failed" in out.lower() or "ReturnValue = 0" not in out:
+        return {"ok": False, "error": f"wmic: {out[:250]}"}
 
     # 数秒待って PID を確認
     import time
