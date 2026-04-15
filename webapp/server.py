@@ -559,6 +559,32 @@ def review_reply_regenerate(
         return HTMLResponse(f'<div class="rv-text" style="color:#f87171;">エラー: {e}</div>')
 
 
+# === Daemon 制御 ===
+
+@app.get("/admin/daemon/status", response_class=JSONResponse)
+def admin_daemon_status(user: str = Depends(check_auth)):
+    from core.daemon_control import get_daemon_status
+    return get_daemon_status()
+
+
+@app.post("/admin/daemon/start", response_class=JSONResponse)
+def admin_daemon_start(user: str = Depends(check_auth)):
+    from core.daemon_control import start_daemon
+    return start_daemon()
+
+
+@app.post("/admin/daemon/stop", response_class=JSONResponse)
+def admin_daemon_stop(user: str = Depends(check_auth)):
+    from core.daemon_control import stop_daemon
+    return stop_daemon()
+
+
+@app.post("/admin/daemon/restart", response_class=JSONResponse)
+def admin_daemon_restart(user: str = Depends(check_auth)):
+    from core.daemon_control import restart_daemon
+    return restart_daemon()
+
+
 # === 記事レビュー ===
 
 @app.post("/review/article/{note_id}/approve", response_class=HTMLResponse)
