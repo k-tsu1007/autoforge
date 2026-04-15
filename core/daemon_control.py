@@ -132,7 +132,11 @@ def stop_daemon() -> dict:
 
 
 def start_daemon() -> dict:
-    """デーモンを detached で起動する (Start-Process -WindowStyle Hidden)。"""
+    """デーモンを fully detached で起動する。
+
+    Windows の CreateProcess に DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    フラグを付けて、親 (webapp) が終了してもデーモンが生き残るようにする。
+    """
     if sys.platform != "win32":
         return {"ok": False, "error": "Windows 以外は非対応"}
     bat = _daemon_bat()
@@ -143,18 +147,27 @@ def start_daemon() -> dict:
     if existing:
         return {"ok": True, "already_running": True, "pid": existing}
 
+    DETACHED_PROCESS = 0x00000008
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    CREATE_NO_WINDOW = 0x08000000
+    flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+
     try:
-        subprocess.run(
-            ["powershell", "-Command",
-             f"Start-Process -FilePath '{bat}' -WindowStyle Hidden"],
-            capture_output=True, timeout=15,
+        subprocess.Popen(
+            ["cmd", "/c", str(bat)],
+            cwd=str(ROOT),
+            creationflags=flags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
         )
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
     # 数秒待って確認
     import time
-    for _ in range(8):
+    for _ in range(12):
         time.sleep(1)
         pid = _find_daemon_pid()
         if pid:
