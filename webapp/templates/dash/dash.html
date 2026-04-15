@@ -37,19 +37,17 @@
 .ab-ttl { font-weight: 600; }
 .ab-dtl { color: var(--dim); font-size: .78rem; }
 
-/* ─── SCORES ─── */
-#scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1px; }
-@media (max-width: 520px) { #scores { grid-template-columns: 1fr 1fr; } }
-.sc-cell { background: var(--surface); padding: 1.4rem 1rem; text-align: center; }
-.sc-cell.sc-done { background: #0c150d; }
-.sc-big { font-family: var(--font-mono); font-size: 3.8rem; font-weight: 900; line-height: 1; letter-spacing: -.05em; color: var(--dim); }
-.sc-done   .sc-big { color: var(--green); }
-.sc-active .sc-big { color: var(--blue); }
-.sc-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-top: .3rem; }
-.sc-bar-wrap { height: 2px; background: var(--border); margin: .5rem auto 0; max-width: 80px; }
-.sc-bar-fill { height: 100%; background: var(--blue); }
-.sc-done .sc-bar-fill { background: var(--green); }
-.sc-sub { font-size: .75rem; color: var(--dim); margin-top: .25rem; }
+/* ─── RESULTS ─── */
+#results-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1px; }
+@media (max-width: 767px) { #results-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 380px) { #results-grid { grid-template-columns: 1fr; } }
+.rc-cell { background: var(--surface); padding: 1rem .9rem; text-align: center; }
+.rc-cell.rc-active { background: #0a1220; }
+.rc-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.rc-big { font-family: var(--font-mono); font-size: 2.4rem; font-weight: 900; line-height: 1.1; letter-spacing: -.04em; color: var(--dim); margin: .3rem 0; }
+.rc-cell.rc-active .rc-big { color: var(--blue); }
+.rc-sub { font-size: .7rem; color: var(--dim); font-family: var(--font-mono); }
+.rc-sub b { color: var(--muted); font-weight: 700; }
 
 /* ─── MID GRID ─── */
 #mid-grid { display: grid; grid-template-columns: 1fr 260px; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 1px; margin-bottom: 1.4rem; }

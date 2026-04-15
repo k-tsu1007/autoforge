@@ -327,6 +327,92 @@ def compute_today_stats() -> dict:
     }
 
 
+def compute_content_results() -> dict:
+    """投稿コンテンツから得られた結果を集計する (result-oriented metrics)。
+
+    - 今日 (today): 今日投稿したものの現時点までの数値 (views/likes/imp/RT/reply)
+    - 7日平均 (7d_avg): 過去7日に投稿したコンテンツの合計を7で割った平均/日
+
+    X分析は朝6時に fetch されるため、今日投稿したツイートは翌朝まで反映されない。
+    その場合は今日=0として表示される (既知の制約)。
+    """
+    from core.db import get_connection
+    conn = get_connection()
+    today = _today()
+
+    # --- 今日 ---
+    art_t = conn.execute(
+        "SELECT COALESCE(SUM(views),0) v, COALESCE(SUM(likes),0) l "
+        "FROM articles WHERE substr(COALESCE(published_at,''),1,10)=?", (today,)
+    ).fetchone()
+    art_views_today = int(art_t["v"] or 0)
+    art_likes_today = int(art_t["l"] or 0)
+
+    # tweets テーブルは created_at が X 投稿時刻
+    try:
+        tw_t = conn.execute(
+            "SELECT COALESCE(SUM(impressions),0) i, COALESCE(SUM(likes),0) l, "
+            "       COALESCE(SUM(retweets),0) r, COALESCE(SUM(replies),0) p "
+            "FROM tweets WHERE substr(COALESCE(created_at,''),1,10)=?", (today,)
+        ).fetchone()
+        tw_imp_today   = int(tw_t["i"] or 0)
+        tw_likes_today = int(tw_t["l"] or 0)
+        tw_rt_today    = int(tw_t["r"] or 0)
+        tw_rep_today   = int(tw_t["p"] or 0)
+    except Exception:
+        tw_imp_today = tw_likes_today = tw_rt_today = tw_rep_today = 0
+
+    tw_engage_today = tw_likes_today + tw_rt_today + tw_rep_today
+    total_likes_today = art_likes_today + tw_likes_today
+
+    # --- 7日平均 (/日) ---
+    # 過去7日間(今日含む)に投稿された記事の views/likes 合計 ÷ 7
+    week_start = (datetime.now(JST) - timedelta(days=6)).strftime("%Y-%m-%d")
+
+    art_7 = conn.execute(
+        "SELECT COALESCE(SUM(views),0) v, COALESCE(SUM(likes),0) l "
+        "FROM articles WHERE substr(COALESCE(published_at,''),1,10)>=?", (week_start,)
+    ).fetchone()
+    art_views_7d = int(art_7["v"] or 0) / 7.0
+    art_likes_7d = int(art_7["l"] or 0) / 7.0
+
+    try:
+        tw_7 = conn.execute(
+            "SELECT COALESCE(SUM(impressions),0) i, COALESCE(SUM(likes),0) l, "
+            "       COALESCE(SUM(retweets),0) r, COALESCE(SUM(replies),0) p "
+            "FROM tweets WHERE substr(COALESCE(created_at,''),1,10)>=?", (week_start,)
+        ).fetchone()
+        tw_imp_7d    = int(tw_7["i"] or 0) / 7.0
+        tw_likes_7d  = int(tw_7["l"] or 0) / 7.0
+        tw_engage_7d = (int(tw_7["l"] or 0) + int(tw_7["r"] or 0) + int(tw_7["p"] or 0)) / 7.0
+    except Exception:
+        tw_imp_7d = tw_likes_7d = tw_engage_7d = 0.0
+
+    total_likes_7d = art_likes_7d + tw_likes_7d
+
+    def _r(x):
+        return round(x, 1) if isinstance(x, float) else x
+
+    return {
+        "today": {
+            "article_views":  art_views_today,
+            "article_likes":  art_likes_today,
+            "tweet_imp":      tw_imp_today,
+            "tweet_likes":    tw_likes_today,
+            "tweet_engage":   tw_engage_today,
+            "total_likes":    total_likes_today,
+        },
+        "avg7": {
+            "article_views":  _r(art_views_7d),
+            "article_likes":  _r(art_likes_7d),
+            "tweet_imp":      _r(tw_imp_7d),
+            "tweet_likes":    _r(tw_likes_7d),
+            "tweet_engage":   _r(tw_engage_7d),
+            "total_likes":    _r(total_likes_7d),
+        },
+    }
+
+
 def _next_scheduled(today_plan: list) -> dict | None:
     """today_plan から「次に来るアクション」を返す。minutes_left 付き。"""
     now = datetime.now(JST)
@@ -389,6 +475,7 @@ def build_brain_data() -> dict:
 
     snapshots = get_recent_snapshots(30)
     today_stats = compute_today_stats()
+    results = compute_content_results()
     today_plan = _build_today_plan(strategy)
 
     return {
@@ -414,6 +501,7 @@ def build_brain_data() -> dict:
         "today_plan": today_plan,
         "today_stats": today_stats,
         "today_achievement": _today_achievement(today_stats, strategy),
+        "results": results,
         "next_event": _next_scheduled(today_plan),
         "daemon_status": _daemon_status(),
         "sparkline_pts": _sparkline_pts(snapshots[:14]),

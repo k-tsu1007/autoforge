@@ -51,29 +51,23 @@
 </div>
 {% endif %}
 
-{# ─── SCORES ─── #}
-{% set art = data.today_achievement.articles %}
-{% set tw  = data.today_achievement.tweets %}
-{% set lk  = data.today_achievement.likes %}
-<div id="scores">
-  <div class="sc-cell {% if art.pct >= 100 %}sc-done{% elif art.actual > 0 %}sc-active{% endif %}">
-    <div class="sc-big">{{ art.actual }}</div>
-    <div class="sc-label">今日の記事</div>
-    <div class="sc-bar-wrap"><div class="sc-bar-fill" style="width:{{ art.pct }}%;"></div></div>
-    <div class="sc-sub">/ {{ art.target }}本</div>
+{# ─── RESULTS (6 metrics × today + 7day avg) ─── #}
+{% set rt = data.results.today %}
+{% set ra = data.results.avg7 %}
+{% macro rcell(label, today_val, avg_val) -%}
+  <div class="rc-cell {% if today_val > 0 %}rc-active{% endif %}">
+    <div class="rc-label">{{ label }}</div>
+    <div class="rc-big">{{ today_val }}</div>
+    <div class="rc-sub">7日平均 <b>{{ avg_val }}</b>/日</div>
   </div>
-  <div class="sc-cell {% if tw.pct >= 100 %}sc-done{% elif tw.actual > 0 %}sc-active{% endif %}">
-    <div class="sc-big">{{ tw.actual }}</div>
-    <div class="sc-label">今日のツイート</div>
-    <div class="sc-bar-wrap"><div class="sc-bar-fill" style="width:{{ tw.pct }}%;"></div></div>
-    <div class="sc-sub">/ {{ tw.target }}件</div>
-  </div>
-  <div class="sc-cell {% if lk.actual > 0 %}sc-done{% endif %}">
-    <div class="sc-big">{{ lk.actual }}</div>
-    <div class="sc-label">もらったいいね</div>
-    <div style="height:.5rem;"></div>
-    <div class="sc-sub">今日の獲得</div>
-  </div>
+{%- endmacro %}
+<div id="results-grid">
+  {{ rcell('記事 PV',        rt.article_views, ra.article_views) }}
+  {{ rcell('記事 いいね',     rt.article_likes, ra.article_likes) }}
+  {{ rcell('TW imp',         rt.tweet_imp,     ra.tweet_imp) }}
+  {{ rcell('TW いいね',       rt.tweet_likes,   ra.tweet_likes) }}
+  {{ rcell('TW 総エンゲ',     rt.tweet_engage,  ra.tweet_engage) }}
+  {{ rcell('合計いいね',      rt.total_likes,   ra.total_likes) }}
 </div>
 
 {# ─── MID GRID: North Star + Right Stack ─── #}
