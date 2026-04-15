@@ -204,13 +204,10 @@ def ask_claude(stats: dict) -> dict:
 - thread_length_min: 最小ツイート数
 - thread_length_max: 最大ツイート数
 - thread_weekly_target: 週に投稿するスレッド数（0〜5）
-- single_daily_target: 1日の単発ツイート数（15〜30）。AI運用なのでフォロワー数や疲労に関係なく多めに投稿する。過去ツイートは資産になり、検索流入・アルゴリズム評価にもプラス。デフォルト20。スパム判定回避のため30本/日が上限
-- single_post_slots: 単発ツイートを投稿する時刻のリスト（"HH:MM" 形式の文字列、10分刻み。single_daily_target と同じ個数）。過去の hour_scores や読者活動時間帯（朝7-9時、昼12-13時、夕18-20時、夜21-23時）を考慮し、なるべく均等に分散。10分刻みで微調整可能。例: 単発12本なら ["07:00","08:30","09:00","12:10","13:00","17:30","18:00","19:00","20:00","21:30","22:00","23:00"]
-- quote_daily_target: 1日に引用RTする数（1〜8）。関連トピックのツイートに自分の観察を添えて引用する。初期は3〜5本推奨
-- quote_post_slots: 引用RTする時刻のリスト ("HH:MM" 文字列、quote_daily_target と同じ個数)。関連投稿が多い時間帯 (朝・昼・夕) に分散
-- reply_daily_target: 1日にリプライする数（3〜20）。関連発信者と交流しフォロワー獲得につなげる。初期は6〜10本推奨
-- reply_post_slots: リプライする時刻のリスト ("HH:MM" 文字列、reply_daily_target と同じ個数)
-- like_post_slots: いいねする時刻のリスト ("HH:MM" 文字列、growth_daily_likes と同じ個数)。多めに散らすほうが自然
+- single_post_slots: 単発ツイートを投稿する時刻のリスト（"HH:MM" 形式、10分刻み）。**リスト長 = 1日の投稿本数**（システムが100%実行する前提、別 target は設定不要）。目安 **35〜40本**。成長フェーズでは量で学習加速。読者活動時間帯（朝6-9時、昼11-14時、夕17-20時、夜21-23時）中心に、20-40分間隔で均等分散
+- quote_post_slots: 引用RTする時刻のリスト。目安4〜8本。関連投稿が多い時間帯 (朝・昼・夕) に分散
+- reply_post_slots: リプライする時刻のリスト。目安 **35〜40本**。フォロワー獲得の主軸なので多め。単発スロットと被らない時刻に配置
+- like_post_slots: いいねする時刻のリスト。目安15〜25本。多めに散らすほうが自然
 - min_gap_minutes: 連投の最小間隔（分）
 - growth_daily_likes: 1日に自動いいねする数（5〜30）。デフォルト15。多いほどアカウント露出が増えるが、1時間に5件超でスパム判定リスク。trust_building期は積極的に上げて関係構築を加速
 - growth_search_keywords: 関連ユーザー発掘用の検索キーワード5〜8個。【重要】各キーワードは1〜2単語まで。実際のXユーザーが日常的にツイートする自然な口語を選ぶ。例: 「副業 始めたい」「ChatGPT 試した」「フォロワー 増えない」「Instagram フォロワー」「副業 初心者」「個人発信」。3単語以上や「改善策」「検証結果」「収益化」のような硬い言葉は検索ヒット数が極端に減るので禁止
@@ -238,21 +235,19 @@ JSONのみ。前後に説明文は一切不要。
   "thread_length_min": 数字,
   "thread_length_max": 数字,
   "thread_weekly_target": 数字,
-  "single_daily_target": 数字,
   "single_post_slots": ["HH:MM", "HH:MM", ...],
-  "quote_daily_target": 数字,
   "quote_post_slots": ["HH:MM", ...],
-  "reply_daily_target": 数字,
   "reply_post_slots": ["HH:MM", ...],
   "like_post_slots": ["HH:MM", ...],
   "min_gap_minutes": 数字,
   "growth_daily_likes": 数字,
   "growth_search_keywords": ["...", "..."],
   "tweet_draft_patterns": ["...", "..."],
-  "note_daily_target": 数字,
   "note_post_slots": ["HH:MM", "HH:MM"],
-  "reasoning": "なぜこの数字にしたかを120字以内で"
-}}"""
+  "reasoning": "なぜこのスロット構成にしたかを120字以内で"
+}}
+
+※ *_daily_target は出力不要。システムが *_post_slots の長さから自動算出する。"""
 
     try:
         result = call_llm(prompt, task_type="strategy_evolution", temperature=0.3, max_tokens=600)
@@ -276,19 +271,20 @@ JSONのみ。前後に説明文は一切不要。
 
 
 def _validate(data: dict) -> dict:
-    """値が想定範囲内かチェック。範囲外はクリップ。"""
+    """値が想定範囲内かチェック。範囲外はクリップ。
+
+    *_daily_target は *_post_slots の長さから自動算出 (get_advice 側)。
+    ここでは slot リスト自体の妥当性のみチェックする。
+    """
     out = {}
+    # スカラー系: 単純 clip
     ranges = {
         "thread_length_default": (3, 8),
         "thread_length_min": (2, 6),
         "thread_length_max": (4, 10),
         "thread_weekly_target": (0, 7),
-        "single_daily_target": (5, 30),
-        "quote_daily_target": (0, 8),
-        "reply_daily_target": (0, 20),
         "min_gap_minutes": (15, 240),
         "growth_daily_likes": (0, 30),
-        "note_daily_target": (0, 5),
     }
     for k, (lo, hi) in ranges.items():
         v = data.get(k)
@@ -297,7 +293,7 @@ def _validate(data: dict) -> dict:
         else:
             out[k] = DEFAULTS[k]
 
-    # リスト系
+    # キーワードリスト
     kws = data.get("growth_search_keywords")
     if isinstance(kws, list) and 3 <= len(kws) <= 12 and all(isinstance(k, str) for k in kws):
         out["growth_search_keywords"] = [k.strip()[:40] for k in kws if k.strip()]
@@ -312,40 +308,21 @@ def _validate(data: dict) -> dict:
     else:
         out["tweet_draft_patterns"] = DEFAULTS["tweet_draft_patterns"]
 
-    # note_post_slots: "HH:MM" リスト (10分刻み)、note_daily_target と長さ一致
+    # スロット系: LLM が出した配列をそのまま採用 (normalize + 上限でキャップ)
     from core.slot_utils import normalize_slots
-    target = int(out.get("note_daily_target", 1))
-    cleaned = normalize_slots(data.get("note_post_slots") or [])
-    if len(cleaned) > target:
-        step = max(1, len(cleaned) // target)
-        cleaned = cleaned[::step][:target]
-    elif len(cleaned) < target:
-        for d in DEFAULTS["note_post_slots"]:
-            if d not in cleaned:
-                cleaned.append(d)
-            if len(cleaned) >= target:
-                break
-        cleaned = sorted(set(cleaned))[:target]
-    out["note_post_slots"] = cleaned or DEFAULTS["note_post_slots"][:max(1, target)]
-
-    def _fit_slots(key: str, target: int):
+    # (key, hard_max, default_count_cap)
+    SLOT_SPECS = [
+        ("single_post_slots", 48, 40),
+        ("quote_post_slots",  16, 4),
+        ("reply_post_slots",  48, 40),
+        ("like_post_slots",   48, 20),
+        ("note_post_slots",   8,  1),
+    ]
+    for key, hard_max, default_cap in SLOT_SPECS:
         cleaned = normalize_slots(data.get(key) or [])
-        if len(cleaned) > target:
-            step = max(1, len(cleaned) // target)
-            cleaned = cleaned[::step][:target]
-        elif len(cleaned) < target:
-            for d in DEFAULTS.get(key, []):
-                if d not in cleaned:
-                    cleaned.append(d)
-                if len(cleaned) >= target:
-                    break
-            cleaned = sorted(set(cleaned))[:target]
-        out[key] = cleaned or DEFAULTS.get(key, [])[:target]
-
-    _fit_slots("single_post_slots", int(out.get("single_daily_target", 20)))
-    _fit_slots("quote_post_slots",  int(out.get("quote_daily_target", 4)))
-    _fit_slots("reply_post_slots",  int(out.get("reply_daily_target", 8)))
-    _fit_slots("like_post_slots",   int(out.get("growth_daily_likes", 15)))
+        if not cleaned:
+            cleaned = DEFAULTS.get(key, [])[:default_cap]
+        out[key] = cleaned[:hard_max]
 
     out["reasoning"] = str(data.get("reasoning", ""))[:400]
     out["updated_at"] = datetime.now(JST).isoformat()
@@ -365,12 +342,23 @@ def save_recommendations(recs: dict, dry_run: bool = False) -> dict:
 
 
 def get_advice() -> dict:
-    """他モジュールが読む。strategy.json から。"""
+    """他モジュールが読む。strategy.json から。
+
+    *_daily_target は必ず対応する *_post_slots の長さと一致させる。
+    AI自動運用では全スロット実行可能なので、「目標」と「枠数」を分ける必要がない。
+    """
     try:
         strategy = json.loads(STRATEGY_JSON.read_text(encoding="utf-8"))
-        return {**DEFAULTS, **(strategy.get("advisor") or {})}
+        adv = {**DEFAULTS, **(strategy.get("advisor") or {})}
     except Exception:
-        return DEFAULTS.copy()
+        adv = DEFAULTS.copy()
+
+    # target を slot 数に合わせる (必ず 100% 実行できる前提)
+    for kind in ("single", "quote", "reply", "note"):
+        slots = adv.get(f"{kind}_post_slots") or []
+        if isinstance(slots, list):
+            adv[f"{kind}_daily_target"] = len(slots)
+    return adv
 
 
 def run(dry_run: bool = False) -> dict:
