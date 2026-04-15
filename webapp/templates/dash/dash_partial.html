@@ -99,8 +99,16 @@
     </div>
     {% endif %}
     <div class="ns-subs">
-      <div class="ns-sub-cell"><div class="sn">PV / 記事</div><div class="sv">{{ data.metrics.avg_views }}</div></div>
-      <div class="ns-sub-cell"><div class="sn">imp / TW</div><div class="sv">{{ data.metrics.avg_imp }}</div></div>
+      <div class="ns-sub-cell">
+        <div class="sn">X follower</div>
+        <div class="sv">{{ data.followers.x.current }}</div>
+        {% if data.followers.x.delta_7d %}<div style="font-size:.65rem;color:{% if data.followers.x.delta_7d > 0 %}var(--green){% else %}var(--red){% endif %};">{{ '%+d'|format(data.followers.x.delta_7d) }}/週</div>{% endif %}
+      </div>
+      <div class="ns-sub-cell">
+        <div class="sn">note follower</div>
+        <div class="sv">{{ data.followers.note.current }}</div>
+        {% if data.followers.note.delta_7d %}<div style="font-size:.65rem;color:{% if data.followers.note.delta_7d > 0 %}var(--green){% else %}var(--red){% endif %};">{{ '%+d'|format(data.followers.note.delta_7d) }}/週</div>{% endif %}
+      </div>
     </div>
   </div>
 

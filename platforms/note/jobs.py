@@ -39,9 +39,9 @@ def job_note_engage():
 
 
 def job_note_analytics_refresh():
-    """Note 分析の定期リフレッシュ — 記事の PV/スキ数を追従する。
+    """Note 分析の定期リフレッシュ — 記事の PV/スキ数 + follower 数を追従する。
 
-    note.com の private stats API を使用 (session.json の Cookie が必要)。
+    note.com の private stats API + public creator API を使用。
     日中 8-22時 に2時間おきで実行。
     """
     now = datetime.now(JST)
@@ -53,6 +53,11 @@ def job_note_analytics_refresh():
         evaluate_all()
     except Exception as e:
         _log(f"❌ note 分析リフレッシュエラー: {e}")
+    try:
+        from platforms.note.analytics import snapshot_note_followers
+        snapshot_note_followers()
+    except Exception as e:
+        _log(f"❌ note follower snapshot エラー: {e}")
 
 
 def register_jobs(scheduler, jst, inst=None):

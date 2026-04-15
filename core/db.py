@@ -225,6 +225,17 @@ CREATE TABLE IF NOT EXISTS regen_log (
     created_at TEXT DEFAULT (datetime('now', '+9 hours'))
 );
 CREATE INDEX IF NOT EXISTS idx_regen_log_type ON regen_log(content_type, approved);
+
+CREATE TABLE IF NOT EXISTS follower_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,           -- 'x' or 'note'
+    snapshot_date TEXT NOT NULL,      -- YYYY-MM-DD
+    followers INTEGER,
+    following INTEGER,
+    fetched_at TEXT,
+    UNIQUE(platform, snapshot_date)
+);
+CREATE INDEX IF NOT EXISTS idx_follower_snapshots ON follower_snapshots(platform, snapshot_date);
 """
 
 

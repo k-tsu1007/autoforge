@@ -26,10 +26,14 @@ JST = timezone(timedelta(hours=9))
 
 
 # === フェーズごとの North Star 定義 ===
+# 各フェーズの目的:
+#   trust_building       : reach を取りつつ刺さる読者を見つける (engaged な imp)
+#   early_monetization   : 興味層を note へ誘導する流量を伸ばす
+#   scaling              : 直接収益を最適化する
 NORTH_STAR_BY_PHASE = {
-    "trust_building":     {"name": "平均いいね/記事", "target": 3.0,  "kind": "avg_likes"},
-    "early_monetization": {"name": "フォロワー成長率/週", "target": 12,   "kind": "follower_growth"},
-    "scaling":            {"name": "月収 (円)",       "target": 10000, "kind": "monthly_revenue"},
+    "trust_building":     {"name": "Engaged Reach (7日)", "target": 5000.0, "kind": "engaged_reach"},
+    "early_monetization": {"name": "note週間PV",          "target": 500.0,  "kind": "weekly_note_pv"},
+    "scaling":            {"name": "月収 (円)",            "target": 10000.0, "kind": "monthly_revenue"},
 }
 
 
@@ -64,7 +68,66 @@ def compute_metrics() -> dict:
         "avg_imp":           _avg(tweets[:20], "impressions"),
         "avg_tweet_likes":   _avg(tweets[:20], "likes"),
         "tweet_count":       len(tweets),
+        "engaged_reach":     compute_engaged_reach(),
+        "weekly_note_pv":    compute_weekly_note_pv(),
+        "monthly_revenue":   compute_monthly_revenue(),
     }
+
+
+def compute_engaged_reach(days: int = 7) -> float:
+    """直近N日間で engagement(いいね/RT/返信) ≧1 を獲得した tweet の imp 合計。
+
+    バズったが反応ゼロ (vanity imp) を除外し、
+    「reach した上で誰かに刺さった imp」を測る。
+    """
+    from core.db import get_connection
+    conn = get_connection()
+    since = (datetime.now(JST) - timedelta(days=days)).strftime("%Y-%m-%d")
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(impressions), 0) AS r "
+            "FROM tweets "
+            "WHERE substr(COALESCE(created_at,''),1,10) >= ? "
+            "AND (COALESCE(likes,0) + COALESCE(retweets,0) + COALESCE(replies,0)) > 0",
+            (since,)
+        ).fetchone()
+        return float(row["r"] or 0)
+    except Exception:
+        return 0.0
+
+
+def compute_weekly_note_pv(days: int = 7) -> float:
+    """直近N日間に公開された note 記事の合計 PV。"""
+    from core.db import get_connection
+    conn = get_connection()
+    since = (datetime.now(JST) - timedelta(days=days)).strftime("%Y-%m-%d")
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(views), 0) AS v "
+            "FROM articles "
+            "WHERE substr(COALESCE(published_at,''),1,10) >= ?",
+            (since,)
+        ).fetchone()
+        return float(row["v"] or 0)
+    except Exception:
+        return 0.0
+
+
+def compute_monthly_revenue() -> float:
+    """過去30日に公開された記事の合計 revenue。"""
+    from core.db import get_connection
+    conn = get_connection()
+    since = (datetime.now(JST) - timedelta(days=30)).strftime("%Y-%m-%d")
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(revenue), 0) AS r "
+            "FROM articles "
+            "WHERE substr(COALESCE(published_at,''),1,10) >= ?",
+            (since,)
+        ).fetchone()
+        return float(row["r"] or 0)
+    except Exception:
+        return 0.0
 
 
 def take_snapshot() -> dict:
@@ -76,12 +139,8 @@ def take_snapshot() -> dict:
     phase = strategy.get("publishing_params", {}).get("phase", "trust_building")
     ns_def = NORTH_STAR_BY_PHASE.get(phase, NORTH_STAR_BY_PHASE["trust_building"])
 
-    if ns_def["kind"] == "avg_likes":
-        ns_value = metrics["avg_likes"]
-    elif ns_def["kind"] == "follower_growth":
-        ns_value = 0  # TODO: フォロワー数取得
-    else:
-        ns_value = 0
+    # NorthStar の値はすべて compute_metrics() に集約済み
+    ns_value = float(metrics.get(ns_def["kind"], 0.0))
 
     today = _today()
     with transaction() as conn:
@@ -413,6 +472,31 @@ def compute_content_results() -> dict:
     }
 
 
+def get_follower_stats() -> dict:
+    """X/note の最新 follower 数 + 7日前との差分を返す。"""
+    from core.db import get_connection
+    conn = get_connection()
+    out = {}
+    for plat in ("x", "note"):
+        try:
+            latest = conn.execute(
+                "SELECT followers FROM follower_snapshots WHERE platform=? ORDER BY snapshot_date DESC LIMIT 1",
+                (plat,)
+            ).fetchone()
+            week_ago_iso = (datetime.now(JST) - timedelta(days=7)).strftime("%Y-%m-%d")
+            past = conn.execute(
+                "SELECT followers FROM follower_snapshots "
+                "WHERE platform=? AND snapshot_date <= ? ORDER BY snapshot_date DESC LIMIT 1",
+                (plat, week_ago_iso)
+            ).fetchone()
+            cur = int(latest["followers"]) if latest else 0
+            old = int(past["followers"]) if past else cur
+            out[plat] = {"current": cur, "delta_7d": cur - old}
+        except Exception:
+            out[plat] = {"current": 0, "delta_7d": 0}
+    return out
+
+
 def _next_scheduled(today_plan: list) -> dict | None:
     """today_plan から「次に来るアクション」を返す。minutes_left 付き。"""
     now = datetime.now(JST)
@@ -439,10 +523,7 @@ def build_brain_data() -> dict:
     phase = strategy.get("publishing_params", {}).get("phase", "trust_building")
     ns_def = NORTH_STAR_BY_PHASE.get(phase, NORTH_STAR_BY_PHASE["trust_building"])
 
-    if ns_def["kind"] == "avg_likes":
-        ns_value = metrics["avg_likes"]
-    else:
-        ns_value = 0
+    ns_value = float(metrics.get(ns_def["kind"], 0.0))
 
     target = ns_def["target"]
     progress_pct = round(min(100, (ns_value / target * 100) if target else 0), 1)
@@ -502,6 +583,7 @@ def build_brain_data() -> dict:
         "today_stats": today_stats,
         "today_achievement": _today_achievement(today_stats, strategy),
         "results": results,
+        "followers": get_follower_stats(),
         "next_event": _next_scheduled(today_plan),
         "daemon_status": _daemon_status(),
         "sparkline_pts": _sparkline_pts(snapshots[:14]),

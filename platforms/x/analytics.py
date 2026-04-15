@@ -151,6 +151,51 @@ def update_tweet_history(new_tweets: list):
     return history
 
 
+def fetch_follower_count() -> dict:
+    """自分の現在の follower / following 数を返す。"""
+    try:
+        auth = get_client()
+        resp = requests.get(
+            "https://api.twitter.com/2/users/me",
+            params={"user.fields": "public_metrics"},
+            auth=auth, timeout=10,
+        )
+        if resp.status_code != 200:
+            print(f"X follower fetch failed: {resp.status_code}")
+            return {}
+        m = resp.json().get("data", {}).get("public_metrics", {})
+        return {
+            "followers": int(m.get("followers_count", 0)),
+            "following": int(m.get("following_count", 0)),
+        }
+    except Exception as e:
+        print(f"X follower fetch error: {e}")
+        return {}
+
+
+def snapshot_followers() -> dict:
+    """X follower 数を follower_snapshots に1日1件記録する (UPSERT)。"""
+    counts = fetch_follower_count()
+    if not counts:
+        return {"ok": False}
+    today = datetime.now(JST).strftime("%Y-%m-%d")
+    try:
+        from core.db import transaction
+        with transaction() as conn:
+            conn.execute(
+                "INSERT INTO follower_snapshots (platform, snapshot_date, followers, following, fetched_at) "
+                "VALUES ('x', ?, ?, ?, ?) "
+                "ON CONFLICT(platform, snapshot_date) DO UPDATE SET "
+                "  followers=excluded.followers, following=excluded.following, fetched_at=excluded.fetched_at",
+                (today, counts["followers"], counts["following"], datetime.now(JST).isoformat()),
+            )
+        print(f"X followers: {counts['followers']} (saved {today})")
+        return {"ok": True, **counts}
+    except Exception as e:
+        print(f"snapshot_followers DB error: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 def main():
     """Xメトリクスを取得して保存する。"""
     tweets = fetch_my_tweets()
@@ -163,6 +208,7 @@ def main():
                   f"インプレッション{summary.get('total_impressions', 0)}")
     else:
         print("ツイートデータなし（まだ投稿していないか、API未設定）")
+    snapshot_followers()
 
 
 if __name__ == "__main__":
