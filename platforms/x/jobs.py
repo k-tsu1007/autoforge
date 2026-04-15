@@ -185,6 +185,23 @@ def job_mention_send():
         _log(f"❌ メンション返信送信エラー: {e}")
 
 
+def job_x_analytics_refresh():
+    """X 分析の定期リフレッシュ — 今日投稿した自分のツイートの impressions/likes を追従する。
+
+    Pay Per Use API 。1回あたり2コール (/users/me + /users/:id/tweets) 程度。
+    日中 8-22時 に2時間おきで実行 (7回/日)。
+    """
+    now = datetime.now(JST)
+    if now.hour < 8 or now.hour > 22:
+        return
+    _log("📊 X 分析リフレッシュ")
+    try:
+        from platforms.x.analytics import main as x_main
+        x_main()
+    except Exception as e:
+        _log(f"❌ X 分析リフレッシュエラー: {e}")
+
+
 def job_regen_learn():
     """再生成ログ学習 — 毎朝6:00にレビュー承認/却下パターンを分析してknowledgeを更新。"""
     _log("🧠 再生成ログ学習開始")
@@ -261,6 +278,14 @@ def register_jobs(scheduler, jst, inst=None):
         CronTrigger(hour=6, minute=0, timezone=jst),
         id="regen_learn",
         name="Regen Log Learning",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        job_x_analytics_refresh,
+        CronTrigger(hour="8,10,12,14,16,18,20,22", minute=5, timezone=jst),
+        id="x_analytics_refresh",
+        name="X: Analytics Refresh",
         max_instances=1,
         coalesce=True,
     )

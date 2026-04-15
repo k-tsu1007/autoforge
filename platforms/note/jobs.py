@@ -38,6 +38,23 @@ def job_note_engage():
         _log(f"❌ note engage エラー: {e}")
 
 
+def job_note_analytics_refresh():
+    """Note 分析の定期リフレッシュ — 記事の PV/スキ数を追従する。
+
+    note.com の private stats API を使用 (session.json の Cookie が必要)。
+    日中 8-22時 に2時間おきで実行。
+    """
+    now = datetime.now(JST)
+    if now.hour < 8 or now.hour > 22:
+        return
+    _log("📊 note 分析リフレッシュ")
+    try:
+        from core.learning.evaluate import evaluate_all
+        evaluate_all()
+    except Exception as e:
+        _log(f"❌ note 分析リフレッシュエラー: {e}")
+
+
 def register_jobs(scheduler, jst, inst=None):
     """APScheduler に Note 関連ジョブを登録する。"""
     from apscheduler.triggers.interval import IntervalTrigger
@@ -51,6 +68,15 @@ def register_jobs(scheduler, jst, inst=None):
         CronTrigger(hour="10,20", minute=0, timezone=jst),
         id="note_engage",
         name="Note: Engage Agent",
+        max_instances=1,
+        coalesce=True,
+    )
+    # note analytics refresh: 2時間おき (8-22時、7回/日)
+    scheduler.add_job(
+        job_note_analytics_refresh,
+        CronTrigger(hour="8,10,12,14,16,18,20,22", minute=15, timezone=jst),
+        id="note_analytics_refresh",
+        name="Note: Analytics Refresh",
         max_instances=1,
         coalesce=True,
     )
