@@ -44,6 +44,25 @@ def _find_daemon_pid() -> Optional[int]:
     if sys.platform != "win32":
         return None
     inst = _current_instance()
+
+    # psutil があれば信頼性高い
+    try:
+        import psutil
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                name = (proc.info.get("name") or "").lower()
+                if "python" not in name:
+                    continue
+                cmd = " ".join(proc.info.get("cmdline") or [])
+                if "tools.run_daemon" in cmd and inst in cmd:
+                    return int(proc.info["pid"])
+            except Exception:
+                continue
+        return None
+    except ImportError:
+        pass
+
+    # fallback: wmic
     try:
         result = subprocess.run(
             ["wmic", "process", "where", "name='python.exe'",
@@ -146,20 +165,23 @@ def start_daemon() -> dict:
         return {"ok": True, "already_running": True, "pid": existing}
 
     inst = _current_instance()
-    # webapp を起動している Python を再利用。path にスペースが無い想定
+    # webapp を起動している Python を再利用
     py_exe = sys.executable
-    cmdline = f"{py_exe} -m tools.run_daemon --instance {inst}"
+    cmdline = f'{py_exe} -m tools.run_daemon --instance {inst}'
+
+    # wmic process call create の引数は単一文字列の "cmdline","workdir" 形式で渡す
+    wmic_arg = f'"{cmdline}","{ROOT}"'
+    full_cmd = f'wmic process call create {wmic_arg}'
 
     try:
         result = subprocess.run(
-            ["wmic", "process", "call", "create", cmdline, str(ROOT)],
-            capture_output=True, text=True, timeout=15,
+            full_cmd, shell=True, capture_output=True, text=True, timeout=15,
         )
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
     out = (result.stdout or "") + (result.stderr or "")
-    if result.returncode != 0 or "失敗" in out or "failed" in out.lower() or "ReturnValue = 0" not in out:
+    if "ReturnValue = 0" not in out:
         return {"ok": False, "error": f"wmic: {out[:250]}"}
 
     # 数秒待って PID を確認
