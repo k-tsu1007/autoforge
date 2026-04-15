@@ -34,11 +34,6 @@ def check_claude():
     r = call_claude_cli("答えだけ: 1+1=?", max_tokens=20)
     return f"OK ({r.strip()[:40]})"
 
-def check_ollama():
-    from llm_wrapper import call_ollama
-    r = call_ollama("Say hi in 3 words", timeout=30)
-    return f"OK ({r.strip()[:40]})"
-
 def check_sd():
     from sd_helper import is_sd_available
     return f"OK (cuda={is_sd_available()})"
@@ -105,7 +100,6 @@ def check_plugin_discovery():
 
 t("DB", check_db)
 t("Claude CLI", check_claude)
-t("Ollama", check_ollama)
 t("SD/CUDA", check_sd)
 t("Discord webhook", check_discord_env)
 t("X cookie", check_x_cookie)
