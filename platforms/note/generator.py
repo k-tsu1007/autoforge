@@ -79,7 +79,7 @@ def _detect_fabrication(article: dict) -> str | None:
     return None
 
 
-def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False) -> dict:
+def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "") -> dict:
     """Claudeで記事を生成する。seo_mode=True のときは完全無料・SEO最適化記事を生成する。"""
     params = strategy["content_params"]
     gen_params = strategy["generation_params"]
@@ -290,9 +290,17 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 - 記事全体を通じて「一緒に考えている」感を出す
 - 同じ構成（悩み代弁→N個のポイント→有料リード）を繰り返さない"""
 
+    user_steer = ""
+    if user_comment:
+        user_steer = (
+            f"\n## 【ユーザーからの修正指示（最優先）】\n"
+            f"{user_comment}\n"
+            f"上記の指示を最優先に反映してください。\n"
+        )
+
     system_prompt = f"""あなたはNote(note.com)向けの記事ライターです。
 以下の戦略指示書に従って、読者に価値のある記事を1本生成してください。
-
+{user_steer}
 {reader_section}
 
 {program}

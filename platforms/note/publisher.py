@@ -306,6 +306,31 @@ def save_locally(article: dict) -> dict:
     }
 
 
+def _save_as_pending_review(article: dict) -> str:
+    """REVIEW_MODE 時に記事を publish せず DB に pending_review で保持する。
+
+    Returns: 割り当てた仮 note_id (pending_<timestamp>)
+    """
+    from core.db import upsert_article
+    now = datetime.now(JST)
+    pending_id = f"pending_{int(now.timestamp() * 1000)}"
+    upsert_article({
+        "note_id": pending_id,
+        "title": article.get("title", ""),
+        "genre": article.get("genre", ""),
+        "tags": article.get("tags", []),
+        "note_url": "",
+        "status": "pending_review",
+        "published_at": "",
+        "created_at": now.isoformat(),
+        "free_content": article.get("free_content", ""),
+        "paid_content": article.get("paid_content", ""),
+        "views": 0, "likes": 0, "comments": 0, "revenue": 0,
+    })
+    print(f"pending_review 保存: {pending_id} {article.get('title','')[:40]}")
+    return pending_id
+
+
 def record_article(article: dict, publish_result: dict):
     """投稿結果をhistory.jsonに記録する。"""
     history = load_history()
@@ -505,9 +530,25 @@ def main():
     last_note_url = ""
     last_tweet_drafts = []
 
+    # レビューモード時は publish せず DB に pending_review として保留する
+    try:
+        from core.db import review_mode_enabled
+        _review_on = review_mode_enabled()
+    except Exception:
+        _review_on = False
+
     for i, draft_path in enumerate(targets):
         article = json.loads(draft_path.read_text(encoding="utf-8"))
         print(f"\n--- [{i + 1}/{len(targets)}] {article['title']} ---")
+
+        if _review_on:
+            print("📝 レビューモード ON → pending_review として保留")
+            try:
+                _save_as_pending_review(article)
+            except Exception as e:
+                print(f"pending_review 保存失敗: {e}")
+            draft_path.rename(published_dir / draft_path.name)
+            continue
 
         result = publish_via_noteclient(article)
         record_article(article, result)

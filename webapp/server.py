@@ -306,6 +306,15 @@ def review_page(request: Request, user: str = Depends(check_auth)):
     except Exception:
         engages = []
 
+    # 記事の承認待ち (pending_review)
+    try:
+        articles_pending = [dict(r) for r in conn.execute(
+            "SELECT note_id, title, genre, tags, free_content, paid_content, created_at "
+            "FROM articles WHERE status='pending_review' ORDER BY created_at DESC"
+        ).fetchall()]
+    except Exception:
+        articles_pending = []
+
     return templates.TemplateResponse(
         request=request, name="review.html",
         context={
@@ -313,6 +322,7 @@ def review_page(request: Request, user: str = Depends(check_auth)):
             "tweets_scheduled": tweets_scheduled,
             "replies": replies,
             "engages": engages,
+            "articles_pending": articles_pending,
             "review_on": review_mode_enabled(),
         }
     )
@@ -547,6 +557,155 @@ def review_reply_regenerate(
         )
     except Exception as e:
         return HTMLResponse(f'<div class="rv-text" style="color:#f87171;">エラー: {e}</div>')
+
+
+# === 記事レビュー ===
+
+@app.post("/review/article/{note_id}/approve", response_class=HTMLResponse)
+def review_article_approve(note_id: str, request: Request, user: str = Depends(check_auth)):
+    """承認 → 即時 publish_via_noteclient() で note.com に投稿。"""
+    from core.db import get_connection
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT title, genre, tags, free_content, paid_content FROM articles WHERE note_id=?",
+        (note_id,)
+    ).fetchone()
+    if not row:
+        return HTMLResponse('<div style="color:#f87171;">記事が見つかりません</div>')
+    article = {
+        "title": row["title"],
+        "genre": row["genre"],
+        "tags": _fromjson(row["tags"]),
+        "free_content": row["free_content"] or "",
+        "paid_content": row["paid_content"] or "",
+    }
+
+    # regen_log の未決を承認に更新
+    conn.execute(
+        "UPDATE regen_log SET approved=1 WHERE content_type='article' AND queue_id=? AND approved IS NULL",
+        (note_id,)
+    )
+    conn.commit()
+
+    def _pub():
+        try:
+            from platforms.note.publisher import publish_via_noteclient, record_article
+            result = publish_via_noteclient(article)
+            if isinstance(result, dict) and result.get("ok") is not False:
+                # DB の pending 行を削除して record_article で本番行を追加
+                try:
+                    from core.db import transaction
+                    with transaction() as c:
+                        c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
+                except Exception:
+                    pass
+                try:
+                    record_article(article, result)
+                except Exception as e:
+                    print(f"[review] record_article 失敗: {e}")
+                try:
+                    from core.notify import send_discord
+                    url = result.get("note_url") or (result.get("data") or {}).get("public_url", "")
+                    send_discord(content=f"📝 note公開 (手動承認) → {url}" if url else "📝 note公開 (手動承認)")
+                except Exception:
+                    pass
+            else:
+                print(f"[review] publish 失敗: {result}")
+        except Exception as e:
+            print(f"[review] 記事即時投稿エラー: {e}")
+
+    _bg(_pub)
+    return HTMLResponse("")
+
+
+@app.post("/review/article/{note_id}/reject", response_class=HTMLResponse)
+def review_article_reject(note_id: str, request: Request, user: str = Depends(check_auth)):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE articles SET status='rejected' WHERE note_id=?", (note_id,))
+    conn.execute(
+        "UPDATE regen_log SET approved=0 WHERE content_type='article' AND queue_id=? AND approved IS NULL",
+        (note_id,)
+    )
+    conn.commit()
+    return HTMLResponse("")
+
+
+@app.post("/review/article/{note_id}/regenerate", response_class=HTMLResponse)
+def review_article_regenerate(
+    note_id: str,
+    request: Request,
+    user_comment: str = Form(""),
+    user: str = Depends(check_auth),
+):
+    """記事の本文を再生成する。user_comment が指示として優先される。"""
+    from core.db import get_connection
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT title, free_content FROM articles WHERE note_id=?", (note_id,)
+        ).fetchone()
+        if not row:
+            return HTMLResponse('<div style="color:#f87171;">記事なし</div>')
+        old_title = row["title"] or ""
+        old_text = (row["free_content"] or "")[:300]
+
+        # 記事生成に必要な strategy / history を読み込む
+        from core.paths import strategy_path, history_path
+        import json as _json
+        strategy = _json.loads(open(strategy_path(), encoding="utf-8").read())
+        history = {"articles": []}
+        try:
+            history = _json.loads(open(history_path(), encoding="utf-8").read())
+        except Exception:
+            pass
+        program = ""
+        try:
+            program = open("program.md", encoding="utf-8").read()
+        except Exception:
+            pass
+
+        from platforms.note.generator import generate_article
+        new_article = generate_article(
+            strategy, program, history,
+            topic_hint=f"既存タイトル「{old_title}」を踏襲しつつ書き直し",
+            user_comment=user_comment,
+        )
+        if not new_article or not new_article.get("title"):
+            return HTMLResponse('<div style="color:#f87171;">生成失敗</div>')
+
+        # DB を更新 (pending のまま、本文だけ差し替え)
+        conn.execute(
+            "UPDATE articles SET title=?, genre=?, tags=?, free_content=?, paid_content=? "
+            "WHERE note_id=?",
+            (
+                new_article.get("title", ""),
+                new_article.get("genre", ""),
+                _json.dumps(new_article.get("tags", []), ensure_ascii=False),
+                new_article.get("free_content", ""),
+                new_article.get("paid_content", ""),
+                note_id,
+            )
+        )
+        conn.execute(
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text, user_comment) "
+            "VALUES ('article',?,?,?,?)",
+            (0, old_text, (new_article.get("free_content") or "")[:300], user_comment or None)
+        )
+        conn.commit()
+
+        # 新しいタイトル + 冒頭を返す
+        new_title = new_article.get("title", "")
+        new_body = new_article.get("free_content", "")[:200]
+        html = (
+            f'<div class="rv-text" id="ar-text-{note_id}">'
+            f'<strong>{new_title.replace("<","&lt;").replace(">","&gt;")}</strong><br>'
+            f'<span style="color:var(--muted);font-size:.78rem;">{new_body.replace("<","&lt;").replace(">","&gt;")}…</span>'
+            f'</div>'
+        )
+        return HTMLResponse(html)
+    except Exception as e:
+        return HTMLResponse(f'<div style="color:#f87171;">エラー: {e}</div>')
 
 
 @app.get("/instances", response_class=HTMLResponse)

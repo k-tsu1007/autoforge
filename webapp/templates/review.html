@@ -123,8 +123,58 @@ function togglePanel(id) {
 {# ═══ 承認待ち ═══ #}
 <div class="rv-section-title">承認待ち <span class="rv-count">— 新規生成・未判断</span></div>
 
+{# --- 承認待ち: 記事 --- #}
+<h3 style="font-size:.78rem;color:var(--muted);margin:.8rem 0 .4rem;font-weight:500;">note 記事 ({{ articles_pending|length }}件)</h3>
+{% if not articles_pending %}<div class="rv-empty">なし。</div>{% endif %}
+{% for a in articles_pending %}
+<div class="rv-card" id="ar-{{ a.note_id }}">
+  <div class="rv-card-inner">
+    <div class="rv-card-body">
+      <div class="rv-meta">
+        <span class="rv-pending-marker">承認待ち</span>
+        {{ a.note_id }} · {{ a.genre or '—' }} · {{ a.created_at[:16] if a.created_at else '' }}
+        <span class="rv-schedule rv-schedule-now">📝 承認で即時公開</span>
+      </div>
+      <div class="rv-text" id="ar-text-{{ a.note_id }}">
+        <strong>{{ a.title }}</strong>
+        <div style="color:var(--muted);font-size:.78rem;margin-top:.3rem;">{{ (a.free_content or '')[:200] }}…</div>
+        <div style="color:var(--dim);font-size:.7rem;margin-top:.2rem;">
+          本文 {{ (a.free_content or '')|length }} 字 / 有料 {{ (a.paid_content or '')|length }} 字
+        </div>
+      </div>
+    </div>
+    <div class="rv-actions">
+      <button class="rv-btn rv-btn-ok"
+        hx-post="/review/article/{{ a.note_id }}/approve"
+        hx-on::after-request="document.getElementById('ar-{{ a.note_id }}').classList.add('rv-done'); this.textContent='✓ 公開中...'">
+        承認して公開
+      </button>
+      <button class="rv-btn rv-btn-ng"
+        hx-post="/review/article/{{ a.note_id }}/reject"
+        hx-on::after-request="document.getElementById('ar-{{ a.note_id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
+        却下
+      </button>
+      <button class="rv-btn rv-btn-regen" onclick="togglePanel('regen-article-{{ a.note_id }}')">🔄 リライト</button>
+    </div>
+  </div>
+  <div class="rv-regen-panel" id="regen-article-{{ a.note_id }}">
+    <form hx-post="/review/article/{{ a.note_id }}/regenerate"
+          hx-target="#ar-text-{{ a.note_id }}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <textarea name="user_comment"
+        placeholder="どう変えたい? (例: タイトルを『なぜ〇〇は△△なのか』型に / 具体事例を3つ入れて / もっと短く)&#10;空欄でも再生成できます。"></textarea>
+      <div class="rv-regen-ctrl">
+        <span class="rv-regen-hint">コメントは学習され、今後のプロンプト改善に使われます</span>
+        <button type="submit" class="rv-regen-submit">再生成</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
 {# --- 承認待ち: ツイート --- #}
-<h3 style="font-size:.78rem;color:var(--muted);margin:.8rem 0 .4rem;font-weight:500;">ツイート ({{ tweets_pending|length }}件)</h3>
+<h3 style="font-size:.78rem;color:var(--muted);margin:1rem 0 .4rem;font-weight:500;">ツイート ({{ tweets_pending|length }}件)</h3>
 {% if not tweets_pending %}<div class="rv-empty">なし。</div>{% endif %}
 {% for t in tweets_pending %}
 <div class="rv-card" id="tw-{{ t.id }}">
