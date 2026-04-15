@@ -101,6 +101,10 @@ async def start_browser_with_session(session_json_path, headless: bool = False):
 
     Returns: (browser, tab) — tab は https://x.com を開いた状態
     Raises: FileNotFoundError / ValueError on missing/invalid session
+
+    内部で uc.start() 後に例外が起きた場合、browser を確実に stop() してから
+    再 raise する。これがないと caller の try/finally が browser=None の状態で
+    入ってきて Chrome がリークする (= 運用中に 48 プロセス残留する事故の原因)。
     """
     import nodriver as uc
     from pathlib import Path
@@ -114,18 +118,24 @@ async def start_browser_with_session(session_json_path, headless: bool = False):
         raise ValueError("x_session.json に auth_token がありません。refresh_x_cookies を実行してください。")
 
     browser = await uc.start(headless=headless)
+    try:
+        # x.com に一度アクセスしてから Cookie を注入する
+        tab = await browser.get("https://x.com")
+        await asyncio.sleep(3)
 
-    # x.com に一度アクセスしてから Cookie を注入する
-    tab = await browser.get("https://x.com")
-    await asyncio.sleep(3)
+        ok = await inject_cookies(browser, cookies)
+        if not ok:
+            print("⚠️  Cookie注入失敗 — ログインできない可能性があります")
 
-    ok = await inject_cookies(browser, cookies)
-    if not ok:
-        print("⚠️  Cookie注入失敗 — ログインできない可能性があります")
+        # cookie注入後、x.com/home に再移動してセッションを確立する
+        tab = await browser.get("https://x.com/home")
+        await asyncio.sleep(3)
 
-    # cookie注入後、x.com/home に再移動してセッションを確立する
-    # これがないと search など一部ページで0件になる
-    tab = await browser.get("https://x.com/home")
-    await asyncio.sleep(3)
-
-    return browser, tab
+        return browser, tab
+    except BaseException:
+        # start() 成功後の例外はリークになるので必ず browser を止める
+        try:
+            browser.stop()
+        except Exception:
+            pass
+        raise

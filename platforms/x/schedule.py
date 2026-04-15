@@ -180,11 +180,11 @@ def schedule_tweet(
     return tweet_id
 
 
-def _register_datetrigger(scheduler, tweet_id: int, post_time: str) -> None:
+def _register_datetrigger(scheduler, tweet_id: int, post_time: str, job_id: str | None = None) -> None:
     """1件のツイートに対して DateTrigger で発火ジョブを登録する。
 
-    'immediate' や過去 post_time が複数ある場合、既存登録ジョブと被らないよう
-    60秒ずつずらして一斉発火を回避する (ブラウザ起動/投稿が重なるのを防ぐ)。
+    複数の発火が近接時刻に集まらないよう、既存の tweet_* ジョブから 45秒以内なら
+    60秒ずつ後ろにずらす。これで同時にブラウザが何本も立ち上がるのを防ぐ。
     """
     from apscheduler.triggers.date import DateTrigger
 
@@ -197,7 +197,6 @@ def _register_datetrigger(scheduler, tweet_id: int, post_time: str) -> None:
             return
         run_at = dt if dt > now else now + timedelta(seconds=10)
 
-    # 既存登録ジョブの発火予定と被ったら 60秒ずつ後ろにずらす
     try:
         existing = [
             j.next_run_time for j in scheduler.get_jobs()
@@ -215,7 +214,7 @@ def _register_datetrigger(scheduler, tweet_id: int, post_time: str) -> None:
         _post_scheduled_tweet_job,
         DateTrigger(run_date=run_at),
         args=[tweet_id],
-        id=f"tweet_{tweet_id}",
+        id=job_id or f"tweet_{tweet_id}",
         replace_existing=True,
         misfire_grace_time=3600,
     )
@@ -285,18 +284,16 @@ def _post_scheduled_tweet_job(tweet_id: int) -> None:
 
     _notify_post_result(result)
 
-    # 失敗時は 5分後に再スケジュール (fail_count は poster 側で +1 済)
+    # 失敗時は 5分後に再スケジュール。stagger ロジック経由で他ツイートと衝突回避
     if not result.get("posted") and result.get("reason") == "post failed" and _scheduler is not None:
-        from apscheduler.triggers.date import DateTrigger
-        retry_at = datetime.now(JST) + timedelta(minutes=5)
         try:
-            _scheduler.add_job(
-                _post_scheduled_tweet_job,
-                DateTrigger(run_date=retry_at),
-                args=[tweet_id],
-                id=f"tweet_{tweet_id}_retry_{int(retry_at.timestamp())}",
-                replace_existing=True,
-                misfire_grace_time=1800,
+            retry_at = datetime.now(JST) + timedelta(minutes=5)
+            retry_job_id = f"tweet_{tweet_id}_retry_{int(retry_at.timestamp())}"
+            _register_datetrigger(
+                _scheduler,
+                tweet_id,
+                retry_at.isoformat(),
+                job_id=retry_job_id,
             )
             _log(f"  5分後に再試行予定 (tweet_id={tweet_id})")
         except Exception:
@@ -373,7 +370,7 @@ def migrate_bad_immediates() -> int:
     return updated
 
 
-def sweep_overdue(max_items: int = 5) -> int:
+def sweep_overdue(max_items: int = 2) -> int:
     """scheduled_at が過去なのに発火していないものを拾って投稿する (safety net)。"""
     from core.db import get_connection
     from platforms.x.poster import post_tweet_by_id
