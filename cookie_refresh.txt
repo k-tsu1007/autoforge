@@ -1,0 +1,16 @@
+==== X Cookie 再取得手順 ====
+
+セッションが切れたときに実行する。
+ブラウザウィンドウが開いて自動ログインします。
+途中で止まった場合は手動で完了させてください。
+
+---- fuku_ai_sns ----
+cd C:\Users\Tsubasa\autoforge
+git pull
+python -m tools.refresh_x_cookies --instance fuku_ai_sns
+
+---- ai_bento ----
+cd C:\Users\Tsubasa\autoforge
+python -m tools.refresh_x_cookies --instance ai_bento
+
+========================

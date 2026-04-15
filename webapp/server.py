@@ -510,12 +510,6 @@ def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(
         return HTMLResponse(f'<div class="rv-text" style="color:#f87171;">エラー: {e}</div>')
 
 
-@app.get("/activity", response_class=HTMLResponse)
-def activity_page(request: Request, user: str = Depends(check_auth)):
-    """ライブアクティビティビュー（GitHub Actions風）。"""
-    return templates.TemplateResponse(request=request, name="activity.html", context={})
-
-
 @app.get("/instances", response_class=HTMLResponse)
 def instances_page(request: Request, user: str = Depends(check_auth)):
     """全インスタンスの集約サマリー (read-only)。"""
@@ -530,133 +524,6 @@ def instances_page(request: Request, user: str = Depends(check_auth)):
     )
 
 
-# === スケジューラ定義（daemon.py と同期） ===
-SCHEDULER_JOBS = [
-    {"id": "morning_pipeline",  "name": "朝の準備 (学習+方針決定)", "schedule": "毎日 06:00", "desc": "evaluate→snapshot→lift→observer→hypothesis→x_analytics→tweet_generator→engage→optimize_post_time→advisor→evolve"},
-    {"id": "note_post_check",   "name": "Note記事投稿チェック",      "schedule": "10分ごと",   "desc": "advisor の note_post_slots に該当する時刻なら generate→publish (1日3〜4本)"},
-    {"id": "x_post_check",      "name": "X単発投稿チェック",         "schedule": "5分ごと",    "desc": "posting_policy のスコア順時刻でキューから1本投稿 (1日約20本)"},
-    {"id": "growth_agent",      "name": "いいねエージェント",        "schedule": "90分ごと",   "desc": "8〜22時の間、1回1いいね (advisor.growth_daily_likes が日次上限)"},
-    {"id": "engage_afternoon",  "name": "引用RT/リプライ",            "schedule": "75分ごと",   "desc": "8〜22時の間、1回1アクション (advisor.quote/reply_daily_target が日次上限)"},
-    {"id": "evening_pipeline",  "name": "夜のまとめ",                 "schedule": "毎日 22:00", "desc": "notify→dashboard→forget(日曜のみ)→maintenance"},
-    {"id": "heartbeat",         "name": "ハートビート",              "schedule": "1分ごと",    "desc": "デーモン生存確認"},
-    {"id": "jobs_queue",        "name": "ジョブキューワーカー",      "schedule": "1分ごと",    "desc": "pending ジョブを実行"},
-    {"id": "cleanup_jobs",      "name": "ジョブクリーンアップ",      "schedule": "毎日 06:00", "desc": "古いジョブ削除"},
-]
-
-
-def _build_activity_data():
-    """activity ページ用にスケジュール+履歴+health+ジョブキューを集める。"""
-    from core.db import get_connection, get_health, get_recent_pipeline_runs
-    conn = get_connection()
-    health_map = get_health()  # {component: row}
-    health_rows = list(health_map.values())
-
-    # 最終実行時刻を引く
-    runs = get_recent_pipeline_runs(10)
-    # 表示用の正規化
-    for r in runs:
-        r["run_at"] = r.get("started_at") or r.get("completed_at") or ""
-        r["duration"] = r.get("duration_seconds") or 0
-    last_pipeline_run = runs[0] if runs else None
-
-    try:
-        last_growth = conn.execute(
-            "SELECT executed_at FROM growth_actions ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-    except Exception:
-        last_growth = None
-    try:
-        last_job_done = conn.execute(
-            "SELECT finished_at FROM jobs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-    except Exception:
-        last_job_done = None
-
-    def fmt(ts):
-        if not ts:
-            return None
-        return ts[5:19] if len(ts) > 19 else ts
-
-    last_runs = {
-        "daily_pipeline": fmt(last_pipeline_run["run_at"]) if last_pipeline_run else None,
-        "x_post_check":   fmt((health_map.get("x_daemon") or {}).get("last_heartbeat")),
-        "heartbeat":      fmt((health_map.get("daemon") or {}).get("last_heartbeat")),
-        "jobs_queue":     fmt(last_job_done["finished_at"]) if last_job_done else None,
-        "growth_agent":   fmt(last_growth["executed_at"]) if last_growth else None,
-        "cleanup_jobs":   None,
-    }
-    statuses = {
-        "daily_pipeline": (last_pipeline_run or {}).get("status", "—"),
-        "x_post_check":   (health_map.get("x_daemon") or {}).get("status", "—"),
-        "heartbeat":      (health_map.get("daemon") or {}).get("status", "—"),
-        "jobs_queue":     "—",
-        "growth_agent":   "—",
-        "cleanup_jobs":   "—",
-    }
-
-    # daemon が生きてるかで全体 live 判定
-    daemon_alive = False
-    daemon_h = health_map.get("daemon")
-    if daemon_h and daemon_h.get("last_heartbeat"):
-        try:
-            from datetime import datetime as dt
-            hb = dt.fromisoformat(daemon_h["last_heartbeat"])
-            if (dt.now(JST) - hb).total_seconds() < 180:
-                daemon_alive = True
-        except Exception:
-            pass
-
-    jobs = []
-    for jdef in SCHEDULER_JOBS:
-        st = statuses.get(jdef["id"], "—")
-        ok = st in ("alive", "completed")
-        color = "green" if ok else ("red" if st == "error" else "gray")
-        jobs.append({
-            **jdef,
-            "status": st,
-            "last_run": last_runs.get(jdef["id"]),
-            "color": color,
-            "live": daemon_alive and jdef["id"] in ("heartbeat", "jobs_queue", "x_post_check"),
-        })
-
-    # ジョブキュー stats
-    try:
-        from core.scheduler.jobs import get_stats
-        job_stats = get_stats()
-    except Exception:
-        job_stats = {}
-
-    return {
-        "jobs": jobs,
-        "runs": runs,
-        "health": health_rows,
-        "job_stats": job_stats,
-        "now": datetime.now(JST).strftime("%H:%M:%S"),
-    }
-
-
-@app.get("/partial/activity", response_class=HTMLResponse)
-def partial_activity(request: Request, user: str = Depends(check_auth)):
-    ctx = _build_activity_data()
-    return templates.TemplateResponse(request=request, name="_activity_partial.html", context=ctx)
-
-
-@app.get("/ab", response_class=HTMLResponse)
-def ab_page(request: Request, user: str = Depends(check_auth)):
-    """A/Bテスト一覧。"""
-    from core.db import get_ab_tests
-    tests = get_ab_tests()
-    # test_nameごとにグルーピング
-    grouped = {}
-    for t in tests:
-        grouped.setdefault(t["test_name"], []).append(t)
-    return templates.TemplateResponse(
-        request=request,
-        name="ab.html",
-        context={"grouped": grouped},
-    )
-
-
 @app.get("/cost", response_class=HTMLResponse)
 def cost_page(request: Request, user: str = Depends(check_auth)):
     """LLM使用量・コストページ。"""
@@ -668,44 +535,6 @@ def cost_page(request: Request, user: str = Depends(check_auth)):
         name="cost.html",
         context={"summary7": summary7, "summary30": summary30},
     )
-
-
-@app.get("/jobs", response_class=HTMLResponse)
-def jobs_page(request: Request, user: str = Depends(check_auth)):
-    """ジョブキュー管理。"""
-    try:
-        from core.scheduler.jobs import get_stats
-        from core.db import get_connection
-        stats = get_stats()
-        conn = get_connection()
-        recent = conn.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT 30").fetchall()
-        recent = [dict(r) for r in recent]
-    except Exception:
-        stats = {}
-        recent = []
-
-    return templates.TemplateResponse(
-        request=request,
-        name="jobs.html",
-        context={"stats": stats, "recent": recent},
-    )
-
-
-@app.post("/jobs/enqueue")
-def enqueue_job(
-    name: str = Form(...),
-    payload: str = Form("{}"),
-    priority: int = Form(5),
-    user: str = Depends(check_auth),
-):
-    """手動でジョブをキューに追加する。"""
-    from core.scheduler.jobs import enqueue
-    try:
-        payload_dict = json.loads(payload) if payload else {}
-        jid = enqueue(name, payload_dict, priority=priority)
-        return RedirectResponse(url=f"/jobs?enqueued={jid}", status_code=303)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/charts/note-growth.png")
