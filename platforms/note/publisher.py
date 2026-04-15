@@ -374,8 +374,22 @@ def record_article(article: dict, publish_result: dict):
         print(f"DB保存失敗: {e}")
 
 
+def _utm_url(note_url: str, source: str = "tw") -> str:
+    """note URL に流入元追跡用クエリを付与する。
+
+    どのチャネル(SNS) → どの記事 → 購入 のファネルを後で集計するための仕込み。
+    note 側の analytics でリファラを見るとき、これがあると拾える。
+    """
+    if not note_url:
+        return note_url
+    sep = "&" if "?" in note_url else "?"
+    return f"{note_url}{sep}from={source}"
+
+
 def generate_tweet_drafts(article: dict, note_url: str) -> list:
     """記事のツイート文案を3パターン生成する（Ollama優先、失敗時Claudeフォールバック）。"""
+    # tweet 用に流入元パラメータ付与
+    note_url = _utm_url(note_url, source="tw")
     try:
         from core.llm.wrapper import call_llm_json
         from core.paths import strategy_path as _stp

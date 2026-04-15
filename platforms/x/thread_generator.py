@@ -84,6 +84,10 @@ def generate_thread(article: dict, note_url: str = "") -> list[str]:
     except Exception as e:
         print(f"LLM 利用不可: {e}")
         return []
+    # スレッド最終ツイートに貼る note URL に流入元追跡パラメータを付ける
+    if note_url:
+        sep = "&" if "?" in note_url else "?"
+        note_url = f"{note_url}{sep}from=tw"
 
     title = article.get("title", "")
     body = (
