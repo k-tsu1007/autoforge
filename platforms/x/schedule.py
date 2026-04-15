@@ -20,6 +20,9 @@ from pathlib import Path
 
 JST = timezone(timedelta(hours=9))
 
+# advisor.single_post_slots が未設定のインスタンス用のフォールバック
+DEFAULT_FALLBACK_SLOTS = ["09:00", "12:00", "15:00", "18:00", "21:00"]
+
 # daemon の scheduler をここに保持する (set_scheduler() で注入)
 _scheduler = None
 
@@ -76,9 +79,10 @@ def find_next_free_time(tweet_type: str = "単発") -> str | None:
         advisor = {}
 
     slots_raw = advisor.get(slot_key) or []
-    slots_hm = normalize_slots(slots_raw)
+    slots_hm = normalize_slots(slots_raw) if slots_raw else []
     if not slots_hm:
-        return None
+        # advisor 未実行のインスタンスではデフォルトスロットを使う (immediate fallback しない)
+        slots_hm = list(DEFAULT_FALLBACK_SLOTS)
 
     # 既に予約されている (scheduled_at が実時刻の) 未投稿行
     conn = get_connection()
@@ -343,6 +347,29 @@ def migrate_null_scheduled_at() -> int:
         with transaction() as c:
             c.execute("UPDATE tweet_queue SET scheduled_at=? WHERE id=?", (slot, r["id"]))
         updated += 1
+    return updated
+
+
+def migrate_bad_immediates() -> int:
+    """scheduled_at='immediate' だが リンク付き ではない行を slot に再割当する。
+
+    起動時の自己修復: advisor 不在時の過去 immediate fallback を解消する。
+    """
+    from core.db import get_connection, transaction
+
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, type FROM tweet_queue "
+        "WHERE posted=0 AND COALESCE(fail_count,0) < 3 "
+        "AND scheduled_at='immediate' AND type != 'リンク付き' ORDER BY id ASC"
+    ).fetchall()
+    updated = 0
+    for r in rows:
+        slot = find_next_free_time(r["type"] or "単発")
+        if slot and slot != "immediate":
+            with transaction() as c:
+                c.execute("UPDATE tweet_queue SET scheduled_at=? WHERE id=?", (slot, r["id"]))
+            updated += 1
     return updated
 
 

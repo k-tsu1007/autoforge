@@ -177,7 +177,8 @@ def register_jobs(scheduler, jst, inst=None):
     from apscheduler.triggers.interval import IntervalTrigger
     from apscheduler.triggers.cron import CronTrigger
     from platforms.x.schedule import (
-        set_scheduler, register_pending_on_startup, migrate_null_scheduled_at,
+        set_scheduler, register_pending_on_startup,
+        migrate_null_scheduled_at, migrate_bad_immediates,
     )
 
     now = datetime.now(jst)
@@ -185,13 +186,21 @@ def register_jobs(scheduler, jst, inst=None):
     # daemon scheduler をモジュールに注入 → 以降 schedule_tweet() が DateTrigger 登録できる
     set_scheduler(scheduler)
 
-    # 旧データの scheduled_at=NULL を埋める (1回だけ)
+    # 旧データの scheduled_at=NULL を埋める
     try:
         migrated = migrate_null_scheduled_at()
         if migrated > 0:
             _log(f"📋 migration: scheduled_at を {migrated}件埋めた")
     except Exception as e:
         _log(f"❌ migration エラー: {e}")
+
+    # リンク付きでないのに 'immediate' になってる行を slot 再割当
+    try:
+        fixed = migrate_bad_immediates()
+        if fixed > 0:
+            _log(f"🔧 immediate→slot 再割当: {fixed}件")
+    except Exception as e:
+        _log(f"❌ immediate修正エラー: {e}")
 
     # 未発火ツイート全件に DateTrigger を再登録
     try:
