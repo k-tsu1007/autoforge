@@ -84,13 +84,18 @@ def _build_prompt(n: int) -> str:
 """
 
 
-def generate_batch(n: int = None) -> list[str]:
+def generate_batch(n: int = None, user_comment: str = "") -> list[str]:
     if n is None:
         n = _target_count()
     if n <= 0:
         return []
     from core.llm.wrapper import call_llm
     prompt = _build_prompt(n)
+    if user_comment:
+        prompt = (
+            f"【ユーザーからの修正指示】\n{user_comment}\n\n"
+            f"上記の指示を最優先に反映して生成してください。\n\n"
+        ) + prompt
     try:
         result = call_llm(prompt, task_type="article_generation", temperature=0.9, max_tokens=2500)
     except Exception as e:

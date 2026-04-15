@@ -216,10 +216,11 @@ CREATE TABLE IF NOT EXISTS engage_queue (
 
 CREATE TABLE IF NOT EXISTS regen_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content_type TEXT NOT NULL,   -- 'tweet' | 'engage' | 'reply'
+    content_type TEXT NOT NULL,   -- 'tweet' | 'engage' | 'reply' | 'article'
     queue_id INTEGER NOT NULL,    -- 各キューテーブルの id
     old_text TEXT,                -- 再生成前のテキスト
     new_text TEXT,                -- 再生成後のテキスト（最終承認テキスト）
+    user_comment TEXT,            -- ユーザーが「こう変えてほしい」と書いたコメント
     approved INTEGER DEFAULT NULL, -- 1=承認 0=却下 NULL=未決
     created_at TEXT DEFAULT (datetime('now', '+9 hours'))
 );
@@ -264,6 +265,12 @@ def get_connection() -> sqlite3.Connection:
             if "approved" not in cols:
                 # 既存アイテムは approved=1 (自動承認) にして動作を変えない
                 _connection.execute("ALTER TABLE tweet_queue ADD COLUMN approved INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        try:
+            cols = [r["name"] for r in _connection.execute("PRAGMA table_info(regen_log)").fetchall()]
+            if "user_comment" not in cols:
+                _connection.execute("ALTER TABLE regen_log ADD COLUMN user_comment TEXT")
         except Exception:
             pass
         _connection.commit()

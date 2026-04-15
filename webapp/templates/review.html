@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}レビューキュー — autoforge{% endblock %}
+{% block title %}レビュー — autoforge{% endblock %}
 {% block content %}
 
 <style>
@@ -7,29 +7,52 @@
   .rv-mode-badge { padding: .3rem .8rem; border-radius: 999px; font-size: .75rem; font-weight: 700; letter-spacing: .05em; }
   .rv-mode-on  { background: #16a34a22; color: var(--green); border: 1px solid #4ade8044; }
   .rv-mode-off { background: #33333322; color: var(--muted); border: 1px solid #55555544; }
-  .rv-section-title { font-size: .75rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin: 1.5rem 0 .6rem; }
+  .rv-section-title { font-size: .78rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin: 1.5rem 0 .6rem; font-weight: 600; }
+  .rv-section-title .rv-count { color: var(--dim); font-weight: 400; }
   .rv-empty { color: var(--dim); font-size: .85rem; padding: .8rem 0; }
-  .rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: .7rem; display: flex; gap: 1rem; align-items: flex-start; }
+
+  .rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: .7rem; }
+  .rv-card-inner { display: flex; gap: 1rem; align-items: flex-start; }
   .rv-card-body { flex: 1; min-width: 0; }
-  .rv-meta { font-size: .75rem; color: var(--muted); margin-bottom: .3rem; }
+  .rv-meta { font-size: .75rem; color: var(--muted); margin-bottom: .3rem; display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
   .rv-text { font-size: .88rem; color: var(--text); white-space: pre-wrap; line-height: 1.55; }
   .rv-sub { margin-top: .5rem; padding: .5rem .7rem; background: var(--bg); border-radius: 6px; font-size: .75rem; color: #888; border-left: 2px solid var(--dim); }
   .rv-sub strong { color: #aaa; }
   .rv-actions { display: flex; flex-direction: column; gap: .4rem; flex-shrink: 0; }
-  .rv-btn { padding: .35rem .9rem; border-radius: 999px; font-size: .75rem; font-weight: 700; border: none; cursor: pointer; transition: opacity .15s; background: var(--border); color: var(--text); }
+  .rv-btn { padding: .35rem .9rem; border-radius: 999px; font-size: .75rem; font-weight: 700; border: none; cursor: pointer; transition: opacity .15s; background: var(--border); color: var(--text); white-space: nowrap; }
   .rv-btn:hover { opacity: .8; }
   .rv-btn-ok    { background: #16a34a; color: #fff; }
   .rv-btn-ng    { background: var(--border); color: var(--red); border: 1px solid #f8717144; }
   .rv-btn-regen { background: #1a2744; color: var(--blue); border: 1px solid #60a5fa44; }
   .rv-done { opacity: .35; pointer-events: none; text-decoration: line-through; }
+
   .rv-hint { background: #0d1a0d; border: 1px solid #16a34a44; border-radius: 8px; padding: .9rem 1.1rem; font-size: .8rem; color: var(--green); margin-bottom: 1.2rem; }
   .rv-hint code { background: #16a34a22; padding: .1rem .35rem; border-radius: 4px; font-family: monospace; }
-  .rv-schedule { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .7rem; font-family: var(--font-mono); margin-left: .3rem; }
+
+  .rv-schedule { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .7rem; font-family: var(--font-mono); }
   .rv-schedule-time { background: #1a2744; color: var(--blue); border: 1px solid #60a5fa44; }
   .rv-schedule-now  { background: #3a1a44; color: #d8b4fe; border: 1px solid #a855f744; }
+
+  /* リライトパネル (最初は隠れている) */
+  .rv-regen-panel { display: none; margin-top: .7rem; padding-top: .7rem; border-top: 1px dashed var(--border); }
+  .rv-regen-panel.open { display: block; }
+  .rv-regen-panel textarea {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: .5rem .7rem; font-size: .82rem; resize: vertical; min-height: 2.2rem;
+    font-family: inherit;
+  }
+  .rv-regen-panel textarea:focus { border-color: var(--blue); outline: none; }
+  .rv-regen-ctrl { display: flex; gap: .5rem; margin-top: .5rem; align-items: center; }
+  .rv-regen-ctrl .rv-regen-hint { color: var(--dim); font-size: .7rem; flex: 1; }
+  .rv-regen-submit { background: var(--blue); color: #000; border: none; padding: .35rem .9rem; border-radius: 999px; font-weight: 700; font-size: .75rem; cursor: pointer; }
+  .rv-regen-submit:disabled { opacity: .5; cursor: wait; }
+
+  .rv-pending-marker { color: var(--yellow); font-weight: 700; font-size: .7rem; }
+  .rv-approved-marker { color: var(--green); font-weight: 700; font-size: .7rem; }
 </style>
 
-{# ─── helpers ─── #}
+{# ─── Helpers ─── #}
 {% macro schedule_badge(scheduled_at) -%}
   {% if scheduled_at == 'immediate' %}
     <span class="rv-schedule rv-schedule-now">⚡ 即時</span>
@@ -38,8 +61,53 @@
   {% endif %}
 {%- endmacro %}
 
+{# action-buttons block: 承認ボタン, 却下ボタン, リライトトグルボタン + リライトパネル #}
+{% macro action_buttons(kind, item_id, target_text_id, show_approve=True) -%}
+  <div class="rv-actions">
+    {% if show_approve %}
+    <button class="rv-btn rv-btn-ok"
+      hx-post="/review/{{ kind }}/{{ item_id }}/approve"
+      hx-on::after-request="document.getElementById('{{ kind|replace('tweet','tw')|replace('engage','eg')|replace('reply','rp') }}-{{ item_id }}').classList.add('rv-done'); this.textContent='✓ 承認'">
+      承認
+    </button>
+    {% endif %}
+    <button class="rv-btn rv-btn-ng"
+      hx-post="/review/{{ kind }}/{{ item_id }}/reject"
+      hx-on::after-request="document.getElementById('{{ kind|replace('tweet','tw')|replace('engage','eg')|replace('reply','rp') }}-{{ item_id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
+      却下
+    </button>
+    <button class="rv-btn rv-btn-regen"
+      onclick="togglePanel('regen-{{ kind }}-{{ item_id }}')">
+      🔄 リライト
+    </button>
+  </div>
+{%- endmacro %}
+
+{% macro regen_panel(kind, item_id, target_text_id) -%}
+  <div class="rv-regen-panel" id="regen-{{ kind }}-{{ item_id }}">
+    <form hx-post="/review/{{ kind }}/{{ item_id }}/regenerate"
+          hx-target="#{{ target_text_id }}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <textarea name="user_comment"
+        placeholder="どう変えたい? (例: もっと具体的に / 失敗談も入れて / ユーモアを足して)&#10;空欄のままでもOK — その場合は学習済みルールだけで再生成します。"></textarea>
+      <div class="rv-regen-ctrl">
+        <span class="rv-regen-hint">コメントは学習され、今後のプロンプト改善に使われます</span>
+        <button type="submit" class="rv-regen-submit">再生成</button>
+      </div>
+    </form>
+  </div>
+{%- endmacro %}
+
+<script>
+function togglePanel(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+</script>
+
 <div class="rv-header">
-  <h2 style="margin:0;">レビューキュー</h2>
+  <h2 style="margin:0;">レビュー</h2>
   <span class="rv-mode-badge {% if review_on %}rv-mode-on{% else %}rv-mode-off{% endif %}">
     {% if review_on %}レビューモード ON{% else %}レビューモード OFF{% endif %}
   </span>
@@ -47,141 +115,105 @@
 
 {% if not review_on %}
 <div class="rv-hint">
-  レビューモードが <strong>OFF</strong> です。新しく生成されたコンテンツは自動的に投稿されます。<br>
+  レビューモードが <strong>OFF</strong> です。生成されたコンテンツは自動的に投稿されます。<br>
   有効にするには <code>.env</code> に <code>REVIEW_MODE=1</code> を追加して daemon を再起動してください。
 </div>
-{% else %}
-<div class="rv-hint">
-  レビューモードが <strong>ON</strong> です。新しく生成されたコンテンツはここに溜まります。承認したものだけが投稿されます。
-</div>
 {% endif %}
 
-{# ─── Tweets ─── #}
-<div class="rv-section-title">ツイート ({{ tweets | length }}件 承認待ち)</div>
+{# ═══ 承認待ち ═══ #}
+<div class="rv-section-title">承認待ち <span class="rv-count">— 新規生成・未判断</span></div>
 
-{% if not tweets %}
-<div class="rv-empty">承認待ちのツイートはありません。</div>
-{% endif %}
-
-{% for t in tweets %}
+{# --- 承認待ち: ツイート --- #}
+<h3 style="font-size:.78rem;color:var(--muted);margin:.8rem 0 .4rem;font-weight:500;">ツイート ({{ tweets_pending|length }}件)</h3>
+{% if not tweets_pending %}<div class="rv-empty">なし。</div>{% endif %}
+{% for t in tweets_pending %}
 <div class="rv-card" id="tw-{{ t.id }}">
-  <div class="rv-card-body">
-    <div class="rv-meta">
-      #{{ t.id }} &nbsp;·&nbsp; {{ t.type }} &nbsp;·&nbsp; {{ t.added_at[:16] if t.added_at else '—' }}
-      {{ schedule_badge(t.scheduled_at) }}
+  <div class="rv-card-inner">
+    <div class="rv-card-body">
+      <div class="rv-meta">
+        <span class="rv-pending-marker">承認待ち</span>
+        #{{ t.id }} · {{ t.type }}
+        {{ schedule_badge(t.scheduled_at) }}
+      </div>
+      <div class="rv-text" id="tw-text-{{ t.id }}">{{ t.text }}</div>
     </div>
-    <div class="rv-text" id="tw-text-{{ t.id }}">{{ t.text }}</div>
+    {{ action_buttons('tweet', t.id, 'tw-text-' ~ t.id) }}
   </div>
-  <div class="rv-actions">
-    <button class="rv-btn rv-btn-ok"
-      hx-post="/review/tweet/{{ t.id }}/approve"
-      hx-on::after-request="document.getElementById('tw-{{ t.id }}').classList.add('rv-done'); this.textContent='✓ 承認'">
-      承認
-    </button>
-    <button class="rv-btn rv-btn-ng"
-      hx-post="/review/tweet/{{ t.id }}/reject"
-      hx-on::after-request="document.getElementById('tw-{{ t.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
-      却下
-    </button>
-    <button class="rv-btn rv-btn-regen"
-      hx-post="/review/tweet/{{ t.id }}/regenerate"
-      hx-target="#tw-text-{{ t.id }}"
-      hx-swap="outerHTML"
-      hx-indicator="#tw-regen-spin-{{ t.id }}"
-      hx-on::before-request="this.textContent='…'"
-      hx-on::after-request="this.textContent='🔄'">
-      🔄
-    </button>
-  </div>
+  {{ regen_panel('tweet', t.id, 'tw-text-' ~ t.id) }}
 </div>
 {% endfor %}
 
-{# ─── Engage ─── #}
-<div class="rv-section-title">Engage — 引用RT / リプライ ({{ engages | length }}件 承認待ち)</div>
-
-{% if not engages %}
-<div class="rv-empty">承認待ちの engage コンテンツはありません。</div>
-{% endif %}
-
+{# --- 承認待ち: Engage --- #}
+<h3 style="font-size:.78rem;color:var(--muted);margin:1rem 0 .4rem;font-weight:500;">引用RT / リプライ ({{ engages|length }}件)</h3>
+{% if not engages %}<div class="rv-empty">なし。</div>{% endif %}
 {% for e in engages %}
 <div class="rv-card" id="eg-{{ e.id }}">
-  <div class="rv-card-body">
-    <div class="rv-meta">
-      #{{ e.id }} &nbsp;·&nbsp;
-      {% if e.action_type == 'quote_tweet' %}🔁 引用RT{% else %}💬 リプライ{% endif %}
-      {{ schedule_badge(e.scheduled_at) }}
+  <div class="rv-card-inner">
+    <div class="rv-card-body">
+      <div class="rv-meta">
+        <span class="rv-pending-marker">承認待ち</span>
+        #{{ e.id }} ·
+        {% if e.action_type == 'quote_tweet' %}🔁 引用RT{% else %}💬 リプライ{% endif %}
+        {{ schedule_badge(e.scheduled_at) }}
+      </div>
+      <div class="rv-sub">
+        <strong>対象:</strong> {{ e.target_text[:120] if e.target_text else '—' }}{% if e.target_text and e.target_text | length > 120 %}…{% endif %}
+        <br><a href="{{ e.target_url }}" target="_blank" style="color:#555;font-size:.65rem;">{{ e.target_url[:60] }}…</a>
+      </div>
+      <div class="rv-text" style="margin-top:.5rem;" id="eg-text-{{ e.id }}">{{ e.comment }}</div>
     </div>
-    <div class="rv-sub">
-      <strong>対象:</strong> {{ e.target_text[:120] if e.target_text else '—' }}{% if e.target_text and e.target_text | length > 120 %}…{% endif %}
-      <br><a href="{{ e.target_url }}" target="_blank" style="color:#555;font-size:.65rem;">{{ e.target_url[:60] }}…</a>
-    </div>
-    <div class="rv-text" style="margin-top:.5rem;" id="eg-text-{{ e.id }}">{{ e.comment }}</div>
+    {{ action_buttons('engage', e.id, 'eg-text-' ~ e.id) }}
   </div>
-  <div class="rv-actions">
-    <button class="rv-btn rv-btn-ok"
-      hx-post="/review/engage/{{ e.id }}/approve"
-      hx-on::after-request="document.getElementById('eg-{{ e.id }}').classList.add('rv-done'); this.textContent='✓ 承認'">
-      承認
-    </button>
-    <button class="rv-btn rv-btn-ng"
-      hx-post="/review/engage/{{ e.id }}/reject"
-      hx-on::after-request="document.getElementById('eg-{{ e.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
-      却下
-    </button>
-    <button class="rv-btn rv-btn-regen"
-      hx-post="/review/engage/{{ e.id }}/regenerate"
-      hx-target="#eg-text-{{ e.id }}"
-      hx-swap="outerHTML"
-      hx-on::before-request="this.textContent='…'"
-      hx-on::after-request="this.textContent='🔄'">
-      🔄
-    </button>
-  </div>
+  {{ regen_panel('engage', e.id, 'eg-text-' ~ e.id) }}
 </div>
 {% endfor %}
 
-{# ─── Replies ─── #}
-<div class="rv-section-title">メンション返信 ({{ replies | length }}件 承認待ち)</div>
-
-{% if not replies %}
-<div class="rv-empty">承認待ちのメンション返信はありません。</div>
-{% endif %}
-
+{# --- 承認待ち: メンション返信 --- #}
+<h3 style="font-size:.78rem;color:var(--muted);margin:1rem 0 .4rem;font-weight:500;">メンション返信 ({{ replies|length }}件)</h3>
+{% if not replies %}<div class="rv-empty">なし。</div>{% endif %}
 {% for r in replies %}
 <div class="rv-card" id="rp-{{ r.id }}">
-  <div class="rv-card-body">
-    <div class="rv-meta">
-      #{{ r.id }} &nbsp;·&nbsp; @{{ r.mention_author }}
-      {% if r.send_after %}
-        <span class="rv-schedule rv-schedule-time">📅 {{ r.send_after[5:16] | replace('T', ' ') }}</span>
-      {% endif %}
+  <div class="rv-card-inner">
+    <div class="rv-card-body">
+      <div class="rv-meta">
+        <span class="rv-pending-marker">承認待ち</span>
+        #{{ r.id }} · @{{ r.mention_author }}
+        {% if r.send_after %}<span class="rv-schedule rv-schedule-time">📅 {{ r.send_after[5:16] | replace('T', ' ') }}</span>{% endif %}
+      </div>
+      <div class="rv-sub">
+        <strong>相手:</strong> {{ r.mention_text[:120] if r.mention_text else '—' }}{% if r.mention_text and r.mention_text | length > 120 %}…{% endif %}
+      </div>
+      <div class="rv-text" style="margin-top:.5rem;" id="rp-text-{{ r.id }}">{{ r.reply_text }}</div>
     </div>
-    <div class="rv-sub">
-      <strong>相手:</strong> {{ r.mention_text[:120] if r.mention_text else '—' }}{% if r.mention_text and r.mention_text | length > 120 %}…{% endif %}
-    </div>
-    <div class="rv-text" style="margin-top:.5rem;" id="rp-text-{{ r.id }}">{{ r.reply_text }}</div>
+    {{ action_buttons('reply', r.id, 'rp-text-' ~ r.id) }}
   </div>
-  <div class="rv-actions">
-    <button class="rv-btn rv-btn-ok"
-      hx-post="/review/reply/{{ r.id }}/approve"
-      hx-on::after-request="document.getElementById('rp-{{ r.id }}').classList.add('rv-done'); this.textContent='✓ 承認'">
-      承認
-    </button>
-    <button class="rv-btn rv-btn-ng"
-      hx-post="/review/reply/{{ r.id }}/reject"
-      hx-on::after-request="document.getElementById('rp-{{ r.id }}').classList.add('rv-done'); this.textContent='✕ 却下'">
-      却下
-    </button>
-    <button class="rv-btn rv-btn-regen"
-      hx-post="/review/reply/{{ r.id }}/regenerate"
-      hx-target="#rp-text-{{ r.id }}"
-      hx-swap="outerHTML"
-      hx-on::before-request="this.textContent='…'"
-      hx-on::after-request="this.textContent='🔄'">
-      🔄
-    </button>
-  </div>
+  {{ regen_panel('reply', r.id, 'rp-text-' ~ r.id) }}
 </div>
 {% endfor %}
+
+{# ═══ 承認済み (これから自動投稿) ═══ #}
+<div class="rv-section-title" style="margin-top:2.5rem;">投稿スケジュール <span class="rv-count">— 承認済み・待機中</span></div>
+
+{% if not tweets_scheduled %}
+<div class="rv-empty">予定なし。</div>
+{% else %}
+{% for t in tweets_scheduled %}
+<div class="rv-card" id="tw-{{ t.id }}">
+  <div class="rv-card-inner">
+    <div class="rv-card-body">
+      <div class="rv-meta">
+        <span class="rv-approved-marker">承認済み</span>
+        #{{ t.id }} · {{ t.type }}
+        {{ schedule_badge(t.scheduled_at) }}
+        {% if t.fail_count and t.fail_count > 0 %}<span style="color:var(--yellow);">失敗{{ t.fail_count }}回</span>{% endif %}
+      </div>
+      <div class="rv-text" id="tw-text-{{ t.id }}">{{ t.text }}</div>
+    </div>
+    {{ action_buttons('tweet', t.id, 'tw-text-' ~ t.id, show_approve=False) }}
+  </div>
+  {{ regen_panel('tweet', t.id, 'tw-text-' ~ t.id) }}
+</div>
+{% endfor %}
+{% endif %}
 
 {% endblock %}

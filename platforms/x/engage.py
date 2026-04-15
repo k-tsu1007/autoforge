@@ -98,7 +98,7 @@ def _get_keywords() -> list[str]:
     return ["ChatGPT 副業", "SNS運用", "AI 活用", "Note 収益化", "副業 始める"]
 
 
-def _generate_comment(tweet_text: str, mode: str) -> str:
+def _generate_comment(tweet_text: str, mode: str, user_comment: str = "") -> str:
     from core.llm.wrapper import call_llm
     prompt = ""
     try:
@@ -112,6 +112,11 @@ def _generate_comment(tweet_text: str, mode: str) -> str:
 以下のツイートに{'引用RT' if mode == 'quote' else 'リプライ'}します。一言書いてください。
 元ツイート: {tweet_text[:300]}
 {'120' if mode == 'quote' else '80'}字以内、ハッシュタグなし、URL禁止。コメントのみ出力。"""
+    if user_comment:
+        prompt = (
+            f"【ユーザーからの修正指示】\n{user_comment}\n\n"
+            f"上記の指示を最優先に反映してください。\n\n"
+        ) + prompt
     try:
         return call_llm(prompt, task_type="article_generation", temperature=0.9, max_tokens=200).strip()
     except Exception as e:

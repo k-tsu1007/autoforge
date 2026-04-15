@@ -165,11 +165,12 @@ async def _fetch_tweet_context_async(tab, tweet_url: str) -> dict:
     return ctx
 
 
-def _decide_reply(mention_text: str, context: dict | None = None, force: bool = False) -> dict:
+def _decide_reply(mention_text: str, context: dict | None = None, force: bool = False, user_comment: str = "") -> dict:
     """Claudeが返信すべきか判断し、返すなら文章も生成。
 
     context: _fetch_tweet_context の戻り値（スレッド履歴・引用ツイート）
     force: True のとき should_reply チェックをスキップして強制生成（再生成ボタン用）
+    user_comment: ユーザーによる「こう変えてほしい」の指示（再生成時のみ）
     Returns: {"should_reply": bool, "reply": str}
     """
     if not force:
@@ -229,6 +230,12 @@ def _decide_reply(mention_text: str, context: dict | None = None, force: bool = 
 REPLY: yes または no
 TEXT: （返す場合のみ70字以内の一言）"""
 
+        if user_comment:
+            prompt = (
+                f"【ユーザーからの修正指示】\n{user_comment}\n\n"
+                f"上記の指示を最優先に反映してください。\n\n"
+            ) + prompt
+
         raw = call_llm(prompt, task_type="strategy_evolution", temperature=0.8, max_tokens=150).strip()
 
         should_reply = False
@@ -245,7 +252,7 @@ TEXT: （返す場合のみ70字以内の一言）"""
         return {"should_reply": False, "reply": ""}
 
 
-async def _generate_reply_text_async(mention_text: str, mention_url: str = "") -> str:
+async def _generate_reply_text_async(mention_text: str, mention_url: str = "", user_comment: str = "") -> str:
     tweet_ctx = {"thread_texts": [], "quoted_text": ""}
 
     if mention_url:
@@ -260,17 +267,16 @@ async def _generate_reply_text_async(mention_text: str, mention_url: str = "") -
         except Exception as e:
             print(f"  コンテキスト取得失敗（再生成）: {e}")
 
-    result = _decide_reply(mention_text, context=tweet_ctx, force=True)
+    result = _decide_reply(mention_text, context=tweet_ctx, force=True, user_comment=user_comment)
     return result.get("reply", "")
 
 
-def generate_reply_text(mention_text: str, mention_url: str = "") -> str:
+def generate_reply_text(mention_text: str, mention_url: str = "", user_comment: str = "") -> str:
     """返信テキストだけを強制生成（should_reply 判断をスキップ）。再生成ボタン用。
 
-    mention_url が渡された場合はスレッドコンテキストを取得して
-    _decide_reply() と同じプロンプトで生成する。
+    user_comment: ユーザーが「こう変えてほしい」と書いた修正指示
     """
-    return asyncio.run(_generate_reply_text_async(mention_text, mention_url))
+    return asyncio.run(_generate_reply_text_async(mention_text, mention_url, user_comment))
 
 
 async def _run_scan_async() -> dict:

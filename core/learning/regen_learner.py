@@ -20,18 +20,23 @@ def run() -> dict:
 
         # 全期間の regen_log を収集
         approved = conn.execute(
-            "SELECT content_type, old_text, new_text FROM regen_log WHERE approved=1"
+            "SELECT content_type, old_text, new_text, user_comment FROM regen_log WHERE approved=1"
         ).fetchall()
         rejected = conn.execute(
-            "SELECT content_type, old_text, new_text FROM regen_log WHERE approved=0"
+            "SELECT content_type, old_text, new_text, user_comment FROM regen_log WHERE approved=0"
+        ).fetchall()
+        # user_comment 付きの再生成 (承認待ちも含む) - 特に強いシグナル
+        commented = conn.execute(
+            "SELECT content_type, old_text, new_text, user_comment FROM regen_log "
+            "WHERE user_comment IS NOT NULL AND TRIM(user_comment) != ''"
         ).fetchall()
 
-        if len(approved) + len(rejected) < MIN_SAMPLES:
-            print(f"[regen_learner] サンプル不足 ({len(approved)}承認 / {len(rejected)}却下) → スキップ")
+        if len(approved) + len(rejected) + len(commented) < MIN_SAMPLES:
+            print(f"[regen_learner] サンプル不足 ({len(approved)}承認 / {len(rejected)}却下 / {len(commented)}コメント付) → スキップ")
             return result
 
         result["analyzed"] = len(approved) + len(rejected)
-        print(f"[regen_learner] 分析開始: 承認={len(approved)}件 却下={len(rejected)}件")
+        print(f"[regen_learner] 分析開始: 承認={len(approved)}件 却下={len(rejected)}件 コメント付={len(commented)}件")
 
         # サンプルテキストを組み立て
         approved_samples = "\n".join(
@@ -42,20 +47,31 @@ def run() -> dict:
             f"[{r['content_type']}] 却下前: {r['old_text'][:100]}"
             for r in rejected[:20]
         )
+        # ユーザーからの修正指示は明確な教師信号
+        comment_samples = "\n".join(
+            f"[{r['content_type']}] BEFORE: {(r['old_text'] or '')[:80]}\n"
+            f"  USER指示: {r['user_comment']}\n"
+            f"  AFTER: {(r['new_text'] or '')[:80]}"
+            for r in commented[:15]
+        )
 
-        prompt = f"""以下はSNS運用自動化システムで「承認されたテキスト」と「却下されて再生成されたテキスト」のログです。
+        prompt = f"""以下はSNS運用自動化システムの再生成ログ分析です。3種類のデータがあります。
 
-【承認されたテキスト（ユーザーが良いと判断）】
+【1. 承認されたテキスト（ユーザーが良いと判断）】
 {approved_samples or '(なし)'}
 
-【却下されたテキスト（ユーザーが再生成を選んだ）】
+【2. 却下されたテキスト（ユーザーが再生成を選んだ）】
 {rejected_samples or '(なし)'}
 
-これらのパターンを分析して、今後の生成品質を上げるための知見を最大5件導き出してください。
+【3. ユーザーが「こう直して」と明示的に指示した再生成】※最も重要なシグナル
+{comment_samples or '(なし)'}
+
+特に (3) のユーザー指示から、ユーザーの好み・回避したい表現を読み取って反映してください。
+全体を総合して、今後の生成品質を上げるための知見を最大7件導き出してください。
 
 出力フォーマット（各行）:
-DO: （採用テキストに共通する良い特徴・表現パターン）
-DONT: （却下テキストに共通する避けるべき特徴）
+DO: （好まれる表現パターン・切り口・トーン）
+DONT: （避けるべき特徴・型）
 
 DOまたはDONTのみ出力。説明文不要。"""
 

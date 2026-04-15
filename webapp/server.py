@@ -276,14 +276,24 @@ def dash_partial(request: Request, user: str = Depends(check_auth)):
 
 @app.get("/review", response_class=HTMLResponse)
 def review_page(request: Request, user: str = Depends(check_auth)):
-    """レビューキュー — 承認待ちのツイート・メンション返信を確認して承認/却下する。"""
+    """レビュー — 承認待ち + 承認済み投稿スケジュール を一画面で管理する。"""
     from core.db import get_connection, review_mode_enabled
     conn = get_connection()
-    tweets = [dict(r) for r in conn.execute(
+
+    # 承認待ち
+    tweets_pending = [dict(r) for r in conn.execute(
         "SELECT id, type, text, added_at, scheduled_at FROM tweet_queue "
         "WHERE posted=0 AND approved IS NULL AND COALESCE(fail_count,0) < 3 "
-        "ORDER BY id DESC"
+        "ORDER BY scheduled_at ASC"
     ).fetchall()]
+
+    # 承認済みで未投稿 (スケジュール一覧)
+    tweets_scheduled = [dict(r) for r in conn.execute(
+        "SELECT id, type, text, scheduled_at, fail_count FROM tweet_queue "
+        "WHERE posted=0 AND approved=1 AND COALESCE(fail_count,0) < 3 "
+        "ORDER BY CASE WHEN scheduled_at='immediate' THEN 0 ELSE 1 END, scheduled_at ASC"
+    ).fetchall()]
+
     replies = [dict(r) for r in conn.execute(
         "SELECT id, mention_author, mention_text, reply_text, send_after FROM mention_reply_queue "
         "WHERE sent=0 AND approved IS NULL ORDER BY id DESC"
@@ -295,10 +305,16 @@ def review_page(request: Request, user: str = Depends(check_auth)):
         ).fetchall()]
     except Exception:
         engages = []
-    review_on = review_mode_enabled()
+
     return templates.TemplateResponse(
         request=request, name="review.html",
-        context={"tweets": tweets, "replies": replies, "engages": engages, "review_on": review_on}
+        context={
+            "tweets_pending": tweets_pending,
+            "tweets_scheduled": tweets_scheduled,
+            "replies": replies,
+            "engages": engages,
+            "review_on": review_mode_enabled(),
+        }
     )
 
 
@@ -351,21 +367,27 @@ def review_tweet_reject(item_id: int, request: Request, user: str = Depends(chec
 
 
 @app.post("/review/tweet/{item_id}/regenerate", response_class=HTMLResponse)
-def review_tweet_regenerate(item_id: int, request: Request, user: str = Depends(check_auth)):
+def review_tweet_regenerate(
+    item_id: int,
+    request: Request,
+    user_comment: str = Form(""),
+    user: str = Depends(check_auth),
+):
     from core.db import get_connection
     conn = get_connection()
     try:
         old_row = conn.execute("SELECT text FROM tweet_queue WHERE id=?", (item_id,)).fetchone()
         old_text = old_row["text"] if old_row else ""
         from platforms.x.tweet_generator import generate_batch
-        new_tweets = generate_batch(n=1)
+        new_tweets = generate_batch(n=1, user_comment=user_comment)
         if not new_tweets:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         new_text = new_tweets[0]
         conn.execute("UPDATE tweet_queue SET text=? WHERE id=?", (new_text, item_id))
         conn.execute(
-            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text) VALUES ('tweet',?,?,?)",
-            (item_id, old_text, new_text)
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text, user_comment) "
+            "VALUES ('tweet',?,?,?,?)",
+            (item_id, old_text, new_text, user_comment or None)
         )
         conn.commit()
         return HTMLResponse(
@@ -413,7 +435,12 @@ def review_engage_reject(item_id: int, request: Request, user: str = Depends(che
 
 
 @app.post("/review/engage/{item_id}/regenerate", response_class=HTMLResponse)
-def review_engage_regenerate(item_id: int, request: Request, user: str = Depends(check_auth)):
+def review_engage_regenerate(
+    item_id: int,
+    request: Request,
+    user_comment: str = Form(""),
+    user: str = Depends(check_auth),
+):
     from core.db import get_connection
     conn = get_connection()
     try:
@@ -425,13 +452,14 @@ def review_engage_regenerate(item_id: int, request: Request, user: str = Depends
         old_text = row["comment"] or ""
         mode = "quote" if row["action_type"] == "quote_tweet" else "reply"
         from platforms.x.engage import _generate_comment
-        new_comment = _generate_comment(row["target_text"] or "", mode)
+        new_comment = _generate_comment(row["target_text"] or "", mode, user_comment=user_comment)
         if not new_comment:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         conn.execute("UPDATE engage_queue SET comment=? WHERE id=?", (new_comment, item_id))
         conn.execute(
-            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text) VALUES ('engage',?,?,?)",
-            (item_id, old_text, new_comment)
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text, user_comment) "
+            "VALUES ('engage',?,?,?,?)",
+            (item_id, old_text, new_comment, user_comment or None)
         )
         conn.commit()
         return HTMLResponse(
@@ -483,7 +511,12 @@ def review_reply_reject(item_id: int, request: Request, user: str = Depends(chec
 
 
 @app.post("/review/reply/{item_id}/regenerate", response_class=HTMLResponse)
-def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(check_auth)):
+def review_reply_regenerate(
+    item_id: int,
+    request: Request,
+    user_comment: str = Form(""),
+    user: str = Depends(check_auth),
+):
     from core.db import get_connection
     conn = get_connection()
     try:
@@ -494,13 +527,18 @@ def review_reply_regenerate(item_id: int, request: Request, user: str = Depends(
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">データなし</div>')
         old_text = row["reply_text"] or ""
         from platforms.x.mention_reply import generate_reply_text
-        new_text = generate_reply_text(row["mention_text"] or "", mention_url=row["mention_url"] or "")
+        new_text = generate_reply_text(
+            row["mention_text"] or "",
+            mention_url=row["mention_url"] or "",
+            user_comment=user_comment,
+        )
         if not new_text:
             return HTMLResponse('<div class="rv-text" style="color:#f87171;">生成失敗</div>')
         conn.execute("UPDATE mention_reply_queue SET reply_text=? WHERE id=?", (new_text, item_id))
         conn.execute(
-            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text) VALUES ('reply',?,?,?)",
-            (item_id, old_text, new_text)
+            "INSERT INTO regen_log (content_type, queue_id, old_text, new_text, user_comment) "
+            "VALUES ('reply',?,?,?,?)",
+            (item_id, old_text, new_text, user_comment or None)
         )
         conn.commit()
         return HTMLResponse(
