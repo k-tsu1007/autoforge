@@ -70,7 +70,8 @@ def run(dry_run: bool = False) -> dict:
         return {"liked": 0, "followed": 0}
 
     import json
-    cookies = json.loads(session_path.read_text(encoding="utf-8"))
+    raw = json.loads(session_path.read_text(encoding="utf-8"))
+    cookies = raw.get("cookies", raw) if isinstance(raw, dict) else raw
 
     liked_today = _count_today("note_like")
     followed_today = _count_today("note_follow")

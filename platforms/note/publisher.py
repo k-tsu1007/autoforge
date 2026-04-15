@@ -121,6 +121,28 @@ def _get_noteclient(email: str, password: str, user_urlname: str):
 
     client.images.upload_eyecatch = types.MethodType(_fixed_upload_eyecatch, client.images)
 
+    # note.com が HTML の `magazineLayout.id` → `magazineId` 形式に変更したため、
+    # MagazineResolver のregexパターンを拡張する
+    import re as _re
+    def _fixed_get_magazine_id(self_mag, http, user_urlname, headers, magazine_key):
+        if not magazine_key:
+            return {"ok": True, "data": {"magazine_id": None}}
+        url = f"https://note.com/{user_urlname}/m/{magazine_key}"
+        res = http.get(url, headers={"User-Agent": headers.get("User-Agent", "")})
+        if not res.get("ok"):
+            return {"ok": False, "error": {"type": "MagazinePageFetchFailed", "status_code": res.get("status_code"), "detail": res.get("text"), "url": url}}
+        html = res.get("text") or ""
+        for pat in (
+            r'"?magazineId"?\\?"?\s*:\s*(\d+)',  # 新形式 (2026-04以降)
+            r'magazineLayout\s*:\s*{\s*id\s*:\s*(\d+)',
+            r'"magazineLayout"\s*:\s*{\s*"id"\s*:\s*(\d+)',
+        ):
+            m = _re.search(pat, html)
+            if m:
+                return {"ok": True, "data": {"magazine_id": int(m.group(1))}}
+        return {"ok": False, "error": {"type": "MagazineIdNotFound", "message": "magazine id not found in html", "url": url}}
+    client.magazines.get_magazine_id = types.MethodType(_fixed_get_magazine_id, client.magazines)
+
     return client
 
 
