@@ -254,11 +254,11 @@ a { color: var(--blue); }
 
   {% if _path != '/instances' and _path != '/' %}
   <nav>
-    <a href="/dash"     {% if _path == '/dash'     %}class="active"{% endif %}>状態</a>
-    <a href="/review"   {% if _path == '/review'   %}class="active"{% endif %}>レビュー</a>
-    <a href="/articles" {% if _path == '/articles' %}class="active"{% endif %}>記事</a>
-    <a href="/tweets"   {% if _path == '/tweets'   %}class="active"{% endif %}>ツイート</a>
-    <a href="/flow"     {% if _path == '/flow'     %}class="active"{% endif %}>フロー</a>
+    <a href="/dash"     {% if _path == '/dash'     %}class="active"{% endif %}>Home</a>
+    <a href="/review"   {% if _path == '/review'   %}class="active"{% endif %}>Review</a>
+    <a href="/articles" {% if _path == '/articles' %}class="active"{% endif %}>articles</a>
+    <a href="/tweets"   {% if _path == '/tweets'   %}class="active"{% endif %}>sns</a>
+    <a href="/flow"     {% if _path == '/flow'     %}class="active"{% endif %}>flow</a>
   </nav>
   {% endif %}
 
