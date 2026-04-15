@@ -215,38 +215,6 @@ def tweets_page(request: Request, user: str = Depends(check_auth)):
     )
 
 
-@app.get("/strategy", response_class=HTMLResponse)
-def strategy_page(request: Request, user: str = Depends(check_auth)):
-    """戦略表示・編集。"""
-    strategy_path = ROOT / "data" / "strategy.json"
-    program_path = ROOT / "program.md"
-
-    strategy_text = strategy_path.read_text(encoding="utf-8") if strategy_path.exists() else "{}"
-    program_text = program_path.read_text(encoding="utf-8") if program_path.exists() else ""
-
-    return templates.TemplateResponse(
-        request=request,
-        name="strategy.html",
-        context={"strategy_text": strategy_text, "program_text": program_text},
-    )
-
-
-@app.post("/strategy/save")
-def save_strategy(
-    strategy_text: str = Form(...),
-    user: str = Depends(check_auth),
-):
-    """戦略JSONを保存する。"""
-    try:
-        # JSON validation
-        json.loads(strategy_text)
-        strategy_path = ROOT / "data" / "strategy.json"
-        strategy_path.write_text(strategy_text, encoding="utf-8")
-        return RedirectResponse(url="/strategy?saved=1", status_code=303)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
-
-
 @app.get("/partial/health", response_class=HTMLResponse)
 def partial_health(request: Request, user: str = Depends(check_auth)):
     """ヘルス状況パーシャル（HTMX用）。"""
