@@ -448,8 +448,13 @@ def add_to_tweet_queue(tweet_type: str, text: str, scheduled_at: str = None) -> 
 
 
 def get_unposted_tweets() -> list[dict]:
+    """投稿予定 (まだ発火していない) を返す。fail_count>=3 の死亡行は除外。"""
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM tweet_queue WHERE posted = 0 ORDER BY id").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM tweet_queue "
+        "WHERE posted = 0 AND COALESCE(fail_count,0) < 3 "
+        "ORDER BY id"
+    ).fetchall()
     return [dict(r) for r in rows]
 
 

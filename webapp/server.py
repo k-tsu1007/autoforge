@@ -281,7 +281,8 @@ def review_page(request: Request, user: str = Depends(check_auth)):
     conn = get_connection()
     tweets = [dict(r) for r in conn.execute(
         "SELECT id, type, text, added_at, scheduled_at FROM tweet_queue "
-        "WHERE posted=0 AND approved IS NULL ORDER BY id DESC"
+        "WHERE posted=0 AND approved IS NULL AND COALESCE(fail_count,0) < 3 "
+        "ORDER BY id DESC"
     ).fetchall()]
     replies = [dict(r) for r in conn.execute(
         "SELECT id, mention_author, mention_text, reply_text, send_after FROM mention_reply_queue "
