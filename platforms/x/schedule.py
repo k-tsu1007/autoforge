@@ -177,17 +177,35 @@ def schedule_tweet(
 
 
 def _register_datetrigger(scheduler, tweet_id: int, post_time: str) -> None:
-    """1件のツイートに対して DateTrigger で発火ジョブを登録する。"""
+    """1件のツイートに対して DateTrigger で発火ジョブを登録する。
+
+    'immediate' や過去 post_time が複数ある場合、既存登録ジョブと被らないよう
+    60秒ずつずらして一斉発火を回避する (ブラウザ起動/投稿が重なるのを防ぐ)。
+    """
     from apscheduler.triggers.date import DateTrigger
 
+    now = datetime.now(JST)
     if post_time == "immediate":
-        run_at = datetime.now(JST) + timedelta(seconds=10)
+        run_at = now + timedelta(seconds=10)
     else:
         dt = _to_dt(post_time)
         if dt is None:
             return
-        # 過去 (起動時再登録時の古い行) は「すぐ」に繰り上げ
-        run_at = dt if dt > datetime.now(JST) else datetime.now(JST) + timedelta(seconds=10)
+        run_at = dt if dt > now else now + timedelta(seconds=10)
+
+    # 既存登録ジョブの発火予定と被ったら 60秒ずつ後ろにずらす
+    try:
+        existing = [
+            j.next_run_time for j in scheduler.get_jobs()
+            if j.id.startswith("tweet_") and j.next_run_time is not None
+        ]
+    except Exception:
+        existing = []
+    while any(
+        e is not None and abs((run_at - e.astimezone(JST)).total_seconds()) < 45
+        for e in existing
+    ):
+        run_at = run_at + timedelta(seconds=60)
 
     scheduler.add_job(
         _post_scheduled_tweet_job,
@@ -304,29 +322,27 @@ def register_pending_on_startup(scheduler) -> int:
 def migrate_null_scheduled_at() -> int:
     """既存の scheduled_at IS NULL 行を埋める (1回限り)。
 
-    - 承認済み: 'immediate' (= 即時発火)
-    - レビュー待ち (approved IS NULL): 空きスロットを割当
+    承認状態にかかわらず advisor の空きスロットに順番割当 (スロット1本 = 行1件)。
+    slot 枯渇時のみ 'immediate' にフォールバック。
+    各更新は即 commit して、次の行の find_next_free_time がそれを見られるようにする。
     """
     from core.db import get_connection, transaction
 
     conn = get_connection()
-    rows_approved = conn.execute(
-        "SELECT id FROM tweet_queue WHERE posted=0 AND approved=1 AND scheduled_at IS NULL"
-    ).fetchall()
-    rows_pending = conn.execute(
-        "SELECT id, type FROM tweet_queue WHERE posted=0 AND approved IS NULL AND scheduled_at IS NULL"
+    rows = conn.execute(
+        "SELECT id, type FROM tweet_queue WHERE posted=0 AND scheduled_at IS NULL ORDER BY id ASC"
     ).fetchall()
 
     updated = 0
-    with transaction() as c:
-        for r in rows_approved:
-            c.execute("UPDATE tweet_queue SET scheduled_at='immediate' WHERE id=?", (r["id"],))
-            updated += 1
-        for r in rows_pending:
-            tt = r["type"] or "単発"
+    for r in rows:
+        tt = r["type"] or "単発"
+        if tt == "リンク付き":
+            slot = "immediate"
+        else:
             slot = find_next_free_time(tt) or "immediate"
+        with transaction() as c:
             c.execute("UPDATE tweet_queue SET scheduled_at=? WHERE id=?", (slot, r["id"]))
-            updated += 1
+        updated += 1
     return updated
 
 
