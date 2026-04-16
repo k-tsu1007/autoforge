@@ -124,11 +124,14 @@ def ui_index(request: Request):
     ).fetchall()
 
     # status='published' + status IS NULL (旧データ互換) 両方を含む
+    # 表示用に published_at が空なら created_at を使う
     recent = conn.execute(
-        "SELECT title, genre, note_url, published_at, views, likes, comments "
+        "SELECT title, genre, note_url, "
+        "COALESCE(NULLIF(published_at, ''), created_at) AS published_at, "
+        "views, likes, comments "
         "FROM articles "
         "WHERE (status='published' OR status IS NULL) AND title IS NOT NULL "
-        "ORDER BY COALESCE(published_at, created_at) DESC"
+        "ORDER BY COALESCE(NULLIF(published_at, ''), created_at) DESC"
     ).fetchall()
 
     published_today = conn.execute(
