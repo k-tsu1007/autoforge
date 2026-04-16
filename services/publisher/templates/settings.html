@@ -62,19 +62,8 @@
 
 <h2 style="margin-top:0;font-size:1.1rem;">Automation</h2>
 <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
-  Posting schedule, review mode, and prompt rotation. Changes apply immediately.
+  Auto-generated articles at scheduled slots publish immediately (no review). For manual generation with review, use <a href="/generate">Generate</a>.
 </p>
-
-{# ─── Review Mode ─── #}
-<div class="set-card">
-  <h3>Review Mode</h3>
-  <div class="set-desc">When ON, generated articles wait for manual approval at <a href="/review">Review</a>. When OFF, they publish immediately on auto-poll.</div>
-  <div class="toggle-row">
-    <div class="toggle {% if review_mode %}on{% endif %}"
-         hx-post="/settings/review_mode/toggle" hx-swap="outerHTML"></div>
-    <span class="toggle-label">{{ "Enabled — manual approval required" if review_mode else "Disabled — auto-publish" }}</span>
-  </div>
-</div>
 
 {# ─── Posting Slots ─── #}
 <div class="set-card">

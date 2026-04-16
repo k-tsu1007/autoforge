@@ -6,7 +6,7 @@
   <h2 style="margin:0;font-size:1.1rem;">Dashboard</h2>
   <div style="display:flex;gap:.5rem;">
     <a href="/generate" class="btn btn-primary">+ Generate</a>
-    {% if pending_count > 0 %}<a href="/review" class="btn btn-ok">Review ({{ pending_count }})</a>{% endif %}
+    {% if pending_count > 0 %}<a href="/generate" class="btn btn-ok">Review ({{ pending_count }})</a>{% endif %}
   </div>
 </div>
 
@@ -36,7 +36,7 @@
   <div class="card-title">{{ a.title }}</div>
   <div class="card-meta">{{ a.genre }} &middot; {{ a.created_at[:16] }}</div>
   <div class="card-actions">
-    <a href="/review" class="btn btn-ok">Review</a>
+    <a href="/generate" class="btn btn-ok">Review</a>
   </div>
 </div>
 {% endfor %}

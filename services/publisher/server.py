@@ -155,18 +155,11 @@ def ui_index(request: Request):
 
 # ─── Review UI ────────────────────────────────────────────────────────────
 
-@app.get("/review", response_class=HTMLResponse)
-def ui_review(request: Request):
-    from core.db import get_connection
-    conn = get_connection()
-    rows = conn.execute(
-        "SELECT note_id, title, genre, tags, free_content, paid_content, created_at, published_at, status "
-        "FROM articles WHERE status IN ('pending_review', 'approved') "
-        "ORDER BY status='pending_review' DESC, created_at DESC"
-    ).fetchall()
-    articles = [dict(r) for r in rows]
-    return _render(request, "review.html", active="review",
-                   articles=articles, next_slot=_next_publish_slot())
+@app.get("/review")
+def ui_review_redirect():
+    """Review は Generate ページに統合されたためリダイレクト。"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/generate", status_code=301)
 
 
 @app.post("/review/{note_id}/approve", response_class=HTMLResponse)
@@ -582,12 +575,24 @@ def ui_generate(request: Request):
             "weight": int(weights.get(p["name"], 1)),
         })
 
+    # pending / scheduled 記事
+    from core.db import get_connection
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT note_id, title, genre, tags, free_content, paid_content, "
+        "created_at, published_at, status "
+        "FROM articles WHERE status IN ('pending_review', 'approved') "
+        "ORDER BY status='pending_review' DESC, created_at DESC"
+    ).fetchall()
+    pending_articles = [dict(r) for r in rows]
+
     return _render(request, "generate.html", active="generate",
                    article_types=article_types,
                    next_slot=next_slot,
                    recent_titles=all_titles,
                    total_articles=len(all_titles),
-                   prompt_choices=prompt_choices)
+                   prompt_choices=prompt_choices,
+                   pending_articles=pending_articles)
 
 
 @app.post("/generate", response_class=HTMLResponse)
@@ -596,6 +601,7 @@ def ui_do_generate(
     user_comment: str = Form(""),
     article_type: str = Form(""),
     prompt_name: str = Form(""),
+    schedule_mode: str = Form("next_slot"),
     scheduled_at: str = Form(""),
 ):
     try:
@@ -626,16 +632,8 @@ def ui_do_generate(
                 user_comment=user_comment,
             )
 
-        # 投稿予約時刻 (datetime-local の形式: YYYY-MM-DDTHH:MM)
-        scheduled_iso = ""
-        if scheduled_at:
-            try:
-                dt = datetime.fromisoformat(scheduled_at)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=JST)
-                scheduled_iso = dt.isoformat()
-            except Exception:
-                pass
+        # 投稿予約時刻を解決
+        scheduled_iso = _resolve_schedule(schedule_mode, scheduled_at)
 
         # pending_review として保存
         from core.db import upsert_article
@@ -856,8 +854,8 @@ def _record_wp_article(article: dict, post_url: str):
 
 
 def _poll_note() -> dict:
+    """Automation (drafts/) → 常に即時投稿 (レビューなし)。"""
     from core.paths import drafts_dir, published_dir
-    from core.db import review_mode_enabled
     dd = drafts_dir()
     pd = published_dir()
     pd.mkdir(parents=True, exist_ok=True)
@@ -866,31 +864,22 @@ def _poll_note() -> dict:
     if not drafts:
         return {"published": 0, "message": "no drafts"}
 
-    review_on = review_mode_enabled()
     results = []
     with _lock:
         for dp in drafts:
             article = json.loads(dp.read_text(encoding="utf-8"))
-            if review_on:
-                try:
-                    from platforms.note.publisher import _save_as_pending_review
-                    _save_as_pending_review(article)
-                    results.append({"title": article.get("title", ""), "status": "pending_review"})
-                except Exception as e:
-                    results.append({"title": article.get("title", ""), "status": f"error: {e}"})
-            else:
-                try:
-                    r = _publish_note(article)
-                    results.append({"title": article.get("title", ""), "status": "published", **r})
-                except Exception as e:
-                    results.append({"title": article.get("title", ""), "status": f"error: {e}"})
+            try:
+                r = _publish_note(article)
+                results.append({"title": article.get("title", ""), "status": "published", **r})
+            except Exception as e:
+                results.append({"title": article.get("title", ""), "status": f"error: {e}"})
             dp.rename(pd / dp.name)
     return {"published": len(results), "results": results}
 
 
 def _poll_wordpress() -> dict:
+    """Automation (drafts/) → 常に即時投稿 (レビューなし)。"""
     from core.paths import drafts_dir, published_dir, ready_to_publish_dir
-    from core.db import review_mode_enabled
     pd = published_dir()
     pd.mkdir(parents=True, exist_ok=True)
 
@@ -901,24 +890,15 @@ def _poll_wordpress() -> dict:
     if not candidates:
         return {"published": 0, "message": "no drafts"}
 
-    review_on = review_mode_enabled()
     results = []
     with _lock:
         for dp in candidates:
             article = json.loads(dp.read_text(encoding="utf-8"))
-            if review_on:
-                try:
-                    from platforms.wordpress.publisher import _save_as_pending_review
-                    _save_as_pending_review(article)
-                    results.append({"title": article.get("title", ""), "status": "pending_review"})
-                except Exception as e:
-                    results.append({"title": article.get("title", ""), "status": f"error: {e}"})
-            else:
-                try:
-                    r = _publish_wordpress(article)
-                    results.append({"title": article.get("title", ""), "status": "published", **r})
-                except Exception as e:
-                    results.append({"title": article.get("title", ""), "status": f"error: {e}"})
+            try:
+                r = _publish_wordpress(article)
+                results.append({"title": article.get("title", ""), "status": "published", **r})
+            except Exception as e:
+                results.append({"title": article.get("title", ""), "status": f"error: {e}"})
             dp.rename(pd / dp.name)
     return {"published": len(results), "results": results}
 
@@ -986,6 +966,42 @@ def _load_history() -> dict:
         except Exception:
             pass
     return {"articles": []}
+
+
+def _resolve_schedule(mode: str, custom: str = "") -> str:
+    """投稿モードから ISO 時刻を返す。
+
+    - 'immediate' → 空文字 (承認時に即投稿)
+    - 'next_slot' → 次のスロット時刻の ISO
+    - 'custom'    → custom の ISO
+    """
+    now = _now()
+    if mode == "immediate" or not mode:
+        return ""
+    if mode == "custom" and custom:
+        try:
+            dt = datetime.fromisoformat(custom)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=JST)
+            return dt.isoformat()
+        except Exception:
+            pass
+    # next_slot
+    try:
+        from services.publisher import automation
+        slots = sorted(automation.get_slots())
+        if not slots:
+            return ""
+        current = now.strftime("%H:%M")
+        future = [s for s in slots if s > current]
+        target_time = future[0] if future else slots[0]
+        hh, mm = target_time.split(":")
+        dt = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+        if dt <= now:
+            dt = dt.replace(day=dt.day) + timedelta(days=1)
+        return dt.isoformat()
+    except Exception:
+        return ""
 
 
 def _next_publish_slot() -> str:
