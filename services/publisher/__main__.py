@@ -36,6 +36,10 @@ def main() -> int:
     inst = set_active_instance(args.instance)
     load_envfiles(REPO_ROOT, inst.root)
 
+    # config.yaml の env セクションも環境変数に注入 (NOTE_URLNAME など)
+    for k, v in inst.env().items():
+        os.environ.setdefault(k, v)
+
     port = args.port or int(inst.get("instance.publisher_port") or 0) or DEFAULT_PORTS.get(args.instance, 8011)
     print(f"[publisher] instance={inst.name} port={port} platform={os.environ.get('CONTENT_PLATFORM', 'note')}")
 
