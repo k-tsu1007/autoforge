@@ -13,6 +13,7 @@ DEFAULT_CONFIG = {
     "review_mode": True,
     "slots": ["09:00", "14:00", "20:00"],
     "prompt_weights": {},
+    "prompt_modes": {},  # {prompt_name: "free" | "mixed"}
 }
 
 
@@ -119,5 +120,28 @@ def set_prompt_weight(name: str, weight: int) -> dict:
     else:
         weights[name] = int(weight)
     cfg["prompt_weights"] = weights
+    save(cfg)
+    return cfg
+
+
+def get_prompt_mode(name: str) -> str:
+    """プロンプトの有料/無料モード: 'free' | 'mixed' (デフォルト 'mixed')。
+
+    - free : 100% 無料で公開 (有料部分なし)
+    - mixed: 無料 + 有料 (note の free_ratio に従う)
+
+    WordPress には関係ない (常に無料)。
+    """
+    modes = load().get("prompt_modes", {})
+    return modes.get(name, "mixed")
+
+
+def set_prompt_mode(name: str, mode: str) -> dict:
+    if mode not in ("free", "mixed"):
+        raise ValueError(f"invalid mode: {mode}")
+    cfg = load()
+    modes = dict(cfg.get("prompt_modes", {}))
+    modes[name] = mode
+    cfg["prompt_modes"] = modes
     save(cfg)
     return cfg

@@ -465,6 +465,7 @@ def _list_prompts() -> list[dict]:
     inst = get_active_instance()
     prompts_dir = inst.root / "prompts"
     weights = automation.get_prompt_weights()
+    is_note = _platform() == "note"
 
     prompts = []
     if prompts_dir.exists():
@@ -486,6 +487,8 @@ def _list_prompts() -> list[dict]:
                 "variables": meta.get("variables", ""),
                 "content": content,
                 "weight": int(weights.get(name, 1)),
+                "mode": automation.get_prompt_mode(name),
+                "mode_applicable": is_note,  # WordPress は常に無料なのでモード選択不要
             })
     return prompts
 
@@ -535,6 +538,16 @@ def ui_prompt_add(request: Request, name: str = Form(...)):
     return RedirectResponse(url="/prompts", status_code=303)
 
 
+@app.post("/prompts/{name}/mode", response_class=HTMLResponse)
+def ui_prompt_mode(name: str, mode: str = Form(...)):
+    from services.publisher import automation
+    try:
+        automation.set_prompt_mode(name, mode)
+    except ValueError:
+        return HTMLResponse("Invalid mode", status_code=400)
+    return HTMLResponse("")
+
+
 @app.post("/prompts/{name}/delete")
 def ui_prompt_delete(name: str):
     from fastapi.responses import RedirectResponse
@@ -573,6 +586,7 @@ def ui_generate(request: Request):
             "name": p["name"],
             "label": p["label"],
             "weight": int(weights.get(p["name"], 1)),
+            "mode": automation.get_prompt_mode(p["name"]) if p.get("mode_applicable") else "-",
         })
 
     # pending / scheduled 記事
@@ -597,6 +611,7 @@ def ui_generate(request: Request):
 
 @app.post("/generate", response_class=HTMLResponse)
 def ui_do_generate(
+    request: Request,
     topic_hint: str = Form(""),
     user_comment: str = Form(""),
     article_type: str = Form(""),
@@ -606,6 +621,7 @@ def ui_do_generate(
 ):
     try:
         from core.paths import strategy_path, program_md_path
+        from services.publisher import automation
         strategy = json.loads(open(strategy_path(), encoding="utf-8").read())
         history = _load_history()
         program = ""
@@ -616,12 +632,14 @@ def ui_do_generate(
 
         platform = _platform()
 
-        # WordPress: prompt_name (or article_type) で記事タイプを指定
-        wp_type = prompt_name or article_type
+        # プロンプトを決定 (明示指定 → weight によるランダム)
+        chosen_prompt = prompt_name or _pick_prompt_by_weight()
+        # プロンプト別 mode 判定 (free / mixed)
+        prompt_mode = automation.get_prompt_mode(chosen_prompt) if chosen_prompt else "mixed"
 
         if platform == "wordpress":
-            if wp_type:
-                strategy.setdefault("content_params", {})["article_type"] = wp_type
+            if chosen_prompt:
+                strategy.setdefault("content_params", {})["article_type"] = chosen_prompt
             from platforms.wordpress.generator import generate_article
             article = generate_article(strategy, program, history, topic_hint=topic_hint)
         else:
@@ -630,6 +648,7 @@ def ui_do_generate(
                 strategy, program, history,
                 topic_hint=topic_hint,
                 user_comment=user_comment,
+                free_only=(prompt_mode == "free"),
             )
 
         # 投稿予約時刻を解決
@@ -650,33 +669,60 @@ def ui_do_generate(
             "tags": tags_with_cat,
             "note_url": "",
             "status": "pending_review",
-            "published_at": scheduled_iso,  # scheduled_at を published_at に流用
+            "published_at": scheduled_iso,
             "created_at": _now().isoformat(),
             "free_content": article.get("free_content", article.get("content", "")),
             "paid_content": article.get("paid_content", ""),
             "views": 0, "likes": 0, "comments": 0, "revenue": 0,
         })
 
-        title = article.get("title", "Untitled")
-        preview = (article.get("free_content", "") or article.get("content", ""))[:200]
-        sched_msg = ""
-        if scheduled_iso:
-            sched_msg = f'<div style="font-size:.78rem;color:var(--yellow);margin-top:.4rem;">Scheduled: {scheduled_iso[:16]}</div>'
-        return HTMLResponse(
-            f'<div class="card" style="border-color:var(--green);">'
-            f'<div class="card-title" style="color:var(--green);">Generated: {title}</div>'
-            f'<div class="card-body">{preview}...</div>'
-            f'{sched_msg}'
-            f'<div class="card-actions" style="margin-top:.6rem;">'
-            f'<a href="/review" class="btn btn-ok">Go to Review</a>'
-            f'</div></div>'
-        )
+        # 更新された pending section を返す (フォーム側 hx-target="#pending-section")
+        return _render_pending_section(request)
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return HTMLResponse(
+            f'<div id="pending-section">'
             f'<div class="card" style="border-color:var(--red);">'
             f'<div class="card-body" style="color:var(--red);">Generation failed: {str(e)[:300]}</div></div>'
+            f'</div>'
         )
+
+
+def _render_pending_section(request: Request):
+    """最新の pending/approved 記事一覧を _pending_section.html として返す。"""
+    from core.db import get_connection
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT note_id, title, genre, tags, free_content, paid_content, "
+        "created_at, published_at, status "
+        "FROM articles WHERE status IN ('pending_review', 'approved') "
+        "ORDER BY status='pending_review' DESC, created_at DESC"
+    ).fetchall()
+    return _render(request, "_pending_section.html",
+                   pending_articles=[dict(r) for r in rows])
+
+
+def _pick_prompt_by_weight() -> str:
+    """重み付きランダムでプロンプトを選ぶ。"""
+    import random
+    from services.publisher import automation
+    weights = automation.get_prompt_weights()
+    names = _list_prompt_files()
+    if not names:
+        return ""
+    items = [(n, max(0, int(weights.get(n, 1)))) for n in names]
+    total = sum(w for _, w in items)
+    if total <= 0:
+        return names[0]
+    pick = random.uniform(0, total)
+    cum = 0
+    for name, w in items:
+        cum += w
+        if pick <= cum:
+            return name
+    return items[-1][0]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

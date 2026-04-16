@@ -68,11 +68,31 @@
   <summary>
     {{ p.label }}
     <span style="font-size:.7rem;color:var(--dim);font-weight:400;">{{ p.filename }}</span>
+    {% if p.mode_applicable %}
+    <span style="font-size:.7rem;color:{% if p.mode == 'free' %}var(--green){% else %}var(--yellow){% endif %};font-family:var(--font-mono);">
+      {% if p.mode == 'free' %}🆓 free{% else %}💰 mixed{% endif %}
+    </span>
+    {% endif %}
     {% if p.weight is defined %}
     <span class="weight-inline">weight: {{ p.weight }}</span>
     {% endif %}
   </summary>
   <div class="prompt-inner">
+    {% if p.mode_applicable %}
+    <div style="padding:.5rem .8rem;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem;">
+      <span style="font-size:.72rem;color:var(--muted);">Paywall mode:</span>
+      <label style="font-size:.78rem;cursor:pointer;">
+        <input type="radio" name="mode-{{ p.name }}" value="free"
+               {% if p.mode == 'free' %}checked{% endif %}
+               hx-post="/prompts/{{ p.name }}/mode" hx-vals='{"mode": "free"}' hx-swap="none"> 🆓 Free only
+      </label>
+      <label style="font-size:.78rem;cursor:pointer;">
+        <input type="radio" name="mode-{{ p.name }}" value="mixed"
+               {% if p.mode == 'mixed' %}checked{% endif %}
+               hx-post="/prompts/{{ p.name }}/mode" hx-vals='{"mode": "mixed"}' hx-swap="none"> 💰 Mixed (free+paid)
+      </label>
+    </div>
+    {% endif %}
     <form hx-post="/prompts/{{ p.name }}/save" hx-swap="none"
           hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},2000)">
       <textarea name="text" rows="20">{{ p.content }}</textarea>
