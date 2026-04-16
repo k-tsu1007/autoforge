@@ -119,6 +119,9 @@ def evaluate_all():
     save_history(history)  # 互換のためJSON保存も継続
 
     # note 側にない記事を DB から削除 (削除された記事の同期)
+    # ロジック:
+    #   - URL がセットされている行: URL が note_stats に含まれていなければ削除 (幽霊行)
+    #   - URL が未設定の行: title 一致で生かす (URL 取得前のレガシー行)
     try:
         from core.db import get_connection as _gc, transaction as _tx
         _conn = _gc()
@@ -131,22 +134,24 @@ def evaluate_all():
         for row in db_published:
             url = row["note_url"] or ""
             title = row["title"] or ""
-            # URL でも title でも note_stats にない → note 側で削除された
-            if url and url in note_urls:
-                continue
-            if title and title in note_titles:
-                continue
-            # URL 空で title も一致しない → 削除対象
+            if url:
+                # URL があるなら URL 一致が必須 (タイトル一致では救わない)
+                if url in note_urls:
+                    continue
+            else:
+                # URL 無しならタイトル一致で救う (レガシー行用)
+                if title and title in note_titles:
+                    continue
             to_delete.append((row["note_id"], title))
         if to_delete:
             with _tx() as _c:
                 for nid, t in to_delete:
                     _c.execute("DELETE FROM articles WHERE note_id = ?", (nid,))
-            print(f"note 側で削除された {len(to_delete)} 件を DB から削除:")
-            for _, t in to_delete[:5]:
+            print(f"note 側に存在しない {len(to_delete)} 件を DB から削除:")
+            for _, t in to_delete[:8]:
                 print(f"  - {t[:60]}")
-            if len(to_delete) > 5:
-                print(f"  ... 他 {len(to_delete)-5} 件")
+            if len(to_delete) > 8:
+                print(f"  ... 他 {len(to_delete)-8} 件")
     except Exception as e:
         print(f"削除同期スキップ: {e}")
 
