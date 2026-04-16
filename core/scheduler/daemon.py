@@ -316,6 +316,38 @@ def job_cleanup_jobs():
         log(f"❌ クリーンアップエラー: {e}")
 
 
+def job_cleanup_temp():
+    """nodriver の残留 temp profile (uc_*) を掃除する。
+
+    browser.stop() は force-kill で Chrome を落とすため、ファイルロック
+    残留で nodriver 側が temp dir を消し損ねるケースが多い (184個残留など)。
+    1時間以上経過したものは使用中の browser と被らないので安全に削除できる。
+    """
+    import tempfile
+    import shutil
+    import time
+
+    tmp = Path(tempfile.gettempdir())
+    cutoff = time.time() - 3600  # 1時間以上前
+    removed = 0
+    freed_mb = 0
+    for entry in tmp.glob("uc_*"):
+        try:
+            if entry.stat().st_mtime < cutoff:
+                # サイズ計測 (概算)
+                try:
+                    size = sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
+                    freed_mb += size / 1024 / 1024
+                except Exception:
+                    pass
+                shutil.rmtree(entry, ignore_errors=True)
+                removed += 1
+        except Exception:
+            continue
+    if removed:
+        log(f"🧹 nodriver temp 掃除: {removed}個 / {freed_mb:.0f}MB")
+
+
 # === メイン ===
 
 def main():
@@ -421,6 +453,17 @@ def main():
         name="Cleanup Old Jobs",
         max_instances=1,
         coalesce=True,
+    )
+
+    # 6. nodriver temp 掃除: 1時間ごと (ブラウザリーク対策)
+    scheduler.add_job(
+        job_cleanup_temp,
+        IntervalTrigger(hours=1),
+        id="cleanup_temp",
+        name="Cleanup nodriver temp profiles",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(JST) + timedelta(minutes=5),
     )
 
     log("登録ジョブ:")
