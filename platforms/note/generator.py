@@ -124,7 +124,7 @@ def _build_legacy_instruction(*, free_only: bool, seo_mode: bool, seo_keyword: s
     return reader + style + anti + constraint
 
 
-def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "", knowledge_set_id: str = "") -> dict:
+def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "", knowledge_set_id: str = "", instruction: str = "") -> dict:
     """Claudeで記事を生成する。
 
     プロンプトファイル (<prompt_name>.txt) が記事生成の指示を全て持つ (自己完結)。
@@ -159,9 +159,15 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
             lines.append(f"- {title}{metrics}")
         existing_context = "\n".join(lines) + "\n"
 
-    topic_instruction = ""
-    if topic_hint:
-        topic_instruction = f"\n## トピック指定\n以下のトピックで記事を書いてください: {topic_hint}\n"
+    # トピック指定 / instruction (互換性: 旧 topic_hint+user_comment と新 instruction の両方を受け付ける)
+    user_request_parts = []
+    if instruction:
+        user_request_parts.append(instruction.strip())
+    elif topic_hint or user_comment:
+        if topic_hint:
+            user_request_parts.append(f"トピック: {topic_hint}")
+        if user_comment:
+            user_request_parts.append(f"修正指示: {user_comment}")
 
     # SEOモード: Googleサジェストから次のキーワードを取得
     seo_keyword = None
@@ -264,11 +270,39 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         n, g = _random.choice(article_formats)
         format_instruction = f"\n## 記事フォーマット（今回は「{n}」で書く）\n{g}\n"
 
-    # 空じゃないセクションだけ並べる (改行ノイズを出さない)
-    # 順序設計: primacy (役割+ルール) と recency (今書く指示) を活かす + キャッシュ効率
+    # note の UI 設定 (文字数 / 価格) を取得して制約セクションに追加
+    note_settings_section = ""
+    note_price = 500
+    try:
+        from services.publisher import automation
+        ns = automation.get_note_settings()
+        note_price = int(ns.get("price", 500))
+        if free_only or seo_mode:
+            total = int(ns.get("free_chars", 1500))
+            note_settings_section = (
+                f"## 文字数・価格設定 (UI 設定で上書き、これを優先)\n"
+                f"- 合計文字数: 約 {total} 文字\n"
+                f"- これは無料記事 (paid_content は空文字)"
+            )
+        else:
+            free_c = int(ns.get("free_chars", 1500))
+            paid_c = int(ns.get("paid_chars", 1250))
+            total = free_c + paid_c
+            note_settings_section = (
+                f"## 文字数・価格設定 (UI 設定で上書き、これを優先)\n"
+                f"- 無料部分: 約 {free_c} 文字\n"
+                f"- 有料部分: 約 {paid_c} 文字\n"
+                f"- 合計: 約 {total} 文字\n"
+                f"- 想定価格: {note_price} 円"
+            )
+    except Exception:
+        pass
+
+    # ─── system prompt 構築 ───
+    # 順序設計: primacy (役割+ルール) と recency (制約・形式) を活かす
     parts = []
 
-    # 1. プロンプトファイル本体 (役割+ルール) — 静的、大、キャッシュ対象
+    # 1. プロンプトファイル本体 (役割+ルール) — 静的、大
     parts.append(article_instruction.strip())
 
     # 2. ペルソナ (program.md) — 静的
@@ -291,18 +325,11 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     if format_instruction:
         parts.append(format_instruction.strip())
 
-    # 7. トピック指定 — 「何を書くか」(終盤、recency 強)
-    if topic_instruction:
-        parts.append(topic_instruction.strip())
+    # 7. UI 設定 (文字数/価格) — プロンプト記述より優先
+    if note_settings_section:
+        parts.append(note_settings_section)
 
-    # 8. ユーザー修正指示 (最優先) — user prompt 直前で recency 最大
-    if user_comment:
-        parts.append(
-            f"## 【ユーザーからの修正指示（最優先）】\n{user_comment}\n"
-            f"上記の指示を最優先に反映してください。"
-        )
-
-    # 9. JSON 出力フォーマット — 「どう返すか」最末尾
+    # 8. JSON 出力フォーマット — 最末尾
     parts.append(
         "## 出力フォーマット（厳守）\n"
         "以下のJSON形式で出力してください。それ以外のテキストは含めないでください。\n\n"
@@ -311,14 +338,24 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 
     system_prompt = "\n\n".join(parts)
 
+    # ─── user prompt 構築 ───
+    if user_request_parts:
+        user_prompt = "\n\n".join(user_request_parts) + "\n\n上記に従って、新しい記事を1本生成してください。"
+    else:
+        user_prompt = "新しい記事を1本生成してください。"
+
     from core.llm.claude import call_claude_json
     article = call_claude_json(
-        "新しい記事を1本生成してください。",
+        user_prompt,
         model=gen_params["model"],
         system=system_prompt,
         max_tokens=gen_params["max_tokens"],
         temperature=gen_params["temperature"],
     )
+
+    # 価格を UI 設定値で上書き (publisher 側で使われる)
+    if not free_only and not seo_mode:
+        article["price"] = note_price
 
     # 捏造検出 (Claudeがルール違反した場合の最終防御)
     fab_check = _detect_fabrication(article)

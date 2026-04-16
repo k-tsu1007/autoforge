@@ -407,7 +407,19 @@ def ui_settings(request: Request):
     return _render(request, "settings.html", active="settings",
                    review_mode=automation.get_review_mode(),
                    slots=automation.get_slots(),
-                   prompts=_build_prompt_weights())
+                   prompts=_build_prompt_weights(),
+                   note_settings=automation.get_note_settings())
+
+
+@app.post("/settings/note", response_class=HTMLResponse)
+def ui_settings_note(
+    free_chars: int = Form(...),
+    paid_chars: int = Form(...),
+    price: int = Form(...),
+):
+    from services.publisher import automation
+    automation.set_note_settings(free_chars=free_chars, paid_chars=paid_chars, price=price)
+    return HTMLResponse("")
 
 
 @app.post("/settings/review_mode/toggle", response_class=HTMLResponse)
@@ -667,6 +679,7 @@ def ui_generate(request: Request):
 
 @app.post("/generate/preview")
 def ui_generate_preview(
+    instruction: str = Form(""),
     topic_hint: str = Form(""),
     user_comment: str = Form(""),
     article_type: str = Form(""),
@@ -708,6 +721,7 @@ def ui_generate_preview(
                     {}, "", history,
                     topic_hint=topic_hint,
                     user_comment=user_comment,
+                    instruction=instruction,
                     free_only=(prompt_mode == "free"),
                     prompt_name=chosen_prompt,
                     knowledge_set_id=knowledge_set_id,
@@ -746,8 +760,9 @@ def ui_generate_preview(
 @app.post("/generate", response_class=HTMLResponse)
 def ui_do_generate(
     request: Request,
-    topic_hint: str = Form(""),
-    user_comment: str = Form(""),
+    instruction: str = Form(""),
+    topic_hint: str = Form(""),       # 後方互換
+    user_comment: str = Form(""),     # 後方互換
     article_type: str = Form(""),
     prompt_name: str = Form(""),
     knowledge_set_id: str = Form("none"),
@@ -778,8 +793,9 @@ def ui_do_generate(
                 strategy, program, history,
                 topic_hint=topic_hint,
                 user_comment=user_comment,
+                instruction=instruction,
                 free_only=(prompt_mode == "free"),
-                prompt_name=chosen_prompt,  # article_free / article_mixed など
+                prompt_name=chosen_prompt,
                 knowledge_set_id=knowledge_set_id,
             )
 

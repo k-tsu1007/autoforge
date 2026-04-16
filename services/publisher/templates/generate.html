@@ -59,13 +59,11 @@
         hx-on::after-request="this.reset();document.getElementById('sched-custom').classList.remove('show')">
 
     <div class="gen-field">
-      <label class="gen-label">Topic Hint (optional)</label>
-      <input type="text" class="gen-input" name="topic_hint" placeholder="e.g. AI画像生成で副業">
-    </div>
-
-    <div class="gen-field">
-      <label class="gen-label">User Comment (optional)</label>
-      <textarea class="gen-input" name="user_comment" rows="2" placeholder="Special instructions..." style="font-family:var(--font-mono);"></textarea>
+      <label class="gen-label">Instructions (optional)</label>
+      <textarea class="gen-input" name="instruction" rows="3"
+                placeholder="例: AI画像生成で副業 (トピック)&#10;500円で売れる構成にして (修正指示)&#10;自由に書いて OK"
+                style="font-family:var(--font-mono);"></textarea>
+      <div class="gen-hint">トピック・修正指示を自由に。空ならプロンプトの方針通りに自動生成。Past {{ total_articles }} articles referenced (latest 15 sent to LLM).</div>
     </div>
 
     {% if prompt_choices %}

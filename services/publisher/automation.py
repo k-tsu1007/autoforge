@@ -14,6 +14,11 @@ DEFAULT_CONFIG = {
     "slots": ["09:00", "14:00", "20:00"],
     "prompt_weights": {},
     "prompt_modes": {},  # {prompt_name: "free" | "mixed"}
+    "note_settings": {
+        "free_chars": 1500,    # 無料部分の目標文字数
+        "paid_chars": 1250,    # 有料部分の目標文字数
+        "price": 500,          # 有料記事の価格 (円)
+    },
 }
 
 
@@ -155,5 +160,26 @@ def set_prompt_mode(name: str, mode: str) -> dict:
     modes = dict(cfg.get("prompt_modes", {}))
     modes[name] = mode
     cfg["prompt_modes"] = modes
+    save(cfg)
+    return cfg
+
+
+def get_note_settings() -> dict:
+    """note の文字数/価格設定を返す。"""
+    cfg = load()
+    settings = dict(DEFAULT_CONFIG["note_settings"])
+    settings.update(cfg.get("note_settings", {}))
+    return settings
+
+
+def set_note_settings(**fields) -> dict:
+    """note 設定を部分更新する。"""
+    cfg = load()
+    settings = dict(DEFAULT_CONFIG["note_settings"])
+    settings.update(cfg.get("note_settings", {}))
+    for k, v in fields.items():
+        if k in settings and v is not None:
+            settings[k] = int(v)
+    cfg["note_settings"] = settings
     save(cfg)
     return cfg

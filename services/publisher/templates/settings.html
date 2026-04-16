@@ -90,6 +90,33 @@
   </form>
 </div>
 
+{% if platform == 'note' %}
+{# ─── Note Settings (文字数 / 価格) ─── #}
+<div class="set-card">
+  <h3>Note: 文字数 & 価格</h3>
+  <div class="set-desc">プロンプトの記述より優先されます。投稿時の価格もこの値が使われます。</div>
+  <form hx-post="/settings/note" hx-swap="none"
+        hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},2000)">
+    <div class="form-row" style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center;">
+      <label style="font-size:.78rem;color:var(--muted);">無料部分:
+        <input type="number" name="free_chars" min="200" max="10000" value="{{ note_settings.free_chars }}"
+               style="width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .5rem;font-family:var(--font-mono);font-size:.82rem;text-align:center;margin-left:.3rem;"> 文字
+      </label>
+      <label style="font-size:.78rem;color:var(--muted);">有料部分:
+        <input type="number" name="paid_chars" min="0" max="10000" value="{{ note_settings.paid_chars }}"
+               style="width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .5rem;font-family:var(--font-mono);font-size:.82rem;text-align:center;margin-left:.3rem;"> 文字
+      </label>
+      <label style="font-size:.78rem;color:var(--muted);">価格:
+        <input type="number" name="price" min="100" max="50000" step="100" value="{{ note_settings.price }}"
+               style="width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .5rem;font-family:var(--font-mono);font-size:.82rem;text-align:center;margin-left:.3rem;"> 円
+      </label>
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span class="save-ok" style="color:var(--green);font-size:.78rem;display:none;">Saved</span>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 {# ─── Prompt Rotation ─── #}
 <div class="set-card">
   <h3>Prompt Rotation</h3>
