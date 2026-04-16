@@ -733,8 +733,8 @@ def _build_history_from_db() -> dict:
     rows = conn.execute(
         "SELECT title, genre, tags, note_url, status, published_at, "
         "views, likes, comments, revenue "
-        "FROM articles WHERE status IN ('published', 'pending_review') "
-        "ORDER BY published_at ASC"
+        "FROM articles WHERE (status='published' OR status IS NULL) AND title IS NOT NULL "
+        "ORDER BY COALESCE(published_at, created_at) ASC"
     ).fetchall()
     articles = []
     for r in rows:
