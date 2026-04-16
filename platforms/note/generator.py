@@ -140,18 +140,24 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     gen_params.setdefault("model", "claude-opus-4-5-20251001")
     gen_params.setdefault("max_tokens", 8000)
     gen_params.setdefault("temperature", 0.8)
-    top_context = build_top_articles_context(history) if history else ""
 
-    # 過去の記事タイトルリスト (直近15本)
-    all_titles = [a["title"] for a in history.get("articles", [])]
-    existing_titles = all_titles[-15:]
+    # 過去の記事タイトルリスト (直近15本 + PV/スキ情報) - 重複回避 + 成績傾向把握
+    articles_list = history.get("articles", []) or []
+    all_titles = [a.get("title", "") for a in articles_list]
+    recent_articles = articles_list[-15:]
     existing_context = ""
-    if existing_titles:
-        existing_context = (
-            "\n## 直近の記事タイトル（同じ型・テーマの繰り返しを避ける）\n"
-            + "\n".join(f"- {t}" for t in existing_titles)
-            + "\n"
-        )
+    top_context = ""  # build_top_articles_context は統合により不要に
+    if recent_articles:
+        lines = ["\n## 直近の記事タイトル（同じ型・テーマの繰り返しを避ける、PV/スキも参考に）"]
+        for a in recent_articles:
+            title = a.get("title", "")
+            pv = a.get("views", 0) or 0
+            likes = a.get("likes", 0) or 0
+            metrics = ""
+            if pv or likes:
+                metrics = f" (PV:{pv} スキ:{likes})"
+            lines.append(f"- {title}{metrics}")
+        existing_context = "\n".join(lines) + "\n"
 
     topic_instruction = ""
     if topic_hint:
@@ -269,15 +275,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 
     system_prompt = f"""あなたはNote(note.com)向けの記事ライターです。
 以下の指示に従って、読者に価値のある記事を1本生成してください。
-{user_steer}
-{program}
-
-{top_context}
-{existing_context}
-{topic_instruction}
-{learning_hint}
-{experiment_hint}
-{format_instruction}
+{user_steer}{program}{existing_context}{topic_instruction}{learning_hint}{experiment_hint}{format_instruction}
 
 {article_instruction}
 

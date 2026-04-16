@@ -118,11 +118,20 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
         news_context=news_context,
     )
 
-    # 過去タイトル（直近15本、重複回避）
-    all_titles = [a["title"] for a in history.get("articles", [])]
+    # 過去タイトル（直近15本 + PV/スキ情報、重複回避 + 成績傾向把握）
+    articles_list = history.get("articles", []) or []
+    all_titles = [a.get("title", "") for a in articles_list]
+    recent_articles = articles_list[-15:]
     existing_context = ""
-    if all_titles[-15:]:
-        existing_context = "\n## 過去の記事タイトル（同じ型・テーマの繰り返しを避ける）\n" + "\n".join(f"- {t}" for t in all_titles[-15:])
+    if recent_articles:
+        lines = ["\n## 過去の記事タイトル（同じ型・テーマの繰り返しを避ける、PV/スキも参考に）"]
+        for a in recent_articles:
+            title = a.get("title", "")
+            pv = a.get("views", 0) or 0
+            likes = a.get("likes", 0) or 0
+            metrics = f" (PV:{pv} スキ:{likes})" if (pv or likes) else ""
+            lines.append(f"- {title}{metrics}")
+        existing_context = "\n".join(lines)
 
     # SEOキーワード指示
     seo_instruction = ""
