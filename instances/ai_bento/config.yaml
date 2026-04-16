@@ -20,7 +20,7 @@ platforms:
     urlname: ""
 
   x:
-    enabled: true
+    enabled: false  # 2026-04-16 X連動機能を一時停止 (fuku_ai凍結のため慎重運用)
     username: "ai_bento"
     monetization_eligible: false
 

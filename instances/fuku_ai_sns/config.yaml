@@ -22,7 +22,7 @@ platforms:
     magazine_auto_classify: true
 
   x:
-    enabled: true
+    enabled: false  # 2026-04-16 アカウント永久凍結のため一時停止
     username: "fuku_ai07"
     # cookies/x_session.json
     monetization_eligible: false
