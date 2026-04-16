@@ -7,6 +7,11 @@
   <div style="display:flex;gap:.5rem;">
     <a href="/generate" class="btn btn-primary">+ Generate</a>
     {% if pending_count > 0 %}<a href="/generate" class="btn btn-ok">Review ({{ pending_count }})</a>{% endif %}
+    <button class="btn" hx-post="/api/sync_stats" hx-swap="none"
+            hx-on::before-request="this.disabled=true;this.textContent='Syncing...'"
+            hx-on::after-request="this.disabled=false;this.textContent='🔄 Sync Stats';location.reload()">
+      🔄 Sync Stats
+    </button>
   </div>
 </div>
 

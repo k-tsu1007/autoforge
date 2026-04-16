@@ -138,7 +138,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     gen_params = strategy.get("generation_params", {}) if strategy else {}
     # デフォルト生成設定
     gen_params.setdefault("model", "claude-opus-4-5-20251001")
-    gen_params.setdefault("max_tokens", 8000)
+    gen_params.setdefault("max_tokens", 4000)  # 2500〜3000文字目標なら4000で十分
     gen_params.setdefault("temperature", 0.8)
 
     # 過去の記事タイトルリスト (直近15本 + PV/スキ情報) - 重複回避 + 成績傾向把握

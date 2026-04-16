@@ -118,6 +118,38 @@ def evaluate_all():
     update_summary(history)
     save_history(history)  # 互換のためJSON保存も継続
 
+    # note 側にない記事を DB から削除 (削除された記事の同期)
+    try:
+        from core.db import get_connection as _gc, transaction as _tx
+        _conn = _gc()
+        note_urls = {a["note_url"] for a in new_articles if a.get("note_url")}
+        note_titles = {a["title"] for a in new_articles if a.get("title")}
+        db_published = _conn.execute(
+            "SELECT note_id, title, note_url FROM articles WHERE status='published'"
+        ).fetchall()
+        to_delete = []
+        for row in db_published:
+            url = row["note_url"] or ""
+            title = row["title"] or ""
+            # URL でも title でも note_stats にない → note 側で削除された
+            if url and url in note_urls:
+                continue
+            if title and title in note_titles:
+                continue
+            # URL 空で title も一致しない → 削除対象
+            to_delete.append((row["note_id"], title))
+        if to_delete:
+            with _tx() as _c:
+                for nid, t in to_delete:
+                    _c.execute("DELETE FROM articles WHERE note_id = ?", (nid,))
+            print(f"note 側で削除された {len(to_delete)} 件を DB から削除:")
+            for _, t in to_delete[:5]:
+                print(f"  - {t[:60]}")
+            if len(to_delete) > 5:
+                print(f"  ... 他 {len(to_delete)-5} 件")
+    except Exception as e:
+        print(f"削除同期スキップ: {e}")
+
     # SQLite に保存（正データ）
     try:
         from core.db import get_connection, upsert_article, take_metrics_snapshot, transaction

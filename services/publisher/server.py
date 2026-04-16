@@ -453,6 +453,19 @@ def ui_magazines(request: Request, refresh: int = 0):
     return _render(request, "magazines.html", active="magazines", magazines=items)
 
 
+@app.post("/api/sync_stats")
+def api_sync_stats():
+    """note から PV/スキを取得し、削除された記事を DB からも消す。"""
+    try:
+        from core.learning.evaluate import evaluate_all
+        evaluate_all()
+        return {"ok": True}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "error": str(e)[:300]}
+
+
 @app.post("/magazines/refresh")
 def ui_magazines_refresh():
     from fastapi.responses import RedirectResponse
