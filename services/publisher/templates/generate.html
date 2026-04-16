@@ -81,6 +81,17 @@
     {% endif %}
 
     <div class="gen-field">
+      <label class="gen-label">Knowledge Set (学習傾向)</label>
+      <select class="gen-input" name="knowledge_set_id">
+        <option value="none">None (use no learning hints)</option>
+        {% for s in knowledge_sets %}
+        <option value="{{ s.id }}">{{ s.name }} &middot; {{ s.source_range }}</option>
+        {% endfor %}
+      </select>
+      <div class="gen-hint">Manage at <a href="/analysis">Analysis</a>.</div>
+    </div>
+
+    <div class="gen-field">
       <label class="gen-label">Publish Time (after approval)</label>
       <div class="sched-radio">
         <label><input type="radio" name="schedule_mode" value="immediate" checked
@@ -98,12 +109,34 @@
       </div>
     </div>
 
-    <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">
-      <span id="gen-spinner" class="htmx-indicator"><span class="spinner"></span></span>
-      Generate
-    </button>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+      <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">
+        <span id="gen-spinner" class="htmx-indicator"><span class="spinner"></span></span>
+        Generate
+      </button>
+      <button type="button" class="btn" onclick="previewPrompt(this)">
+        📄 Preview Prompt
+      </button>
+    </div>
   </form>
 </div>
+
+<script>
+function previewPrompt(btn) {
+  const form = btn.closest('form');
+  const fd = new FormData(form);
+  fetch('/generate/preview', {method: 'POST', body: fd})
+    .then(r => r.blob())
+    .then(b => {
+      const url = URL.createObjectURL(b);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'prompt_preview_' + Date.now() + '.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+}
+</script>
 
 {# ─── Pending / Scheduled (always visible) ─── #}
 {% include "_pending_section.html" %}

@@ -1,0 +1,31 @@
+<div id="sets-list">
+  <div class="section-hd">Knowledge Sets ({{ sets|length }})</div>
+
+  {% if not sets %}
+  <div class="empty">No analyses yet. Run one above to get started.</div>
+  {% endif %}
+
+  {% for s in sets %}
+  <div class="set-item">
+    <div class="set-hd">
+      <span class="set-name">{{ s.name }}</span>
+      <span class="set-meta">{{ s.source_range }} · {{ s.created_at[:16] }}</span>
+    </div>
+    {% if s.description %}
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem;">{{ s.description }}</div>
+    {% endif %}
+    {% if s.do_rules %}
+    <div class="rule-hd do">Do</div>
+    <ul class="rule-list">{% for r in s.do_rules %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if s.dont_rules %}
+    <div class="rule-hd dont">Don't</div>
+    <ul class="rule-list">{% for r in s.dont_rules %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+    <div style="margin-top:.5rem;">
+      <button class="btn btn-ng" hx-post="/analysis/{{ s.id }}/delete"
+              hx-confirm="Delete this knowledge set?" hx-target="body" hx-swap="outerHTML">Delete</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>

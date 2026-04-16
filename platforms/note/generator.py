@@ -124,7 +124,7 @@ def _build_legacy_instruction(*, free_only: bool, seo_mode: bool, seo_keyword: s
     return reader + style + anti + constraint
 
 
-def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "") -> dict:
+def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "", knowledge_set_id: str = "") -> dict:
     """Claudeで記事を生成する。
 
     プロンプトファイル (<prompt_name>.txt) が記事生成の指示を全て持つ (自己完結)。
@@ -174,15 +174,14 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         except Exception as e:
             print(f"キーワード取得失敗: {e}")
 
-    # Knowledge: 確証された知見のみ
+    # Knowledge: Publisher の analysis.py から選択された set を使う
     learning_hint = ""
-    try:
-        from core.learning.knowledge import format_for_prompt
-        learning_hint = format_for_prompt()
-        if learning_hint:
-            learning_hint = "\n## 学習済みの傾向\n" + learning_hint + "\n"
-    except Exception as e:
-        print(f"knowledge 取得失敗: {e}")
+    if knowledge_set_id and knowledge_set_id != "none":
+        try:
+            from services.publisher.analysis import format_for_prompt as _kfp
+            learning_hint = _kfp(knowledge_set_id)
+        except Exception as e:
+            print(f"knowledge set 取得失敗: {e}")
 
     # 実験モード
     experiment_hint = ""
@@ -265,27 +264,51 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         n, g = _random.choice(article_formats)
         format_instruction = f"\n## 記事フォーマット（今回は「{n}」で書く）\n{g}\n"
 
-    user_steer = ""
+    # 空じゃないセクションだけ並べる (改行ノイズを出さない)
+    parts = []
+
+    # 1. プロンプトファイル本体 (冒頭にロール行を含む自己完結プロンプト)
+    parts.append(article_instruction.strip())
+
+    # 2. ユーザーからの指示 (最優先)
     if user_comment:
-        user_steer = (
-            f"\n## 【ユーザーからの修正指示（最優先）】\n"
-            f"{user_comment}\n"
-            f"上記の指示を最優先に反映してください。\n"
+        parts.append(
+            f"## 【ユーザーからの修正指示（最優先）】\n{user_comment}\n"
+            f"上記の指示を最優先に反映してください。"
         )
 
-    system_prompt = f"""あなたはNote(note.com)向けの記事ライターです。
-以下の指示に従って、読者に価値のある記事を1本生成してください。
-{user_steer}{program}{existing_context}{topic_instruction}{learning_hint}{experiment_hint}{format_instruction}
+    # 3. ペルソナ (program.md)
+    if program:
+        parts.append(program.strip())
 
-{article_instruction}
+    # 4. ユーザー指定トピック
+    if topic_instruction:
+        parts.append(topic_instruction.strip())
 
-## 出力フォーマット（厳守）
-以下のJSON形式で出力してください。それ以外のテキストは含めないでください。
+    # 5. 過去の記事一覧 (重複回避 + 成績傾向)
+    if existing_context:
+        parts.append(existing_context.strip())
 
-{output_format}
+    # 6. 選択された学習傾向 (knowledge set)
+    if learning_hint:
+        parts.append(learning_hint.strip())
 
-{content_instruction}
-"""
+    # 7. 実験モード (仮説検証中なら)
+    if experiment_hint:
+        parts.append(experiment_hint.strip())
+
+    # 8. 記事フォーマット (レガシー用)
+    if format_instruction:
+        parts.append(format_instruction.strip())
+
+    # 9. JSON 出力フォーマット
+    parts.append(
+        "## 出力フォーマット（厳守）\n"
+        "以下のJSON形式で出力してください。それ以外のテキストは含めないでください。\n\n"
+        + output_format
+    )
+
+    system_prompt = "\n\n".join(parts)
 
     from core.llm.claude import call_claude_json
     article = call_claude_json(

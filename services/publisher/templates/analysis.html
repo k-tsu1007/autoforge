@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Analysis — {{ instance }}{% endblock %}
+{% block head %}
+<style>
+.an-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+.an-card h3 { font-size: .9rem; margin-bottom: .3rem; }
+.an-desc { font-size: .75rem; color: var(--muted); margin-bottom: .8rem; line-height: 1.6; }
+.form-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.form-row input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: .45rem .7rem; font-size: .82rem; }
+.form-row input[type="number"] { width: 90px; }
+.form-row input[type="text"] { flex: 1; min-width: 200px; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.set-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .8rem 1rem; margin-bottom: .8rem; }
+.set-hd { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.set-name { font-weight: 600; font-size: .88rem; }
+.set-meta { font-size: .7rem; color: var(--dim); font-family: var(--font-mono); margin-left: auto; }
+.rule-list { font-size: .76rem; line-height: 1.7; color: var(--muted); margin: .3rem 0 .5rem 1rem; }
+.rule-list li { margin-bottom: .15rem; }
+.rule-hd { font-size: .72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-top: .4rem; }
+.rule-hd.do { color: var(--green); }
+.rule-hd.dont { color: var(--red); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<h2 style="margin-top:0;font-size:1.1rem;">Analysis</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  Analyze past articles (PV / スキ) to build knowledge sets. Select one in <a href="/generate">Generate</a> to guide the LLM with "what's working" and "what's not".
+</p>
+
+<div class="an-card">
+  <h3>+ Generate New Analysis</h3>
+  <div class="an-desc">Claude analyzes the past articles and produces DO/DONT rules.</div>
+  <form hx-post="/analysis/generate" hx-target="#sets-list" hx-swap="outerHTML" hx-indicator="#an-spin">
+    <div class="form-row">
+      <label style="font-size:.75rem;color:var(--muted);">Range (days):</label>
+      <input type="number" name="range_days" min="7" max="365" value="30" required>
+      <input type="text" name="focus_hint" placeholder="Focus hint (optional, e.g. 'タイトル形式と PV の関係')">
+      <button type="submit" class="btn btn-primary">
+        <span id="an-spin" class="htmx-indicator"><span class="spinner"></span></span>
+        Run Analysis
+      </button>
+    </div>
+  </form>
+</div>
+
+{% include "_analysis_list.html" %}
+
+{% endblock %}

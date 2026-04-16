@@ -442,6 +442,59 @@ def ui_settings_prompt_weight(request: Request,
     return _render(request, "_weight_list.html", prompts=_build_prompt_weights())
 
 
+# ─── Analysis UI ──────────────────────────────────────────────────────────
+
+@app.get("/analysis", response_class=HTMLResponse)
+def ui_analysis(request: Request):
+    from services.publisher import analysis
+    sets = analysis.list_sets()
+    return _render(request, "analysis.html", active="analysis", sets=sets)
+
+
+@app.post("/analysis/generate", response_class=HTMLResponse)
+def ui_analysis_generate(
+    request: Request,
+    range_days: int = Form(30),
+    focus_hint: str = Form(""),
+):
+    from services.publisher import analysis
+    try:
+        result = analysis.generate_from_articles(range_days=range_days, focus_hint=focus_hint)
+        sid = analysis.add(
+            name=result["name"],
+            description=result["description"],
+            do_rules=result["do_rules"],
+            dont_rules=result["dont_rules"],
+            source_range=result["source_range"],
+        )
+        print(f"[analysis] 新しい knowledge set 作成: {sid}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HTMLResponse(
+            f'<div class="card" style="border-color:var(--red);">'
+            f'<div class="card-body" style="color:var(--red);">Analysis failed: {str(e)[:300]}</div></div>'
+        )
+
+    sets = analysis.list_sets()
+    return _render(request, "_analysis_list.html", sets=sets)
+
+
+@app.post("/analysis/{set_id}/delete")
+def ui_analysis_delete(set_id: str):
+    from fastapi.responses import RedirectResponse
+    from services.publisher import analysis
+    analysis.delete(set_id)
+    return RedirectResponse(url="/analysis", status_code=303)
+
+
+@app.post("/analysis/{set_id}/rename", response_class=HTMLResponse)
+def ui_analysis_rename(set_id: str, name: str = Form(...)):
+    from services.publisher import analysis
+    analysis.update(set_id, name=name)
+    return HTMLResponse("")
+
+
 # ─── Prompts UI ───────────────────────────────────────────────────────────
 
 PROMPT_META = {
@@ -577,7 +630,7 @@ def ui_generate(request: Request):
     all_titles = [a["title"] for a in history.get("articles", [])]
 
     # プロンプト一覧 (Settings の重みも反映)
-    from services.publisher import automation
+    from services.publisher import automation, analysis
     weights = automation.get_prompt_weights()
     prompt_choices = []
     for p in _list_prompts():
@@ -587,6 +640,9 @@ def ui_generate(request: Request):
             "weight": int(weights.get(p["name"], 1)),
             "mode": automation.get_prompt_mode(p["name"]) if p.get("mode_applicable") else "-",
         })
+
+    # Knowledge set 一覧
+    knowledge_sets = analysis.list_sets()
 
     # pending / scheduled 記事
     from core.db import get_connection
@@ -605,7 +661,86 @@ def ui_generate(request: Request):
                    recent_titles=all_titles,
                    total_articles=len(all_titles),
                    prompt_choices=prompt_choices,
+                   knowledge_sets=knowledge_sets,
                    pending_articles=pending_articles)
+
+
+@app.post("/generate/preview")
+def ui_generate_preview(
+    topic_hint: str = Form(""),
+    user_comment: str = Form(""),
+    article_type: str = Form(""),
+    prompt_name: str = Form(""),
+    knowledge_set_id: str = Form("none"),
+    schedule_mode: str = Form("immediate"),
+    scheduled_at: str = Form(""),
+):
+    """LLM に渡る system prompt と user prompt をプレーンテキストでダウンロード可能にする。"""
+    from fastapi.responses import PlainTextResponse
+    from services.publisher import automation
+    history = _load_history()
+    chosen_prompt = prompt_name or _pick_prompt_by_weight()
+    prompt_mode = automation.get_prompt_mode(chosen_prompt) if chosen_prompt else "mixed"
+    platform = _platform()
+
+    # 実際の generator から system_prompt を組み立て (LLM 呼び出しなし)
+    import core.llm.claude as c
+    captured = {}
+    orig_json = c.call_claude_json
+    def fake(prompt, model=None, system=None, max_tokens=0, temperature=0, **kw):
+        captured["prompt"] = prompt
+        captured["system"] = system
+        captured["model"] = model
+        return {"title": "(preview)", "genre": "(preview)", "tags": [],
+                "free_content": "(preview)", "paid_content": ""}
+    c.call_claude_json = fake
+    try:
+        if platform == "wordpress":
+            from platforms.wordpress.generator import generate_article
+            try:
+                generate_article({}, "", history, topic_hint=topic_hint)
+            except Exception as e:
+                pass
+        else:
+            from platforms.note.generator import generate_article
+            try:
+                generate_article(
+                    {}, "", history,
+                    topic_hint=topic_hint,
+                    user_comment=user_comment,
+                    free_only=(prompt_mode == "free"),
+                    prompt_name=chosen_prompt,
+                    knowledge_set_id=knowledge_set_id,
+                )
+            except Exception as e:
+                pass
+    finally:
+        c.call_claude_json = orig_json
+
+    sys_p = captured.get("system", "") or ""
+    user_p = captured.get("prompt", "") or ""
+    model = captured.get("model", "?")
+
+    body = (
+        f"# Publisher Service Prompt Preview\n"
+        f"# Instance: {_instance_name()}  Platform: {platform}  Model: {model}\n"
+        f"# Generated at: {_now().isoformat()}\n"
+        f"# System prompt size: {len(sys_p)} chars\n"
+        f"\n"
+        f"{'=' * 70}\n"
+        f"USER PROMPT (stdin tail):\n"
+        f"{'=' * 70}\n"
+        f"{user_p}\n"
+        f"\n"
+        f"{'=' * 70}\n"
+        f"SYSTEM PROMPT:\n"
+        f"{'=' * 70}\n"
+        f"{sys_p}\n"
+    )
+    return PlainTextResponse(
+        body,
+        headers={"Content-Disposition": f"attachment; filename=prompt_preview_{_now().strftime('%Y%m%d_%H%M%S')}.txt"},
+    )
 
 
 @app.post("/generate", response_class=HTMLResponse)
@@ -615,6 +750,7 @@ def ui_do_generate(
     user_comment: str = Form(""),
     article_type: str = Form(""),
     prompt_name: str = Form(""),
+    knowledge_set_id: str = Form("none"),
     schedule_mode: str = Form("next_slot"),
     scheduled_at: str = Form(""),
 ):
@@ -644,6 +780,7 @@ def ui_do_generate(
                 user_comment=user_comment,
                 free_only=(prompt_mode == "free"),
                 prompt_name=chosen_prompt,  # article_free / article_mixed など
+                knowledge_set_id=knowledge_set_id,
             )
 
         # 投稿予約時刻を解決
