@@ -265,43 +265,44 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         format_instruction = f"\n## 記事フォーマット（今回は「{n}」で書く）\n{g}\n"
 
     # 空じゃないセクションだけ並べる (改行ノイズを出さない)
+    # 順序設計: primacy (役割+ルール) と recency (今書く指示) を活かす + キャッシュ効率
     parts = []
 
-    # 1. プロンプトファイル本体 (冒頭にロール行を含む自己完結プロンプト)
+    # 1. プロンプトファイル本体 (役割+ルール) — 静的、大、キャッシュ対象
     parts.append(article_instruction.strip())
 
-    # 2. ユーザーからの指示 (最優先)
+    # 2. ペルソナ (program.md) — 静的
+    if program:
+        parts.append(program.strip())
+
+    # 3. 過去の記事一覧 (大きな参照データ、中盤) — 重複回避 + 成績傾向
+    if existing_context:
+        parts.append(existing_context.strip())
+
+    # 4. 学習傾向 (knowledge set) — 参照データ
+    if learning_hint:
+        parts.append(learning_hint.strip())
+
+    # 5. 実験モード (仮説検証中、稀)
+    if experiment_hint:
+        parts.append(experiment_hint.strip())
+
+    # 6. 記事フォーマット (レガシー用)
+    if format_instruction:
+        parts.append(format_instruction.strip())
+
+    # 7. トピック指定 — 「何を書くか」(終盤、recency 強)
+    if topic_instruction:
+        parts.append(topic_instruction.strip())
+
+    # 8. ユーザー修正指示 (最優先) — user prompt 直前で recency 最大
     if user_comment:
         parts.append(
             f"## 【ユーザーからの修正指示（最優先）】\n{user_comment}\n"
             f"上記の指示を最優先に反映してください。"
         )
 
-    # 3. ペルソナ (program.md)
-    if program:
-        parts.append(program.strip())
-
-    # 4. ユーザー指定トピック
-    if topic_instruction:
-        parts.append(topic_instruction.strip())
-
-    # 5. 過去の記事一覧 (重複回避 + 成績傾向)
-    if existing_context:
-        parts.append(existing_context.strip())
-
-    # 6. 選択された学習傾向 (knowledge set)
-    if learning_hint:
-        parts.append(learning_hint.strip())
-
-    # 7. 実験モード (仮説検証中なら)
-    if experiment_hint:
-        parts.append(experiment_hint.strip())
-
-    # 8. 記事フォーマット (レガシー用)
-    if format_instruction:
-        parts.append(format_instruction.strip())
-
-    # 9. JSON 出力フォーマット
+    # 9. JSON 出力フォーマット — 「どう返すか」最末尾
     parts.append(
         "## 出力フォーマット（厳守）\n"
         "以下のJSON形式で出力してください。それ以外のテキストは含めないでください。\n\n"
