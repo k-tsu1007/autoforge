@@ -674,6 +674,7 @@ def ui_generate(request: Request):
             "label": p["label"],
             "weight": int(weights.get(p["name"], 1)),
             "mode": automation.get_prompt_mode(p["name"]) if p.get("mode_applicable") else "-",
+            "settings": p.get("settings", {"free_chars": 0, "paid_chars": 0, "price": 0}),
         })
 
     # Knowledge set 一覧
