@@ -1,5 +1,11 @@
 """PV/スキの取得状況を確認"""
 import sqlite3
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 c = sqlite3.connect("instances/fuku_ai_sns/data/db.sqlite3")
 c.row_factory = sqlite3.Row
