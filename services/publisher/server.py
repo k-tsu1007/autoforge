@@ -56,14 +56,19 @@ def _now() -> datetime:
     return datetime.now(JST)
 
 
-def _ctx(request: Request, active: str = "home", **extra) -> dict:
+def _ctx(active: str = "home", **extra) -> dict:
     return {
-        "request": request,
         "instance": _instance_name(),
         "platform": _platform(),
         "active": active,
         **extra,
     }
+
+
+def _render(request: Request, name: str, active: str = "home", **extra):
+    return templates.TemplateResponse(
+        request=request, name=name, context=_ctx(active, **extra),
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -101,15 +106,14 @@ def ui_index(request: Request):
     dd = drafts_dir()
     drafts_count = len(list(dd.glob("draft_*.json"))) if dd.exists() else 0
 
-    return templates.TemplateResponse("index.html", _ctx(
-        request, active="home",
+    return _render(request, "index.html", active="home",
         pending_articles=[dict(r) for r in pending],
         pending_count=len(pending),
         drafts_count=drafts_count,
         published_today=published_today,
         published_total=published_total,
         recent=[dict(r) for r in recent],
-    ))
+    )
 
 
 # ─── Review UI ────────────────────────────────────────────────────────────
@@ -123,9 +127,7 @@ def ui_review(request: Request):
         "FROM articles WHERE status='pending_review' ORDER BY created_at DESC"
     ).fetchall()
     articles = [dict(r) for r in rows]
-    return templates.TemplateResponse("review.html", _ctx(
-        request, active="review", articles=articles,
-    ))
+    return _render(request, "review.html", active="review", articles=articles)
 
 
 @app.post("/review/{note_id}/approve", response_class=HTMLResponse)
@@ -348,9 +350,7 @@ def ui_prompts(request: Request):
                 "content": content,
             })
 
-    return templates.TemplateResponse("prompts.html", _ctx(
-        request, active="prompts", prompts=prompts,
-    ))
+    return _render(request, "prompts.html", active="prompts", prompts=prompts)
 
 
 @app.post("/prompts/{name}/save", response_class=HTMLResponse)
@@ -383,9 +383,7 @@ def ui_generate(request: Request):
     if platform == "wordpress":
         article_types = ["beginner", "comparison", "news", "handson"]
 
-    return templates.TemplateResponse("generate.html", _ctx(
-        request, active="generate", article_types=article_types,
-    ))
+    return _render(request, "generate.html", active="generate", article_types=article_types)
 
 
 @app.post("/generate", response_class=HTMLResponse)
