@@ -15,12 +15,36 @@
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem;">{{ s.description }}</div>
     {% endif %}
     {% if s.do_rules %}
-    <div class="rule-hd do">Do</div>
+    <div class="rule-hd do">Do (書き方)</div>
     <ul class="rule-list">{% for r in s.do_rules %}<li>{{ r }}</li>{% endfor %}</ul>
     {% endif %}
     {% if s.dont_rules %}
-    <div class="rule-hd dont">Don't</div>
+    <div class="rule-hd dont">Don't (書き方)</div>
     <ul class="rule-list">{% for r in s.dont_rules %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if s.hot_topics %}
+    <div class="rule-hd do">🔥 Hot Topics (伸びたテーマ)</div>
+    <ul class="rule-list">
+      {% for t in s.hot_topics %}
+        {% if t is mapping %}
+        <li><strong>{{ t.name }}</strong>{% if t.avg_pv %} <span style="color:var(--blue);">PV {{ t.avg_pv }}</span>{% endif %}{% if t.reason %} — {{ t.reason }}{% endif %}</li>
+        {% else %}
+        <li>{{ t }}</li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if s.cold_topics %}
+    <div class="rule-hd dont">🧊 Cold Topics (伸びなかったテーマ)</div>
+    <ul class="rule-list">
+      {% for t in s.cold_topics %}
+        {% if t is mapping %}
+        <li><strong>{{ t.name }}</strong>{% if t.avg_pv %} <span style="color:var(--dim);">PV {{ t.avg_pv }}</span>{% endif %}{% if t.reason %} — {{ t.reason }}{% endif %}</li>
+        {% else %}
+        <li>{{ t }}</li>
+        {% endif %}
+      {% endfor %}
+    </ul>
     {% endif %}
     <div style="margin-top:.5rem;">
       <button class="btn btn-ng" hx-post="/analysis/{{ s.id }}/delete"

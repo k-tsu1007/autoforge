@@ -62,6 +62,8 @@ def list_sets() -> list[dict]:
             "description": s.get("description", ""),
             "do_rules": s.get("do_rules", []),
             "dont_rules": s.get("dont_rules", []),
+            "hot_topics": s.get("hot_topics", []) or [],
+            "cold_topics": s.get("cold_topics", []) or [],
             "created_at": s.get("created_at", ""),
             "source_range": s.get("source_range", ""),
         })
@@ -76,6 +78,7 @@ def get(set_id: str) -> dict | None:
 
 
 def add(name: str, description: str, do_rules: list, dont_rules: list,
+        hot_topics: list | None = None, cold_topics: list | None = None,
         source_range: str = "") -> str:
     data = load_all()
     sid = uuid.uuid4().hex[:8]
@@ -84,6 +87,8 @@ def add(name: str, description: str, do_rules: list, dont_rules: list,
         "description": description,
         "do_rules": do_rules,
         "dont_rules": dont_rules,
+        "hot_topics": hot_topics or [],
+        "cold_topics": cold_topics or [],
         "created_at": datetime.now(JST).isoformat(),
         "source_range": source_range,
     }
@@ -117,14 +122,44 @@ def format_for_prompt(set_id: str) -> str:
     lines = [f"## 学習済みの傾向 — {s.get('name', '')}"]
     dos = s.get("do_rules") or []
     dnts = s.get("dont_rules") or []
+    hot = s.get("hot_topics") or []
+    cold = s.get("cold_topics") or []
+
     if dos:
-        lines.append("### 効くと確認済み (優先して使う)")
+        lines.append("### 効くと確認済みの書き方 (優先して使う)")
         for r in dos:
             lines.append(f"- {r}")
     if dnts:
-        lines.append("### 効かないと確認済み (避ける)")
+        lines.append("### 効かないと確認済みの書き方 (避ける)")
         for r in dnts:
             lines.append(f"- {r}")
+
+    if hot or cold:
+        lines.append("")
+        lines.append("### トピック傾向 (あくまで参考。縛りではない)")
+        if hot:
+            lines.append("**伸びたテーマ例**:")
+            for t in hot:
+                if isinstance(t, dict):
+                    name = t.get("name", "")
+                    pv = t.get("avg_pv", "")
+                    reason = t.get("reason", "")
+                    lines.append(f"- {name}" + (f" (PV平均 {pv})" if pv else "") + (f" — {reason}" if reason else ""))
+                else:
+                    lines.append(f"- {t}")
+        if cold:
+            lines.append("**伸びなかったテーマ例**:")
+            for t in cold:
+                if isinstance(t, dict):
+                    name = t.get("name", "")
+                    pv = t.get("avg_pv", "")
+                    reason = t.get("reason", "")
+                    lines.append(f"- {name}" + (f" (PV平均 {pv})" if pv else "") + (f" — {reason}" if reason else ""))
+                else:
+                    lines.append(f"- {t}")
+        lines.append("")
+        lines.append("【重要】上記は参考情報です。これに限定する必要はなく、より刺さると判断するテーマがあれば遠慮なくそちらで書いてください。直近15記事との重複を避けることが最優先。")
+
     return "\n".join(lines)
 
 
@@ -157,7 +192,10 @@ def generate_from_articles(range_days: int = 30, focus_hint: str = "") -> dict:
             "excerpt": (r["free_content"] or "")[:400],
         })
 
-    prompt_txt = f"""以下は過去の記事データです。PV・スキの傾向から「タイトル・文体・構成に効く傾向」と「効かない傾向」を抽出してください。
+    prompt_txt = f"""以下は過去の記事データです。PV・スキの傾向から次の 2 観点を抽出してください:
+
+**1. 書き方の傾向**: タイトル形式・文体・構成に「効く書き方」と「効かない書き方」
+**2. トピックの傾向**: 「伸びたテーマ (hot)」と「伸びなかったテーマ (cold)」を抽象化
 
 {json.dumps(articles_summary, ensure_ascii=False, indent=2)}
 
@@ -167,14 +205,21 @@ def generate_from_articles(range_days: int = 30, focus_hint: str = "") -> dict:
 {{
   "name": "このセットの短い名称 (20字以内)",
   "description": "このセットの特徴を1〜2文で",
-  "do_rules": ["効く傾向を短文で", "..."],
-  "dont_rules": ["効かない傾向を短文で", "..."]
+  "do_rules": ["効く書き方を短文で", "..."],
+  "dont_rules": ["効かない書き方を短文で", "..."],
+  "hot_topics": [
+    {{"name": "抽象化したテーマ名", "avg_pv": 数値, "reason": "なぜ伸びたか30字以内"}}
+  ],
+  "cold_topics": [
+    {{"name": "抽象化したテーマ名", "avg_pv": 数値, "reason": "なぜ伸びなかったか30字以内"}}
+  ]
 }}
 
 注意:
-- do/dont それぞれ 3〜8 個程度
-- 固有名詞 (具体的な記事タイトル) は使わず、抽象化したルールにする
-- 記事の文体・構成・タイトル形式・テーマ選びなど、次の記事生成に直接使える知見に絞る"""
+- do_rules / dont_rules: それぞれ 3〜8 個
+- hot_topics / cold_topics: それぞれ 2〜5 個、PV平均を算出して入れる
+- 「抽象化」とは: 「ChatGPTでレジュメ作成」→「AI活用の具体例」のように、類似記事全体に適用できる形
+- 固有名詞 (具体的な記事タイトル) は使わず、次の記事生成に直接使える知見にする"""
 
     from core.llm.claude import call_claude_json
     result = call_claude_json(prompt_txt, model="claude-opus-4-5-20251001",
@@ -188,5 +233,7 @@ def generate_from_articles(range_days: int = 30, focus_hint: str = "") -> dict:
         "description": result.get("description", ""),
         "do_rules": result.get("do_rules", []) or [],
         "dont_rules": result.get("dont_rules", []) or [],
+        "hot_topics": result.get("hot_topics", []) or [],
+        "cold_topics": result.get("cold_topics", []) or [],
         "source_range": f"last_{range_days}_days ({len(rows)} articles)",
     }

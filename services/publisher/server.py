@@ -495,6 +495,8 @@ def ui_analysis_generate(
             description=result["description"],
             do_rules=result["do_rules"],
             dont_rules=result["dont_rules"],
+            hot_topics=result.get("hot_topics", []),
+            cold_topics=result.get("cold_topics", []),
             source_range=result["source_range"],
         )
         print(f"[analysis] 新しい knowledge set 作成: {sid}")
