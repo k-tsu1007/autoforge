@@ -69,59 +69,14 @@
     {% if prompt_choices %}
     <div class="gen-field">
       <label class="gen-label">Prompt</label>
-      <select class="gen-input" name="prompt_name" id="prompt-select" onchange="onPromptChange()">
+      <select class="gen-input" name="prompt_name">
         <option value="">Auto (rotation by weight)</option>
         {% for p in prompt_choices %}
-        <option value="{{ p.name }}"
-                data-mode="{{ p.mode }}"
-                data-free="{{ p.settings.free_chars }}"
-                data-paid="{{ p.settings.paid_chars }}"
-                data-price="{{ p.settings.price }}">
-          {{ p.label }} &middot; {{ p.mode }} &middot; weight {{ p.weight }}
-        </option>
+        <option value="{{ p.name }}">{{ p.label }} &middot; {{ p.mode }} &middot; weight {{ p.weight }}</option>
         {% endfor %}
       </select>
     </div>
 
-    {# このプロンプトの設定を一時的にオーバーライドできる #}
-    <div class="gen-field" id="override-fields" style="display:none;">
-      <label class="gen-label">Override settings for this generation (optional)</label>
-      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;background:var(--surface);padding:.6rem .8rem;border-radius:6px;border:1px solid var(--border);">
-        <span id="override-free-wrap" style="display:inline-flex;gap:.3rem;align-items:center;font-size:.76rem;color:var(--muted);">
-          <span id="override-free-label">無料</span>
-          <input type="number" name="override_free_chars" id="override-free" min="0" max="20000"
-                 style="width:80px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.25rem .4rem;font-family:var(--font-mono);font-size:.78rem;text-align:center;"> 文字
-        </span>
-        <span id="override-paid-wrap" style="display:inline-flex;gap:.3rem;align-items:center;font-size:.76rem;color:var(--muted);">
-          有料
-          <input type="number" name="override_paid_chars" id="override-paid" min="0" max="20000"
-                 style="width:80px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.25rem .4rem;font-family:var(--font-mono);font-size:.78rem;text-align:center;"> 文字
-        </span>
-        <span id="override-price-wrap" style="display:inline-flex;gap:.3rem;align-items:center;font-size:.76rem;color:var(--muted);">
-          価格
-          <input type="number" name="override_price" id="override-price" min="0" max="50000" step="100"
-                 style="width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.25rem .4rem;font-family:var(--font-mono);font-size:.78rem;text-align:center;"> 円
-        </span>
-      </div>
-      <div class="gen-hint">空のままならプロンプトの設定値が使われます。</div>
-    </div>
-
-    <script>
-    function onPromptChange() {
-      const sel = document.getElementById('prompt-select');
-      const opt = sel.options[sel.selectedIndex];
-      const wrap = document.getElementById('override-fields');
-      if (!opt.value) { wrap.style.display = 'none'; return; }
-      wrap.style.display = '';
-      const mode = opt.dataset.mode || 'mixed';
-      document.getElementById('override-free').value = opt.dataset.free || '';
-      document.getElementById('override-paid').value = opt.dataset.paid || '';
-      document.getElementById('override-price').value = opt.dataset.price || '';
-      document.getElementById('override-free-label').textContent = (mode === 'free') ? '合計' : '無料';
-      document.getElementById('override-paid-wrap').style.display = (mode === 'mixed') ? '' : 'none';
-      document.getElementById('override-price-wrap').style.display = (mode === 'mixed') ? '' : 'none';
-    }
-    </script>
     {% endif %}
 
     {% if magazines %}

@@ -280,48 +280,49 @@ def ui_reject(note_id: str):
 
 
 @app.post("/review/{note_id}/regenerate", response_class=HTMLResponse)
-def ui_regenerate(note_id: str, user_comment: str = Form("")):
+def ui_regenerate(request: Request, note_id: str, user_comment: str = Form("")):
+    """既存の pending 記事を再生成。元のプロンプト/設定を引き継ぐ。"""
     from core.db import get_connection
     conn = get_connection()
+    # genre カラムに使用プロンプト名が入っている想定 (新方式)
     row = conn.execute(
-        "SELECT title, free_content FROM articles WHERE note_id=?", (note_id,)
+        "SELECT title, free_content, genre, tags FROM articles WHERE note_id=?", (note_id,)
     ).fetchone()
     if not row:
         return HTMLResponse('<div class="card"><div class="card-body" style="color:var(--red);">Not found.</div></div>')
 
     old_title = row["title"] or ""
+    prompt_name = row["genre"] or ""
+    # prompt_name が未設定 or 無効なら妥当なデフォルト
+    if prompt_name not in ("article_free", "article_mixed", "article_generator"):
+        prompt_name = "article_mixed"
 
     try:
-        from core.paths import strategy_path, program_md_path
-        strategy = json.loads(open(strategy_path(), encoding="utf-8").read())
         history = _load_history()
-        program = ""
-        try:
-            program = open(program_md_path(), encoding="utf-8").read()
-        except Exception:
-            pass
-
         platform = _platform()
         if platform == "wordpress":
             from platforms.wordpress.generator import generate_article
             new_article = generate_article(
-                strategy, program, history,
-                topic_hint=f"Rewrite: {old_title}. {user_comment}".strip(),
+                {}, "", history,
+                topic_hint=f"既存タイトル「{old_title}」と違う切り口で書き直し。 {user_comment}".strip(),
             )
         else:
             from platforms.note.generator import generate_article
             new_article = generate_article(
-                strategy, program, history,
-                topic_hint=f"Rewrite: {old_title}",
-                user_comment=user_comment,
+                {}, "", history,
+                instruction=f"既存タイトル「{old_title}」と違う切り口で書き直してください。{user_comment}".strip(),
+                free_only=(prompt_name == "article_free"),
+                prompt_name=prompt_name,
             )
 
         from core.db import upsert_article
+        # tags は元のものを維持 (cat:/mag: も含む)
+        stored_tags = _parse_tags(row["tags"])
         upsert_article({
             "note_id": note_id,
             "title": new_article.get("title", old_title),
-            "genre": new_article.get("genre", ""),
-            "tags": new_article.get("tags", []),
+            "genre": prompt_name,
+            "tags": stored_tags,
             "note_url": "",
             "status": "pending_review",
             "published_at": "",
@@ -341,29 +342,15 @@ def ui_regenerate(note_id: str, user_comment: str = Form("")):
                  user_comment),
             )
             conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[regen] regen_log 保存失敗: {e}")
 
-        new_title = new_article.get("title", old_title)
-        new_content = new_article.get("free_content", "")[:200]
-        return HTMLResponse(
-            f'<div class="card" id="card-{note_id}">'
-            f'<div class="card-title">{new_title}</div>'
-            f'<div class="card-meta">Regenerated</div>'
-            f'<details style="margin-top:.5rem;"><summary style="font-size:.78rem;color:var(--blue);cursor:pointer;">Preview</summary>'
-            f'<div class="preview">{new_content}...</div></details>'
-            f'<div class="card-actions">'
-            f'<button class="btn btn-ok" hx-post="/review/{note_id}/approve" hx-target="#card-{note_id}" hx-swap="outerHTML" hx-confirm="Publish?">Approve</button>'
-            f'<button class="btn btn-ng" hx-post="/review/{note_id}/reject" hx-target="#card-{note_id}" hx-swap="outerHTML">Reject</button>'
-            f'<button class="btn btn-regen" onclick="this.closest(\'.card\').querySelector(\'.regen-panel\').classList.toggle(\'open\')">Regenerate</button>'
-            f'</div>'
-            f'<div class="regen-panel"><form hx-post="/review/{note_id}/regenerate" hx-target="#card-{note_id}" hx-swap="outerHTML" style="margin-top:.5rem;">'
-            f'<textarea name="user_comment" rows="3" placeholder="Instructions..."></textarea>'
-            f'<div style="margin-top:.4rem;"><button type="submit" class="btn btn-primary">Regenerate</button></div>'
-            f'</form></div></div>'
-        )
+        # pending section を返して UI を最新化
+        return _render_pending_section(request)
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return HTMLResponse(
             f'<div class="card"><div class="card-body" style="color:var(--red);">Regeneration failed: {str(e)[:200]}</div></div>'
         )

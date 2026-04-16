@@ -48,10 +48,15 @@
     </div>
     <div class="regen-panel">
       <form hx-post="/review/{{ a.note_id }}/regenerate"
-            hx-target="#card-{{ a.note_id }}" hx-swap="outerHTML" style="margin-top:.5rem;">
+            hx-target="#pending-section" hx-swap="outerHTML"
+            hx-indicator=".regen-indicator-{{ a.note_id }}"
+            style="margin-top:.5rem;">
         <textarea name="user_comment" rows="3" placeholder="Regeneration instructions..."></textarea>
         <div style="margin-top:.4rem;">
-          <button type="submit" class="btn btn-primary">Regenerate</button>
+          <button type="submit" class="btn btn-primary">
+            <span class="regen-indicator-{{ a.note_id }} htmx-indicator"><span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:.3rem;"></span></span>
+            Regenerate
+          </button>
         </div>
       </form>
     </div>
