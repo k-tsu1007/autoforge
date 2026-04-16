@@ -56,11 +56,48 @@ def _now() -> datetime:
     return datetime.now(JST)
 
 
+def _all_instances() -> list[dict]:
+    """他インスタンスへ切り替えるため、全インスタンスと publisher_port を返す。"""
+    try:
+        from core.instance import list_instances
+        from pathlib import Path
+        import yaml
+        items = []
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        for name in list_instances():
+            cfg_path = repo_root / "instances" / name / "config.yaml"
+            port = None
+            display = name
+            platform = ""
+            if cfg_path.exists():
+                try:
+                    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                    port = (cfg.get("instance") or {}).get("publisher_port")
+                    display = (cfg.get("instance") or {}).get("display_name") or name
+                    platforms = cfg.get("platforms") or {}
+                    if (platforms.get("note") or {}).get("enabled"):
+                        platform = "note"
+                    elif (platforms.get("wordpress") or {}).get("enabled"):
+                        platform = "wordpress"
+                except Exception:
+                    pass
+            items.append({
+                "name": name,
+                "display": display,
+                "port": port,
+                "platform": platform,
+            })
+        return items
+    except Exception:
+        return []
+
+
 def _ctx(active: str = "home", **extra) -> dict:
     return {
         "instance": _instance_name(),
         "platform": _platform(),
         "active": active,
+        "all_instances": _all_instances(),
         **extra,
     }
 

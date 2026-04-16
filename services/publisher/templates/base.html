@@ -44,8 +44,42 @@ a:hover { text-decoration: underline; }
 .badge-warn { background: #1c0f02; color: var(--yellow); border: 1px solid #facc1533; }
 .badge-off { background: var(--surface2); color: var(--dim); border: 1px solid var(--border); }
 
+/* ─── LAYOUT (sidebar + main) ─── */
+.layout { display: grid; grid-template-columns: 200px 1fr; min-height: calc(100vh - 48px); }
+.sidebar {
+  background: var(--surface); border-right: 1px solid var(--border);
+  padding: 1rem .8rem; position: sticky; top: 48px; align-self: start;
+  max-height: calc(100vh - 48px); overflow-y: auto;
+}
+.sb-hd {
+  font-size: .7rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .08em; padding: 0 .4rem .4rem; margin-bottom: .3rem;
+  border-bottom: 1px solid var(--border);
+}
+.sb-item {
+  display: block; padding: .5rem .7rem; border-radius: 6px;
+  font-size: .82rem; color: var(--muted); margin-bottom: .15rem;
+  line-height: 1.3; text-decoration: none; transition: all .15s;
+}
+.sb-item:hover { background: var(--surface2); color: var(--text); text-decoration: none; }
+.sb-item.active {
+  background: var(--surface2); color: var(--text); font-weight: 600;
+  border-left: 2px solid var(--blue); padding-left: calc(.7rem - 2px);
+}
+.sb-item .sb-sub {
+  display: block; font-size: .68rem; color: var(--dim); font-family: var(--font-mono);
+  margin-top: .15rem; font-weight: 400;
+}
+.sb-item.active .sb-sub { color: var(--muted); }
+
+@media (max-width: 768px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--border); padding: .6rem .8rem; }
+  .sb-hd { display: none; }
+}
+
 /* ─── MAIN ─── */
-.main { max-width: 960px; margin: 0 auto; padding: 1.5rem 1.2rem; }
+.main { max-width: 960px; margin: 0; padding: 1.5rem 1.2rem; min-width: 0; }
 
 /* ─── CARDS ─── */
 .card {
@@ -136,9 +170,34 @@ textarea:focus, input:focus { outline: none; border-color: var(--blue); }
   </div>
 </header>
 
-<main class="main">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sb-hd">Services</div>
+    {% for inst in all_instances %}
+      {% if inst.name == instance %}
+        <div class="sb-item active">
+          {{ inst.display }}
+          <span class="sb-sub">:{{ inst.port or '?' }} · {{ inst.platform or '?' }}</span>
+        </div>
+      {% else %}
+        {% if inst.port %}
+        <a class="sb-item" href="http://{{ request.url.hostname or '127.0.0.1' }}:{{ inst.port }}{{ request.url.path }}">
+          {{ inst.display }}
+          <span class="sb-sub">:{{ inst.port }} · {{ inst.platform or '?' }}</span>
+        </a>
+        {% else %}
+        <div class="sb-item" style="opacity:.5;">
+          {{ inst.display }}
+          <span class="sb-sub">no port</span>
+        </div>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  </aside>
+  <main class="main">
 {% block content %}{% endblock %}
-</main>
+  </main>
+</div>
 
 </body>
 </html>
