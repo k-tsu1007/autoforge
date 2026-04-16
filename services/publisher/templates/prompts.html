@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Prompts — {{ instance }}{% endblock %}
+{% block head %}
+<style>
+.prompt-card { margin-bottom: 1.2rem; }
+.prompt-card summary {
+  cursor: pointer; padding: .6rem .8rem; font-size: .85rem; font-weight: 600;
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  list-style: none; user-select: none; color: var(--text);
+}
+.prompt-card summary::-webkit-details-marker { display: none; }
+.prompt-card summary::after { content: ""; margin-left: auto; color: var(--dim); font-size: .7rem; }
+.prompt-card[open] summary { border-radius: 8px 8px 0 0; }
+.prompt-card[open] summary::after { content: ""; }
+.prompt-inner {
+  border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 8px 8px; overflow: hidden;
+}
+.prompt-inner textarea { border: none; border-radius: 0; min-height: 250px; }
+.prompt-foot {
+  display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem;
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+.prompt-vars { font-size: .72rem; color: var(--dim); }
+.save-ok { color: var(--green); font-size: .78rem; display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<h2 style="margin-top:0;font-size:1.1rem;">Prompts</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  Article generation prompts. Changes take effect on the next generation.
+</p>
+
+{% for p in prompts %}
+<details class="prompt-card" {% if loop.first %}open{% endif %}>
+  <summary>
+    {{ p.label }}
+    <span style="font-size:.7rem;color:var(--dim);font-weight:400;">{{ p.filename }}</span>
+  </summary>
+  <div class="prompt-inner">
+    <form hx-post="/prompts/{{ p.name }}/save" hx-swap="none"
+          hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},2000)">
+      <textarea name="text" rows="20">{{ p.content }}</textarea>
+      <div class="prompt-foot">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <span class="save-ok">Saved</span>
+        {% if p.variables %}
+        <span class="prompt-vars">Variables: {{ p.variables }}</span>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</details>
+{% endfor %}
+
+{% if not prompts %}
+<div class="empty">No prompts found in prompts/ directory.</div>
+{% endif %}
+
+{% endblock %}

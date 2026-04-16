@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Publisher — {{ instance }}{% endblock %}
+{% block content %}
+
+<div class="stat-row">
+  <div class="stat-box">
+    <div class="stat-val" style="color:var(--yellow);">{{ pending_count }}</div>
+    <div class="stat-label">Review Pending</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-val" style="color:var(--blue);">{{ drafts_count }}</div>
+    <div class="stat-label">Drafts</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-val" style="color:var(--green);">{{ published_today }}</div>
+    <div class="stat-label">Published Today</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-val">{{ published_total }}</div>
+    <div class="stat-label">Total Articles</div>
+  </div>
+</div>
+
+{% if pending_articles %}
+<div class="section-hd">Pending Review</div>
+{% for a in pending_articles %}
+<div class="card">
+  <div class="card-title">{{ a.title }}</div>
+  <div class="card-meta">{{ a.genre }} &middot; {{ a.created_at[:16] }}</div>
+  <div class="card-actions">
+    <a href="/review" class="btn btn-ok">Review</a>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if recent %}
+<div class="section-hd">Recent Publications</div>
+{% for a in recent %}
+<div class="card">
+  <div class="card-title">
+    {% if a.note_url %}<a href="{{ a.note_url }}" target="_blank">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}
+  </div>
+  <div class="card-meta">{{ a.genre }} &middot; {{ a.published_at[:16] }} &middot; PV {{ a.views }} / Like {{ a.likes }}</div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if not pending_articles and not recent %}
+<div class="empty">No articles yet. Go to <a href="/generate">Generate</a> to create your first article.</div>
+{% endif %}
+
+{% endblock %}

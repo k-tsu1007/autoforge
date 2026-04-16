@@ -163,9 +163,15 @@
   </a>
   <a class="pipe-stage" href="#article">
     <span class="ps-icon">📝</span>
-    <span class="ps-label">記事生成・投稿</span>
+    <span class="ps-label">記事生成</span>
     <span class="ps-time">スロット毎</span>
   </a>
+  <a class="pipe-stage" href="#publisher">
+    <span class="ps-icon">📤</span>
+    <span class="ps-label">Publisher</span>
+    <span class="ps-time">5分毎 (独立)</span>
+  </a>
+  {% if x_enabled %}
   <a class="pipe-stage" href="#xpost">
     <span class="ps-icon">🐦</span>
     <span class="ps-label">Xツイート投稿</span>
@@ -181,6 +187,7 @@
     <span class="ps-label">メンション返信</span>
     <span class="ps-time">10/30分毎</span>
   </a>
+  {% endif %}
   <a class="pipe-stage" href="#learn">
     <span class="ps-icon">🧠</span>
     <span class="ps-label">学習ループ</span>
@@ -305,8 +312,8 @@
 <div class="flow-section" id="article">
   <div class="flow-section-hd">
     <span class="fsh-icon">📝</span>
-    Note記事の生成・投稿
-    <span class="fsh-time">advisor の note_post_slots に一致した時</span>
+    記事生成 (Daemon)
+    <span class="fsh-time">advisor の post_slots に一致した時</span>
   </div>
   <div class="flow-steps">
 
@@ -317,8 +324,8 @@
           スロット確認
           <span class="step-badge badge-nocode">制御</span>
         </div>
-        <div class="step-desc"><code>advisor.note_post_slots</code> と現在時刻を照合。当日の投稿数が <code>note_daily_target</code> 未満なら生成に進む。</div>
-        <span class="step-file">platforms/note/policy.py</span>
+        <div class="step-desc">advisor のスロット設定と現在時刻を照合。当日の投稿数が目標未満なら生成に進む。</div>
+        <span class="step-file">platforms/note/policy.py | platforms/wordpress/publisher.py</span>
       </div>
     </div>
 
@@ -329,11 +336,11 @@
           article_generator — 記事本文を生成
           <span class="step-badge badge-edit">✎ 編集可能</span>
         </div>
-        <div class="step-desc">SEOキーワード・ジャンル・ターゲット読者・文体ルールを渡して Claude に記事を書かせる。無料部分と有料部分（<code>free_ratio</code> で比率設定）を生成。</div>
+        <div class="step-desc">SEOキーワード・ジャンル・ターゲット読者・文体ルールを渡して Claude に記事を書かせる。生成結果は <code>drafts/</code> ディレクトリに JSON として保存される。</div>
         <div class="data-flow">
           <span class="df-box df-db">strategy.json + knowledge</span><span class="df-arr">→</span>
-          <span class="df-box df-ai">Claude (opus)</span><span class="df-arr">→</span>
-          <span class="df-box df-out">articles DB (draft)</span>
+          <span class="df-box df-ai">Claude</span><span class="df-arr">→</span>
+          <span class="df-box df-out">drafts/ (draft_*.json)</span>
         </div>
         <span class="step-file">prompts/article_generator.txt</span>
         <details class="prompt-panel">
@@ -351,26 +358,92 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+{# ════════════════════════════════════════ #}
+{# SECTION 2.5: PUBLISHER SERVICE            #}
+{# ════════════════════════════════════════ #}
+<div class="flow-section" id="publisher">
+  <div class="flow-section-hd">
+    <span class="fsh-icon">📤</span>
+    Publisher Service (独立プロセス)
+    <span class="fsh-time">5分毎 auto-poll / API 経由で即時</span>
+  </div>
+  <div class="flow-steps">
+
+    <div class="flow-step">
+      <div class="step-dot">1</div>
+      <div class="step-body">
+        <div class="step-name">
+          auto-poll — drafts/ を自動検出
+          <span class="step-badge badge-nocode">ポーリング</span>
+        </div>
+        <div class="step-desc">5分おきに <code>drafts/</code> ディレクトリを確認。新しい <code>draft_*.json</code> があれば投稿処理に進む。<strong>daemon が停止していても独立して動作する。</strong></div>
+        <div class="data-flow">
+          <span class="df-box">drafts/ (filesystem)</span><span class="df-arr">→</span>
+          <span class="df-box df-out">投稿処理へ</span>
+        </div>
+        <span class="step-file">services/publisher/server.py → auto-poll</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">2</div>
+      <div class="step-body">
+        <div class="step-name">
+          REVIEW_MODE 判定
+          <span class="step-badge badge-nocode">制御</span>
+        </div>
+        <div class="step-desc"><code>REVIEW_MODE=1</code> の場合は <code>pending_review</code> として DB に保留し、<a href="/review">Review ページ</a> で承認を待つ。<code>=0</code> の場合は即時投稿。</div>
+        <div class="data-flow">
+          <span class="df-box">draft_*.json</span><span class="df-arr">→</span>
+          <span class="df-box df-db">articles DB (pending_review)</span><span class="df-arr">or→</span>
+          <span class="df-box df-out">即時投稿</span>
+        </div>
+      </div>
+    </div>
+
     <div class="flow-step">
       <div class="step-dot">3</div>
       <div class="step-body">
         <div class="step-name">
-          publish — Note に投稿
+          投稿 — Note / WordPress
           <span class="step-badge badge-nocode">投稿</span>
         </div>
-        <div class="step-desc">生成した記事を Playwright 経由で Note に投稿する。投稿後、記事タイトルからツイート下書きを自動生成して <code>tweet_queue</code> に追加。</div>
+        <div class="step-desc">プラットフォーム設定に応じて Note (API) または WordPress (REST API) に投稿。サムネイル自動生成、タグ・カテゴリ設定も行う。投稿後は <code>articles</code> DB に記録。</div>
         <div class="data-flow">
-          <span class="df-box df-db">articles DB</span><span class="df-arr">→</span>
-          <span class="df-box">Note (Playwright)</span><span class="df-arr">→</span>
-          <span class="df-box df-out">note_url 保存 + tweet_queue 追加</span>
+          <span class="df-box df-db">articles DB / draft</span><span class="df-arr">→</span>
+          <span class="df-box">Note API / WordPress REST</span><span class="df-arr">→</span>
+          <span class="df-box df-out">公開 URL + DB 記録</span>
         </div>
-        <span class="step-file">platforms/note/publisher.py</span>
+        <span class="step-file">platforms/note/publisher.py | platforms/wordpress/publisher.py</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-dot">4</div>
+      <div class="step-body">
+        <div class="step-name">
+          API エンドポイント
+          <span class="step-badge badge-nocode">API</span>
+        </div>
+        <div class="step-desc">
+          Daemon / Webapp / 外部から HTTP で直接操作可能。<br>
+          <code>POST /poll</code> — drafts/ 確認して投稿<br>
+          <code>POST /publish</code> — 記事 JSON を即時投稿<br>
+          <code>POST /publish/approve</code> — pending_review を承認して投稿<br>
+          <code>GET /health</code> — 生存確認<br>
+          <code>GET /pending</code> — 承認待ち一覧
+        </div>
+        <span class="step-file">services/publisher/server.py (port {{ publisher_port }})</span>
       </div>
     </div>
 
   </div>
 </div>
 
+{% if x_enabled %}
 {# ════════════════════════════════════════ #}
 {# SECTION 3: X POSTING                     #}
 {# ════════════════════════════════════════ #}
@@ -590,6 +663,7 @@
 
   </div>
 </div>
+{% endif %}
 
 {# ════════════════════════════════════════ #}
 {# SECTION 6: LEARNING LOOP                 #}

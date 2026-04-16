@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Publisher{% endblock %}</title>
+<style>
+:root {
+  --bg: #0a0a0a; --surface: #111111; --surface2: #161616; --border: #222222;
+  --text: #f0f0f0; --muted: #888888; --dim: #555555;
+  --green: #4ade80; --blue: #60a5fa; --yellow: #facc15; --red: #f87171; --lime: #a3e635;
+  --font-mono: "SF Mono","Fira Code","Consolas",monospace;
+}
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ─── HEADER ─── */
+.hdr {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  height: 48px; display: flex; align-items: center; padding: 0 1.2rem; gap: 1.5rem;
+}
+.hdr-logo { font-weight: 700; font-size: .9rem; color: var(--text); white-space: nowrap; }
+.hdr-logo span { color: var(--blue); }
+.hdr-nav { display: flex; gap: .2rem; }
+.hdr-nav a {
+  padding: .35rem .75rem; border-radius: 6px; font-size: .8rem;
+  color: var(--muted); transition: all .15s;
+}
+.hdr-nav a:hover { background: var(--surface2); color: var(--text); text-decoration: none; }
+.hdr-nav a.active { background: var(--surface2); color: var(--text); font-weight: 600; }
+.hdr-right { margin-left: auto; display: flex; align-items: center; gap: .8rem; }
+.hdr-badge {
+  font-size: .7rem; padding: .15rem .5rem; border-radius: 999px;
+  font-weight: 600; font-family: var(--font-mono);
+}
+.badge-ok { background: #0c2016; color: var(--green); border: 1px solid #4ade8033; }
+.badge-warn { background: #1c0f02; color: var(--yellow); border: 1px solid #facc1533; }
+.badge-off { background: var(--surface2); color: var(--dim); border: 1px solid var(--border); }
+
+/* ─── MAIN ─── */
+.main { max-width: 960px; margin: 0 auto; padding: 1.5rem 1.2rem; }
+
+/* ─── CARDS ─── */
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.2rem; margin-bottom: 1rem;
+}
+.card-title { font-size: .9rem; font-weight: 600; margin-bottom: .5rem; }
+.card-meta { font-size: .75rem; color: var(--muted); font-family: var(--font-mono); }
+.card-body { font-size: .82rem; color: var(--muted); margin-top: .5rem; line-height: 1.6; }
+.card-actions { display: flex; gap: .5rem; margin-top: .8rem; flex-wrap: wrap; }
+
+/* ─── BUTTONS ─── */
+.btn {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .35rem .8rem; border-radius: 6px; border: 1px solid var(--border);
+  font-size: .78rem; font-weight: 600; cursor: pointer; transition: all .15s;
+  background: var(--surface2); color: var(--muted);
+}
+.btn:hover { border-color: var(--muted); color: var(--text); }
+.btn-ok { border-color: #4ade8033; color: var(--green); background: #0c2016; }
+.btn-ok:hover { background: #0f2e1c; }
+.btn-ng { border-color: #f8717133; color: var(--red); background: #1c0808; }
+.btn-ng:hover { background: #2a0c0c; }
+.btn-regen { border-color: #60a5fa33; color: var(--blue); background: #0c1424; }
+.btn-regen:hover { background: #0f1a30; }
+.btn-primary { border-color: var(--blue); color: #000; background: var(--blue); }
+.btn-primary:hover { opacity: .85; }
+
+/* ─── FORMS ─── */
+textarea, input[type="text"] {
+  width: 100%; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: .6rem .8rem; font-family: var(--font-mono); font-size: .8rem;
+  line-height: 1.6; resize: vertical;
+}
+textarea:focus, input:focus { outline: none; border-color: var(--blue); }
+
+/* ─── STAT GRID ─── */
+.stat-row { display: flex; gap: 1rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
+.stat-box {
+  flex: 1; min-width: 120px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: .8rem 1rem; text-align: center;
+}
+.stat-val { font-size: 1.5rem; font-weight: 700; font-family: var(--font-mono); }
+.stat-label { font-size: .7rem; color: var(--muted); margin-top: .2rem; }
+
+/* ─── SECTION ─── */
+.section-hd {
+  font-size: .75rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .08em; padding-bottom: .4rem; margin-bottom: .8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ─── EMPTY STATE ─── */
+.empty { text-align: center; padding: 2rem; color: var(--dim); font-size: .85rem; }
+
+/* ─── REGEN PANEL ─── */
+.regen-panel { margin-top: .6rem; display: none; }
+.regen-panel.open { display: block; }
+
+/* ─── TOAST ─── */
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 200;
+  background: var(--surface); border: 1px solid var(--green); border-radius: 8px;
+  padding: .6rem 1rem; font-size: .82rem; color: var(--green);
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; } }
+
+{% block head %}{% endblock %}
+</style>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-logo"><span>Publisher</span> &middot; {{ instance }}</div>
+  <nav class="hdr-nav">
+    <a href="/" class="{% if active == 'home' %}active{% endif %}">Home</a>
+    <a href="/review" class="{% if active == 'review' %}active{% endif %}">Review</a>
+    <a href="/prompts" class="{% if active == 'prompts' %}active{% endif %}">Prompts</a>
+    <a href="/generate" class="{% if active == 'generate' %}active{% endif %}">Generate</a>
+  </nav>
+  <div class="hdr-right">
+    <span class="hdr-badge badge-ok">{{ platform }}</span>
+  </div>
+</header>
+
+<main class="main">
+{% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

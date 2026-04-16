@@ -957,7 +957,12 @@ def flow_page(request: Request, user: str = Depends(check_auth)):
     return templates.TemplateResponse(
         request=request,
         name="flow.html",
-        context={"prompts": prompts, "saved": saved},
+        context={
+            "prompts": prompts,
+            "saved": saved,
+            "x_enabled": inst.get("platforms.x.enabled", False),
+            "publisher_port": int(inst.get("instance.publisher_port") or 8011),
+        },
     )
 
 

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Generate — {{ instance }}{% endblock %}
+{% block head %}
+<style>
+.gen-form { max-width: 600px; }
+.gen-field { margin-bottom: 1rem; }
+.gen-label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: .3rem; font-weight: 600; }
+.gen-hint { font-size: .72rem; color: var(--dim); margin-top: .2rem; }
+.gen-result { margin-top: 1.5rem; }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<h2 style="margin-top:0;font-size:1.1rem;">Generate Article</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  Generate a new article. It will go to <a href="/review">Review</a> for approval before publishing.
+</p>
+
+<form class="gen-form" hx-post="/generate" hx-target="#gen-result" hx-swap="innerHTML"
+      hx-indicator="#gen-spinner">
+  <div class="gen-field">
+    <label class="gen-label">Topic Hint (optional)</label>
+    <input type="text" name="topic_hint" placeholder="e.g. AI画像生成で副業">
+    <div class="gen-hint">Leave empty for auto-selection based on strategy and SEO keywords.</div>
+  </div>
+
+  <div class="gen-field">
+    <label class="gen-label">User Comment (optional)</label>
+    <textarea name="user_comment" rows="3" placeholder="Special instructions for this article..."></textarea>
+  </div>
+
+  {% if article_types %}
+  <div class="gen-field">
+    <label class="gen-label">Article Type</label>
+    <select name="article_type" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.5rem .8rem;font-size:.82rem;">
+      <option value="">Auto (rotation)</option>
+      {% for t in article_types %}
+      <option value="{{ t }}">{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">
+    <span id="gen-spinner" class="htmx-indicator"><span class="spinner"></span></span>
+    Generate
+  </button>
+</form>
+
+<div id="gen-result" class="gen-result"></div>
+
+{% endblock %}
