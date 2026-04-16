@@ -127,8 +127,9 @@ textarea:focus, input:focus { outline: none; border-color: var(--blue); }
   <nav class="hdr-nav">
     <a href="/" class="{% if active == 'home' %}active{% endif %}">Home</a>
     <a href="/review" class="{% if active == 'review' %}active{% endif %}">Review</a>
-    <a href="/prompts" class="{% if active == 'prompts' %}active{% endif %}">Prompts</a>
     <a href="/generate" class="{% if active == 'generate' %}active{% endif %}">Generate</a>
+    <a href="/prompts" class="{% if active == 'prompts' %}active{% endif %}">Prompts</a>
+    <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Automation</a>
   </nav>
   <div class="hdr-right">
     <span class="hdr-badge badge-ok">{{ platform }}</span>

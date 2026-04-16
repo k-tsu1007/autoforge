@@ -1,0 +1,3 @@
+<div class="toggle {% if review_mode %}on{% endif %}"
+     hx-post="/settings/review_mode/toggle" hx-swap="outerHTML"
+     hx-on::after-request="this.nextElementSibling.textContent = this.classList.contains('on') ? 'Enabled — manual approval required' : 'Disabled — auto-publish'"></div>

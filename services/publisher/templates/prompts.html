@@ -22,23 +22,55 @@
   display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem;
   background: var(--surface); border-top: 1px solid var(--border);
 }
-.prompt-vars { font-size: .72rem; color: var(--dim); }
+.prompt-vars { font-size: .72rem; color: var(--dim); margin-left: auto; }
 .save-ok { color: var(--green); font-size: .78rem; display: none; }
+
+.add-card {
+  background: var(--surface); border: 1px dashed var(--border); border-radius: 8px;
+  padding: 1rem; margin-bottom: 1.2rem;
+}
+.add-card h3 { font-size: .85rem; margin-bottom: .5rem; }
+.add-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.add-row input {
+  flex: 1; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: .4rem .6rem; font-size: .8rem;
+}
+.weight-inline { font-size: .7rem; color: var(--dim); margin-left: auto; }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<h2 style="margin-top:0;font-size:1.1rem;">Prompts</h2>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+  <h2 style="margin:0;font-size:1.1rem;">Prompts</h2>
+  <a href="/settings" class="btn">Manage Rotation Weights</a>
+</div>
 <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
-  Article generation prompts. Changes take effect on the next generation.
+  Article generation prompts. Changes take effect on the next generation. Set rotation weights in <a href="/settings">Automation</a>.
 </p>
 
+{# ─── Add new prompt ─── #}
+<div class="add-card">
+  <h3>+ Add New Prompt</h3>
+  <form hx-post="/prompts/add" hx-target="body" hx-swap="outerHTML">
+    <div class="add-row">
+      <input type="text" name="name" placeholder="prompt_name (e.g. tutorial, list_post)" required pattern="[a-z0-9_]+">
+      <button type="submit" class="btn btn-primary">Create</button>
+    </div>
+    <div style="font-size:.7rem;color:var(--dim);">Lowercase letters, numbers, underscores only.</div>
+  </form>
+</div>
+
+{# ─── Prompt list ─── #}
 {% for p in prompts %}
 <details class="prompt-card" {% if loop.first %}open{% endif %}>
   <summary>
     {{ p.label }}
     <span style="font-size:.7rem;color:var(--dim);font-weight:400;">{{ p.filename }}</span>
+    {% if p.weight is defined %}
+    <span class="weight-inline">weight: {{ p.weight }}</span>
+    {% endif %}
   </summary>
   <div class="prompt-inner">
     <form hx-post="/prompts/{{ p.name }}/save" hx-swap="none"
@@ -47,6 +79,10 @@
       <div class="prompt-foot">
         <button type="submit" class="btn btn-primary">Save</button>
         <span class="save-ok">Saved</span>
+        <button type="button" class="btn btn-ng"
+                hx-post="/prompts/{{ p.name }}/delete"
+                hx-confirm="Delete prompt '{{ p.name }}'? This cannot be undone."
+                hx-target="body" hx-swap="outerHTML">Delete</button>
         {% if p.variables %}
         <span class="prompt-vars">Variables: {{ p.variables }}</span>
         {% endif %}
@@ -57,7 +93,7 @@
 {% endfor %}
 
 {% if not prompts %}
-<div class="empty">No prompts found in prompts/ directory.</div>
+<div class="empty">No prompts found. Add one above.</div>
 {% endif %}
 
 {% endblock %}

@@ -1,0 +1,16 @@
+<div class="weight-list" id="weight-list">
+  <div class="weight-hd">Prompt</div>
+  <div class="weight-hd" style="text-align:center;">Weight</div>
+  <div class="weight-hd">Pickup %</div>
+  {% for p in prompts %}
+  <div class="weight-name">{{ p.name }}</div>
+  <input type="number" class="weight-num" min="0" max="100" value="{{ p.weight }}"
+         hx-post="/settings/prompt_weight"
+         hx-vals='{"name": "{{ p.name }}"}'
+         hx-trigger="change"
+         hx-target="#weight-list"
+         hx-swap="outerHTML"
+         name="weight">
+  <div class="weight-meta">{{ p.pct }}%</div>
+  {% endfor %}
+</div>

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Automation — {{ instance }}{% endblock %}
+{% block head %}
+<style>
+.set-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.2rem; margin-bottom: 1.2rem;
+}
+.set-card h3 { font-size: .9rem; margin-bottom: .3rem; }
+.set-desc { font-size: .75rem; color: var(--muted); margin-bottom: .8rem; line-height: 1.6; }
+
+.toggle-row { display: flex; align-items: center; gap: .8rem; }
+.toggle {
+  position: relative; width: 42px; height: 22px;
+  background: var(--border); border-radius: 999px; cursor: pointer; transition: background .2s;
+}
+.toggle.on { background: var(--green); }
+.toggle::after {
+  content: ""; position: absolute; left: 3px; top: 3px;
+  width: 16px; height: 16px; border-radius: 50%; background: var(--text);
+  transition: left .2s;
+}
+.toggle.on::after { left: 23px; }
+.toggle-label { font-size: .85rem; }
+
+.slot-list { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+.slot-chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: .25rem .6rem .25rem .8rem;
+  font-family: var(--font-mono); font-size: .8rem;
+}
+.slot-x {
+  background: none; border: none; color: var(--dim); cursor: pointer;
+  font-size: 1rem; padding: 0; line-height: 1;
+}
+.slot-x:hover { color: var(--red); }
+
+.slot-add { display: flex; gap: .4rem; align-items: center; }
+.slot-add input[type="time"] {
+  width: 100px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: .3rem .5rem;
+  font-family: var(--font-mono); font-size: .8rem;
+}
+
+.weight-list { display: grid; grid-template-columns: 1fr 80px 80px; gap: .5rem; align-items: center; }
+.weight-row {
+  display: contents;
+}
+.weight-name { font-size: .85rem; padding: .3rem .5rem; }
+.weight-num {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: .3rem .5rem; font-family: var(--font-mono);
+  font-size: .82rem; text-align: center; width: 70px;
+}
+.weight-meta { font-size: .68rem; color: var(--dim); }
+.weight-hd { font-size: .7rem; color: var(--muted); padding: 0 .5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<h2 style="margin-top:0;font-size:1.1rem;">Automation</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  Posting schedule, review mode, and prompt rotation. Changes apply immediately.
+</p>
+
+{# ─── Review Mode ─── #}
+<div class="set-card">
+  <h3>Review Mode</h3>
+  <div class="set-desc">When ON, generated articles wait for manual approval at <a href="/review">Review</a>. When OFF, they publish immediately on auto-poll.</div>
+  <div class="toggle-row">
+    <div class="toggle {% if review_mode %}on{% endif %}"
+         hx-post="/settings/review_mode/toggle" hx-swap="outerHTML"></div>
+    <span class="toggle-label">{{ "Enabled — manual approval required" if review_mode else "Disabled — auto-publish" }}</span>
+  </div>
+</div>
+
+{# ─── Posting Slots ─── #}
+<div class="set-card">
+  <h3>Posting Schedule</h3>
+  <div class="set-desc">Times of day when approved articles are published. Daily target = number of slots ({{ slots|length }} per day).</div>
+
+  <div class="slot-list" id="slot-list">
+    {% for s in slots %}
+    <span class="slot-chip">
+      {{ s }}
+      <button class="slot-x" hx-post="/settings/slots/remove" hx-vals='{"time": "{{ s }}"}'
+              hx-target="#slot-list" hx-swap="outerHTML">×</button>
+    </span>
+    {% endfor %}
+    {% if not slots %}
+    <span style="font-size:.78rem;color:var(--dim);">No slots configured. Articles won't auto-publish.</span>
+    {% endif %}
+  </div>
+
+  <form class="slot-add" hx-post="/settings/slots/add" hx-target="#slot-list" hx-swap="outerHTML"
+        hx-on::after-request="this.reset()">
+    <input type="time" name="time" required>
+    <button type="submit" class="btn btn-primary">+ Add Slot</button>
+  </form>
+</div>
+
+{# ─── Prompt Rotation ─── #}
+<div class="set-card">
+  <h3>Prompt Rotation</h3>
+  <div class="set-desc">Auto-generation picks a prompt weighted by these values. <code>0</code> disables a prompt entirely. Edit content at <a href="/prompts">Prompts</a>.</div>
+
+  <div class="weight-list" id="weight-list">
+    <div class="weight-hd">Prompt</div>
+    <div class="weight-hd" style="text-align:center;">Weight</div>
+    <div class="weight-hd">Pickup %</div>
+    {% for p in prompts %}
+    <div class="weight-name">{{ p.name }}</div>
+    <input type="number" class="weight-num" min="0" max="100" value="{{ p.weight }}"
+           hx-post="/settings/prompt_weight"
+           hx-vals='{"name": "{{ p.name }}"}'
+           hx-trigger="change"
+           hx-target="#weight-list"
+           hx-swap="outerHTML"
+           name="weight">
+    <div class="weight-meta">{{ p.pct }}%</div>
+    {% endfor %}
+  </div>
+
+  {% if not prompts %}
+  <div style="font-size:.78rem;color:var(--dim);margin-top:.5rem;">No prompts found. Add some at <a href="/prompts">Prompts</a>.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

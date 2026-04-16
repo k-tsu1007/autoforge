@@ -123,8 +123,9 @@ def ui_review(request: Request):
     from core.db import get_connection
     conn = get_connection()
     rows = conn.execute(
-        "SELECT note_id, title, genre, tags, free_content, paid_content, created_at "
-        "FROM articles WHERE status='pending_review' ORDER BY created_at DESC"
+        "SELECT note_id, title, genre, tags, free_content, paid_content, created_at, published_at, status "
+        "FROM articles WHERE status IN ('pending_review', 'approved') "
+        "ORDER BY status='pending_review' DESC, created_at DESC"
     ).fetchall()
     articles = [dict(r) for r in rows]
     return _render(request, "review.html", active="review",
@@ -133,29 +134,18 @@ def ui_review(request: Request):
 
 @app.post("/review/{note_id}/approve", response_class=HTMLResponse)
 def ui_approve(note_id: str):
+    """承認。published_at に未来時刻があれば 'approved' でその時刻まで待機。"""
     from core.db import get_connection
     conn = get_connection()
     row = conn.execute(
-        "SELECT title, genre, tags, free_content, paid_content "
-        "FROM articles WHERE note_id=? AND status='pending_review'",
+        "SELECT title, published_at FROM articles WHERE note_id=? AND status='pending_review'",
         (note_id,),
     ).fetchone()
     if not row:
         return HTMLResponse('<div class="card" style="border-color:var(--red);"><div class="card-body">Article not found.</div></div>')
 
-    stored_tags = _parse_tags(row["tags"])
-    tags = [t for t in stored_tags if not (isinstance(t, str) and t.startswith("cat:"))]
-    categories = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("cat:")]
-
-    article = {
-        "title": row["title"],
-        "genre": row["genre"],
-        "tags": tags,
-        "categories": categories,
-        "free_content": row["free_content"] or "",
-        "paid_content": row["paid_content"] or "",
-        "content": row["free_content"] or "",
-    }
+    title = row["title"] or ""
+    scheduled_iso = row["published_at"] or ""
 
     # regen_log 承認
     try:
@@ -168,33 +158,74 @@ def ui_approve(note_id: str):
     except Exception:
         pass
 
-    # バックグラウンドで投稿
-    def _do():
-        with _lock:
-            platform = _platform()
-            try:
-                if platform == "wordpress":
-                    result = _publish_wordpress(article)
-                else:
-                    result = _publish_note(article)
-            except Exception as e:
-                print(f"[publisher] approve publish error: {e}")
-                return
+    # 予約時刻が未来 → status='approved' にして待機 (auto-poll が時刻判定して投稿)
+    is_scheduled = False
+    if scheduled_iso:
         try:
-            from core.db import get_connection as gc
-            c = gc()
-            c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
-            c.commit()
+            dt = datetime.fromisoformat(scheduled_iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=JST)
+            if dt > _now():
+                is_scheduled = True
         except Exception:
             pass
-        _notify(platform, result)
 
-    threading.Thread(target=_do, daemon=True).start()
+    if is_scheduled:
+        conn.execute("UPDATE articles SET status='approved' WHERE note_id=?", (note_id,))
+        conn.commit()
+        return HTMLResponse(
+            f'<div class="card approved"><div class="card-body" style="color:var(--blue);">'
+            f'Approved & scheduled: {title[:60]} — will publish at {scheduled_iso[:16]}</div></div>'
+        )
 
+    # 即時投稿
+    threading.Thread(target=_publish_pending, args=(note_id,), daemon=True).start()
     return HTMLResponse(
         f'<div class="card approved"><div class="card-body" style="color:var(--green);">'
-        f'Approved: {row["title"][:60]} — publishing in background...</div></div>'
+        f'Approved: {title[:60]} — publishing in background...</div></div>'
     )
+
+
+def _publish_pending(note_id: str):
+    """approved/pending_review の記事を投稿 (背景処理)。"""
+    from core.db import get_connection
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT title, genre, tags, free_content, paid_content "
+        "FROM articles WHERE note_id=?",
+        (note_id,),
+    ).fetchone()
+    if not row:
+        return
+    stored_tags = _parse_tags(row["tags"])
+    tags = [t for t in stored_tags if not (isinstance(t, str) and t.startswith("cat:"))]
+    categories = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("cat:")]
+    article = {
+        "title": row["title"],
+        "genre": row["genre"],
+        "tags": tags,
+        "categories": categories,
+        "free_content": row["free_content"] or "",
+        "paid_content": row["paid_content"] or "",
+        "content": row["free_content"] or "",
+    }
+    with _lock:
+        platform = _platform()
+        try:
+            if platform == "wordpress":
+                result = _publish_wordpress(article)
+            else:
+                result = _publish_note(article)
+        except Exception as e:
+            print(f"[publisher] _publish_pending error: {e}")
+            return
+    try:
+        c = get_connection()
+        c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
+        c.commit()
+    except Exception:
+        pass
+    _notify(platform, result)
 
 
 @app.post("/review/{note_id}/reject", response_class=HTMLResponse)
@@ -306,24 +337,104 @@ def ui_regenerate(note_id: str, user_comment: str = Form("")):
         )
 
 
-# ─── Prompts UI ───────────────────────────────────────────────────────────
+# ─── Settings UI ──────────────────────────────────────────────────────────
 
-@app.get("/prompts", response_class=HTMLResponse)
-def ui_prompts(request: Request):
+def _list_prompt_files() -> list[str]:
+    """インスタンスの prompts/ から記事生成系プロンプト名のリストを返す。"""
     from core.instance import get_active_instance
     inst = get_active_instance()
-    prompts_dir = inst.root / "prompts"
+    pdir = inst.root / "prompts"
+    if not pdir.exists():
+        return []
+    excluded = {"tweet_generator", "engage_quote", "engage_reply", "mention_reply"}
+    names = []
+    for fp in sorted(pdir.iterdir()):
+        if fp.is_file() and fp.stem not in excluded:
+            names.append(fp.stem)
+    return names
 
-    PROMPT_META = {
-        "article_generator": {
-            "label": "Article Generator",
-            "variables": "{genre}, {target_length}, {free_ratio}, {seo_keywords}, {recent_titles}",
-        },
-        "beginner": {"label": "WordPress: Beginner", "variables": "{keyword}, {audience}, {tone}"},
-        "comparison": {"label": "WordPress: Comparison", "variables": "{keyword}, {audience}, {tone}"},
-        "news": {"label": "WordPress: News", "variables": "{keyword}, {audience}, {tone}"},
-        "handson": {"label": "WordPress: Hands-on", "variables": "{keyword}, {audience}, {tone}"},
-    }
+
+def _build_prompt_weights() -> list[dict]:
+    """[{name, weight, pct}] のリストを返す。"""
+    from services.publisher import automation
+    weights = automation.get_prompt_weights()
+    names = _list_prompt_files()
+
+    # automation.json に重みが無い場合はデフォルト 1
+    items = []
+    for n in names:
+        items.append({"name": n, "weight": int(weights.get(n, 1))})
+
+    total = sum(x["weight"] for x in items) or 1
+    for x in items:
+        x["pct"] = round(100 * x["weight"] / total) if total else 0
+    return items
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def ui_settings(request: Request):
+    from services.publisher import automation
+    return _render(request, "settings.html", active="settings",
+                   review_mode=automation.get_review_mode(),
+                   slots=automation.get_slots(),
+                   prompts=_build_prompt_weights())
+
+
+@app.post("/settings/review_mode/toggle", response_class=HTMLResponse)
+def ui_settings_toggle_review(request: Request):
+    from services.publisher import automation
+    cfg = automation.load()
+    new_val = not cfg.get("review_mode", True)
+    automation.update(review_mode=new_val)
+    return _render(request, "_review_toggle.html", review_mode=new_val)
+
+
+@app.post("/settings/slots/add", response_class=HTMLResponse)
+def ui_settings_add_slot(request: Request, time: str = Form(...)):
+    from services.publisher import automation
+    automation.add_slot(time)
+    return _render(request, "_slot_list.html", slots=automation.get_slots())
+
+
+@app.post("/settings/slots/remove", response_class=HTMLResponse)
+def ui_settings_remove_slot(request: Request, time: str = Form(...)):
+    from services.publisher import automation
+    automation.remove_slot(time)
+    return _render(request, "_slot_list.html", slots=automation.get_slots())
+
+
+@app.post("/settings/prompt_weight", response_class=HTMLResponse)
+def ui_settings_prompt_weight(request: Request,
+                               name: str = Form(...),
+                               weight: int = Form(...)):
+    from services.publisher import automation
+    automation.set_prompt_weight(name, weight)
+    return _render(request, "_weight_list.html", prompts=_build_prompt_weights())
+
+
+# ─── Prompts UI ───────────────────────────────────────────────────────────
+
+PROMPT_META = {
+    "article_generator": {
+        "label": "Note: Article Generator",
+        "variables": "{genre}, {target_length}, {free_ratio}, {seo_keywords}, {recent_titles}",
+    },
+    "beginner": {"label": "WordPress: Beginner", "variables": "{keyword}, {audience}, {tone}"},
+    "comparison": {"label": "WordPress: Comparison", "variables": "{keyword}, {audience}, {tone}"},
+    "news": {"label": "WordPress: News", "variables": "{keyword}, {audience}, {tone}"},
+    "handson": {"label": "WordPress: Hands-on", "variables": "{keyword}, {audience}, {tone}"},
+}
+
+EXCLUDED_PROMPTS = {"tweet_generator", "engage_quote", "engage_reply", "mention_reply"}
+
+
+def _list_prompts() -> list[dict]:
+    """Publisher で扱うプロンプト一覧 (内容込み)。"""
+    from core.instance import get_active_instance
+    from services.publisher import automation
+    inst = get_active_instance()
+    prompts_dir = inst.root / "prompts"
+    weights = automation.get_prompt_weights()
 
     prompts = []
     if prompts_dir.exists():
@@ -331,8 +442,7 @@ def ui_prompts(request: Request):
             if not fp.is_file():
                 continue
             name = fp.stem
-            # article-related prompts only
-            if name in ("tweet_generator", "engage_quote", "engage_reply", "mention_reply"):
+            if name in EXCLUDED_PROMPTS:
                 continue
             meta = PROMPT_META.get(name, {})
             try:
@@ -345,9 +455,14 @@ def ui_prompts(request: Request):
                 "label": meta.get("label", name),
                 "variables": meta.get("variables", ""),
                 "content": content,
+                "weight": int(weights.get(name, 1)),
             })
+    return prompts
 
-    return _render(request, "prompts.html", active="prompts", prompts=prompts)
+
+@app.get("/prompts", response_class=HTMLResponse)
+def ui_prompts(request: Request):
+    return _render(request, "prompts.html", active="prompts", prompts=_list_prompts())
 
 
 @app.post("/prompts/{name}/save", response_class=HTMLResponse)
@@ -356,7 +471,6 @@ def ui_prompt_save(name: str, text: str = Form("")):
     inst = get_active_instance()
     prompts_dir = inst.root / "prompts"
 
-    # find matching file (txt or md)
     candidates = [prompts_dir / f"{name}.txt", prompts_dir / f"{name}.md"]
     target = None
     for c in candidates:
@@ -371,6 +485,42 @@ def ui_prompt_save(name: str, text: str = Form("")):
     return HTMLResponse("")
 
 
+@app.post("/prompts/add")
+def ui_prompt_add(request: Request, name: str = Form(...)):
+    import re
+    from fastapi.responses import RedirectResponse
+    from core.instance import get_active_instance
+    name = name.strip().lower()
+    if not re.match(r"^[a-z0-9_]+$", name):
+        return HTMLResponse("Invalid name. Use lowercase letters, numbers, underscores.", status_code=400)
+    if name in EXCLUDED_PROMPTS:
+        return HTMLResponse(f"'{name}' is reserved for SNS use.", status_code=400)
+
+    inst = get_active_instance()
+    prompts_dir = inst.root / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    target = prompts_dir / f"{name}.txt"
+    if not target.exists():
+        target.write_text("# New prompt — write your article generation instructions here.\n", encoding="utf-8")
+    return RedirectResponse(url="/prompts", status_code=303)
+
+
+@app.post("/prompts/{name}/delete")
+def ui_prompt_delete(name: str):
+    from fastapi.responses import RedirectResponse
+    from core.instance import get_active_instance
+    from services.publisher import automation
+    inst = get_active_instance()
+    prompts_dir = inst.root / "prompts"
+    for ext in (".txt", ".md"):
+        fp = prompts_dir / f"{name}{ext}"
+        if fp.exists():
+            fp.unlink()
+    # 重み設定からも削除
+    automation.set_prompt_weight(name, 0)
+    return RedirectResponse(url="/prompts", status_code=303)
+
+
 # ─── Generate UI ──────────────────────────────────────────────────────────
 
 @app.get("/generate", response_class=HTMLResponse)
@@ -382,13 +532,25 @@ def ui_generate(request: Request):
 
     next_slot = _next_publish_slot()
     history = _load_history()
-    recent_titles = [a["title"] for a in history.get("articles", [])[-10:]]
+    all_titles = [a["title"] for a in history.get("articles", [])]
+
+    # プロンプト一覧 (Settings の重みも反映)
+    from services.publisher import automation
+    weights = automation.get_prompt_weights()
+    prompt_choices = []
+    for p in _list_prompts():
+        prompt_choices.append({
+            "name": p["name"],
+            "label": p["label"],
+            "weight": int(weights.get(p["name"], 1)),
+        })
 
     return _render(request, "generate.html", active="generate",
                    article_types=article_types,
                    next_slot=next_slot,
-                   recent_titles=recent_titles,
-                   total_articles=len(history.get("articles", [])))
+                   recent_titles=all_titles,
+                   total_articles=len(all_titles),
+                   prompt_choices=prompt_choices)
 
 
 @app.post("/generate", response_class=HTMLResponse)
@@ -396,6 +558,8 @@ def ui_do_generate(
     topic_hint: str = Form(""),
     user_comment: str = Form(""),
     article_type: str = Form(""),
+    prompt_name: str = Form(""),
+    scheduled_at: str = Form(""),
 ):
     try:
         from core.paths import strategy_path, program_md_path
@@ -408,9 +572,13 @@ def ui_do_generate(
             pass
 
         platform = _platform()
+
+        # WordPress: prompt_name (or article_type) で記事タイプを指定
+        wp_type = prompt_name or article_type
+
         if platform == "wordpress":
-            if article_type:
-                strategy.setdefault("content_params", {})["article_type"] = article_type
+            if wp_type:
+                strategy.setdefault("content_params", {})["article_type"] = wp_type
             from platforms.wordpress.generator import generate_article
             article = generate_article(strategy, program, history, topic_hint=topic_hint)
         else:
@@ -420,6 +588,17 @@ def ui_do_generate(
                 topic_hint=topic_hint,
                 user_comment=user_comment,
             )
+
+        # 投稿予約時刻 (datetime-local の形式: YYYY-MM-DDTHH:MM)
+        scheduled_iso = ""
+        if scheduled_at:
+            try:
+                dt = datetime.fromisoformat(scheduled_at)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=JST)
+                scheduled_iso = dt.isoformat()
+            except Exception:
+                pass
 
         # pending_review として保存
         from core.db import upsert_article
@@ -436,7 +615,7 @@ def ui_do_generate(
             "tags": tags_with_cat,
             "note_url": "",
             "status": "pending_review",
-            "published_at": "",
+            "published_at": scheduled_iso,  # scheduled_at を published_at に流用
             "created_at": _now().isoformat(),
             "free_content": article.get("free_content", article.get("content", "")),
             "paid_content": article.get("paid_content", ""),
@@ -445,10 +624,14 @@ def ui_do_generate(
 
         title = article.get("title", "Untitled")
         preview = (article.get("free_content", "") or article.get("content", ""))[:200]
+        sched_msg = ""
+        if scheduled_iso:
+            sched_msg = f'<div style="font-size:.78rem;color:var(--yellow);margin-top:.4rem;">Scheduled: {scheduled_iso[:16]}</div>'
         return HTMLResponse(
             f'<div class="card" style="border-color:var(--green);">'
             f'<div class="card-title" style="color:var(--green);">Generated: {title}</div>'
             f'<div class="card-body">{preview}...</div>'
+            f'{sched_msg}'
             f'<div class="card-actions" style="margin-top:.6rem;">'
             f'<a href="/review" class="btn btn-ok">Go to Review</a>'
             f'</div></div>'
@@ -770,17 +953,14 @@ def _load_history() -> dict:
 
 def _next_publish_slot() -> str:
     """次の投稿スロット時刻を返す (HH:MM or 'N/A')。"""
-    now = _now()
     try:
-        from core.learning.advisor import get_advice
-        adv = get_advice()
-        slots = adv.get("note_post_slots") or adv.get("wp_post_slots") or []
+        from services.publisher import automation
+        slots = automation.get_slots()
         if not slots:
-            return "N/A"
-        from core.slot_utils import normalize_slots
-        normalized = normalize_slots(slots)
-        current = now.strftime("%H:%M")
-        future = sorted([s for s in normalized if s > current])
+            return "Not scheduled (no slots)"
+        normalized = sorted(slots)
+        current = _now().strftime("%H:%M")
+        future = [s for s in normalized if s > current]
         return future[0] if future else normalized[0] + " (tomorrow)"
     except Exception:
         return "N/A"
@@ -807,11 +987,30 @@ def _parse_tags(raw) -> list[str]:
 _poll_interval_sec = int(os.environ.get("PUBLISHER_POLL_INTERVAL", "300"))
 
 
+def _publish_overdue_scheduled():
+    """status='approved' で published_at が過去の記事を投稿する。"""
+    from core.db import get_connection
+    conn = get_connection()
+    now_iso = _now().isoformat()
+    rows = conn.execute(
+        "SELECT note_id FROM articles WHERE status='approved' AND published_at <= ?",
+        (now_iso,),
+    ).fetchall()
+    for r in rows:
+        nid = r["note_id"]
+        print(f"[publisher] publishing overdue scheduled: {nid}")
+        try:
+            _publish_pending(nid)
+        except Exception as e:
+            print(f"[publisher] overdue publish error ({nid}): {e}")
+
+
 def _auto_poll_loop():
     while True:
         time.sleep(_poll_interval_sec)
         try:
             print(f"[publisher] auto-poll at {_now().strftime('%H:%M:%S')}")
+            _publish_overdue_scheduled()
             api_poll()
         except Exception as e:
             print(f"[publisher] auto-poll error: {e}")

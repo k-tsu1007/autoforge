@@ -212,8 +212,7 @@ def ask_claude(stats: dict) -> dict:
 - growth_daily_likes: 1日に自動いいねする数（5〜30）。デフォルト15。多いほどアカウント露出が増えるが、1時間に5件超でスパム判定リスク。trust_building期は積極的に上げて関係構築を加速
 - growth_search_keywords: 関連ユーザー発掘用の検索キーワード5〜8個。【重要】各キーワードは1〜2単語まで。実際のXユーザーが日常的にツイートする自然な口語を選ぶ。例: 「副業 始めたい」「ChatGPT 試した」「フォロワー 増えない」「Instagram フォロワー」「副業 初心者」「個人発信」。3単語以上や「改善策」「検証結果」「収益化」のような硬い言葉は検索ヒット数が極端に減るので禁止
 - tweet_draft_patterns: 記事連動ツイート生成時の文体パターン（1〜4個選ぶ）。選択肢: "link"=リンク付き宣伝 / "trivia"=豆知識 / "musing"=つぶやき / "question"=問いかけ / "experience"=体験談 / "list"=箇条書き / "experiment"=検証メモ(試した結果) / "comparison"=比較メモ(AとB試した) / "fail_report"=失敗報告(やってみたけどダメだった)。アカウントポジション「副業の検証係」に合うため、experiment/comparison/fail_report を優先的に含める
-- note_daily_target: 1日のNote記事投稿数（1〜5）。AI生成なので品質は本数に依存しない。3ヶ月で月1万円ゴール（goal.target_date 参照）に向け、月1=3本/日で信頼構築・lift学習加速、月2=avg_likes確認しつつ3〜4本/日、月3=4本/日+有料記事比率引き上げ。Noteスパム判定リスクのため絶対に5本/日を超えない。同一時間帯連投NG。avg_likesが連続急落した場合のみ一時的に2本に絞り、ジャンル/文体を切り替える
-- note_post_slots: Note投稿する時刻のリスト（"HH:MM" 形式の文字列、10分刻み、note_daily_target と同じ個数。例 ["09:00", "14:30", "20:00"]）。読まれやすい時間帯を選ぶ
+- (note_post_slots / note_daily_target はユーザーが Publisher UI で設定するため出力不要)
 
 【考慮ポイント】
 - フェーズはあくまで成熟度の目安。AI運用なのでtrust_buildingでも臆さず本数を出して学習を加速して良い
@@ -243,7 +242,6 @@ JSONのみ。前後に説明文は一切不要。
   "growth_daily_likes": 数字,
   "growth_search_keywords": ["...", "..."],
   "tweet_draft_patterns": ["...", "..."],
-  "note_post_slots": ["HH:MM", "HH:MM"],
   "reasoning": "なぜこのスロット構成にしたかを120字以内で"
 }}
 
@@ -317,7 +315,6 @@ def _validate(data: dict) -> dict:
         ("quote_post_slots",  12, 4),
         ("reply_post_slots",  28, 20),
         ("like_post_slots",   32, 20),
-        ("note_post_slots",   6,  1),
     ]
     for key, hard_max, default_cap in SLOT_SPECS:
         cleaned = normalize_slots(data.get(key) or [])
@@ -353,6 +350,16 @@ def get_advice() -> dict:
         adv = {**DEFAULTS, **(strategy.get("advisor") or {})}
     except Exception:
         adv = DEFAULTS.copy()
+
+    # 記事投稿スロット (note/wp) は automation.json (ユーザー設定) を優先
+    try:
+        from services.publisher import automation
+        user_slots = automation.get_slots()
+        if user_slots:
+            adv["note_post_slots"] = user_slots
+            adv["wp_post_slots"] = user_slots
+    except Exception:
+        pass
 
     # target を slot 数に合わせる (必ず 100% 実行できる前提)
     for kind in ("single", "quote", "reply", "note"):

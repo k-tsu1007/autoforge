@@ -85,9 +85,9 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     gen_params = strategy["generation_params"]
     top_context = build_top_articles_context(history)
 
-    # 過去の記事タイトルリスト (直近10本のみ — 渡しすぎるとプレースホルダ置換に陥る)
+    # 過去の記事タイトルリスト (直近50本)
     all_titles = [a["title"] for a in history.get("articles", [])]
-    existing_titles = all_titles[-10:]
+    existing_titles = all_titles[-50:]
     existing_context = ""
     if existing_titles:
         existing_context = (

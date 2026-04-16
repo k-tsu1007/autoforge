@@ -24,12 +24,16 @@
 {% endif %}
 
 {% for a in articles %}
-<div class="card" id="card-{{ a.note_id }}">
-  <div class="card-title">{{ a.title }}</div>
+<div class="card{% if a.status == 'approved' %} approved{% endif %}" id="card-{{ a.note_id }}">
+  <div class="card-title">
+    {% if a.status == 'approved' %}<span style="color:var(--blue);font-size:.7rem;">📅 SCHEDULED</span> {% endif %}
+    {{ a.title }}
+  </div>
   <div class="card-meta">
     {{ a.genre }}
     {% if a.tags %} &middot; {{ a.tags[:80] }}{% endif %}
     &middot; {{ a.created_at[:16] }}
+    {% if a.published_at %} &middot; <span style="color:var(--blue);">⏰ {{ a.published_at[:16] }}</span>{% endif %}
   </div>
 
   <details style="margin-top:.5rem;">
@@ -41,11 +45,20 @@
   </details>
 
   <div class="card-actions">
+    {% if a.status == 'approved' %}
+    <button class="btn btn-ng"
+            hx-post="/review/{{ a.note_id }}/reject"
+            hx-target="#card-{{ a.note_id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Cancel this scheduled post?">
+      Cancel Schedule
+    </button>
+    {% else %}
     <button class="btn btn-ok"
             hx-post="/review/{{ a.note_id }}/approve"
             hx-target="#card-{{ a.note_id }}"
             hx-swap="outerHTML"
-            hx-confirm="Publish this article?">
+            hx-confirm="Publish or schedule this article?">
       Approve
     </button>
     <button class="btn btn-ng"
@@ -58,6 +71,7 @@
             onclick="this.closest('.card').querySelector('.regen-panel').classList.toggle('open')">
       Regenerate
     </button>
+    {% endif %}
   </div>
 
   <div class="regen-panel">

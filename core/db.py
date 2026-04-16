@@ -501,7 +501,12 @@ def is_already_posted_today(text: str) -> bool:
 
 
 def review_mode_enabled() -> bool:
-    """環境変数 REVIEW_MODE=1 のときレビューモードを有効にする。"""
+    """automation.json (Publisher UI で切替) を優先、無ければ環境変数 REVIEW_MODE。"""
+    try:
+        from services.publisher import automation
+        return automation.get_review_mode()
+    except Exception:
+        pass
     import os
     return os.environ.get("REVIEW_MODE", "").strip() in ("1", "true", "True", "yes")
 

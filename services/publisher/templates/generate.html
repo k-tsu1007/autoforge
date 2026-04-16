@@ -9,13 +9,18 @@
 .gen-label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: .3rem; font-weight: 600; }
 .gen-hint { font-size: .72rem; color: var(--dim); margin-top: .2rem; }
 .gen-result { margin-top: 1.5rem; }
+.gen-input {
+  width: 100%; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: .5rem .8rem; font-size: .82rem;
+}
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .info-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .8rem 1rem; margin-bottom: 1rem; }
 .info-card h4 { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .4rem; }
 .info-val { font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700; color: var(--blue); }
-.recent-list { font-size: .75rem; color: var(--muted); line-height: 1.7; max-height: 240px; overflow-y: auto; }
-.recent-list div { padding: .15rem 0; border-bottom: 1px solid var(--border); }
+.recent-list { font-size: .72rem; color: var(--muted); line-height: 1.7; max-height: 360px; overflow-y: auto; padding-right: .3rem; }
+.recent-list div { padding: .2rem 0; border-bottom: 1px solid var(--border); }
 .recent-list div:last-child { border-bottom: none; }
 </style>
 {% endblock %}
@@ -24,35 +29,43 @@
 
 <h2 style="margin-top:0;font-size:1.1rem;">Generate Article</h2>
 <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
-  Generate a new article. It will go to <a href="/review">Review</a> for approval before publishing.
+  Generate a new article. Goes to <a href="/review">Review</a> for approval before publishing.
 </p>
 
 <div class="gen-layout">
   <div>
     <form class="gen-form" hx-post="/generate" hx-target="#gen-result" hx-swap="innerHTML"
           hx-indicator="#gen-spinner">
+
       <div class="gen-field">
         <label class="gen-label">Topic Hint (optional)</label>
-        <input type="text" name="topic_hint" placeholder="e.g. AI画像生成で副業">
-        <div class="gen-hint">Leave empty for auto-selection. Past {{ total_articles }} articles will be considered to avoid duplicates.</div>
+        <input type="text" class="gen-input" name="topic_hint" placeholder="e.g. AI画像生成で副業">
+        <div class="gen-hint">Leave empty for auto-selection. Past {{ total_articles }} articles will be referenced (latest 50 sent to LLM).</div>
       </div>
 
       <div class="gen-field">
         <label class="gen-label">User Comment (optional)</label>
-        <textarea name="user_comment" rows="3" placeholder="Special instructions for this article..."></textarea>
+        <textarea class="gen-input" name="user_comment" rows="3" placeholder="Special instructions for this article..." style="font-family:var(--font-mono);"></textarea>
       </div>
 
-      {% if article_types %}
+      {% if prompt_choices %}
       <div class="gen-field">
-        <label class="gen-label">Article Type</label>
-        <select name="article_type" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.5rem .8rem;font-size:.82rem;">
-          <option value="">Auto (rotation)</option>
-          {% for t in article_types %}
-          <option value="{{ t }}">{{ t }}</option>
+        <label class="gen-label">Prompt</label>
+        <select class="gen-input" name="prompt_name">
+          <option value="">Auto (rotation by weight)</option>
+          {% for p in prompt_choices %}
+          <option value="{{ p.name }}">{{ p.label }} (weight: {{ p.weight }})</option>
           {% endfor %}
         </select>
+        <div class="gen-hint">Override the rotation. Leave empty to pick by weight.</div>
       </div>
       {% endif %}
+
+      <div class="gen-field">
+        <label class="gen-label">Scheduled Publish Time (optional)</label>
+        <input type="datetime-local" class="gen-input" name="scheduled_at">
+        <div class="gen-hint">Leave empty to use the next slot ({{ next_slot }}). Manual approval is still required.</div>
+      </div>
 
       <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">
         <span id="gen-spinner" class="htmx-indicator"><span class="spinner"></span></span>
@@ -65,10 +78,10 @@
 
   <aside>
     <div class="info-card">
-      <h4>Next Publish Slot</h4>
+      <h4>Next Slot</h4>
       <div class="info-val">{{ next_slot }}</div>
       <div style="font-size:.7rem;color:var(--dim);margin-top:.3rem;">
-        Approved articles publish at scheduled slot times.
+        Set slots in <a href="/settings">Automation</a>.
       </div>
     </div>
 
@@ -76,13 +89,13 @@
       <h4>Total Past Articles</h4>
       <div class="info-val">{{ total_articles }}</div>
       <div style="font-size:.7rem;color:var(--dim);margin-top:.3rem;">
-        Used as context to avoid duplicate topics.
+        All shown below. Latest 50 sent to LLM as context.
       </div>
     </div>
 
     {% if recent_titles %}
     <div class="info-card">
-      <h4>Recent Titles</h4>
+      <h4>All Titles ({{ recent_titles|length }})</h4>
       <div class="recent-list">
         {% for t in recent_titles[::-1] %}
         <div>{{ t }}</div>
