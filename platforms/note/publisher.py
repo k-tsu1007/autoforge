@@ -225,13 +225,19 @@ def publish_via_noteclient(article: dict) -> dict:
         except Exception as e:
             print(f"サムネイル生成スキップ: {e}")
 
-        # マガジン自動分類 (Claudeが既存マガジンから1つ選ぶ)
+        # マガジン分類: article["magazine_key"] が指定されていればそれを優先、
+        # なければ Claude で自動分類。
         magazine_keys = []
+        manual_key = (article.get("magazine_key") or "").strip()
         try:
-            from platforms.note.magazine import classify_article
-            mk = classify_article(article)
-            if mk:
-                magazine_keys = [mk]
+            if manual_key:
+                magazine_keys = [manual_key]
+                print(f"  📚 マガジン (手動指定): {manual_key}")
+            else:
+                from services.publisher.magazines import classify_article
+                mk = classify_article(article)
+                if mk:
+                    magazine_keys = [mk]
         except Exception as e:
             print(f"  マガジン分類スキップ: {e}")
 

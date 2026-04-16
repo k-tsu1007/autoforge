@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Magazines — {{ instance }}{% endblock %}
+{% block head %}
+<style>
+.mag-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.2rem; margin-bottom: 1rem;
+}
+.mag-name { font-weight: 700; font-size: .95rem; margin-bottom: .3rem; }
+.mag-key {
+  font-family: var(--font-mono); font-size: .68rem; color: var(--dim);
+  margin-bottom: .4rem;
+}
+.mag-desc { font-size: .8rem; color: var(--muted); line-height: 1.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+  <h2 style="margin:0;font-size:1.1rem;">Magazines (note)</h2>
+  <form hx-post="/magazines/refresh" hx-swap="none" style="margin:0;">
+    <button type="submit" class="btn">🔄 Refresh from note</button>
+  </form>
+</div>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  note 上で作成したあなたのマガジン一覧 (キャッシュ TTL 6 時間)。
+  記事公開時に Claude が「タイトル + 本文冒頭」を見てこの中から最も合うマガジンを自動で選び、note へ投稿します。
+  Generate ページで手動指定もできます (まもなく対応)。
+</p>
+
+{% if not magazines %}
+<div class="empty">
+  マガジンが見つかりません。<br>
+  note でマガジンを作成 → "🔄 Refresh from note" で再取得してください。
+</div>
+{% endif %}
+
+{% for m in magazines %}
+<div class="mag-card">
+  <div class="mag-name">{{ m.name }}</div>
+  <div class="mag-key">key: {{ m.key }}</div>
+  {% if m.description %}
+  <div class="mag-desc">{{ m.description }}</div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% endblock %}

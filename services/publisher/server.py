@@ -228,8 +228,9 @@ def _publish_pending(note_id: str):
     if not row:
         return
     stored_tags = _parse_tags(row["tags"])
-    tags = [t for t in stored_tags if not (isinstance(t, str) and t.startswith("cat:"))]
+    tags = [t for t in stored_tags if isinstance(t, str) and not (t.startswith("cat:") or t.startswith("mag:"))]
     categories = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("cat:")]
+    magazine_keys = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("mag:")]
     article = {
         "title": row["title"],
         "genre": row["genre"],
@@ -238,6 +239,7 @@ def _publish_pending(note_id: str):
         "free_content": row["free_content"] or "",
         "paid_content": row["paid_content"] or "",
         "content": row["free_content"] or "",
+        "magazine_key": magazine_keys[0] if magazine_keys else "",
     }
     with _lock:
         platform = _platform()
@@ -455,6 +457,22 @@ def ui_settings_prompt_weight(request: Request,
 
 
 # ─── Analysis UI ──────────────────────────────────────────────────────────
+
+@app.get("/magazines", response_class=HTMLResponse)
+def ui_magazines(request: Request, refresh: int = 0):
+    """note マガジン一覧 (note 専用)。"""
+    from services.publisher import magazines as mag
+    items = mag.list_magazines(force=bool(refresh))
+    return _render(request, "magazines.html", active="magazines", magazines=items)
+
+
+@app.post("/magazines/refresh")
+def ui_magazines_refresh():
+    from fastapi.responses import RedirectResponse
+    from services.publisher import magazines as mag
+    mag.list_magazines(force=True)
+    return RedirectResponse(url="/magazines", status_code=303)
+
 
 @app.get("/analysis", response_class=HTMLResponse)
 def ui_analysis(request: Request):
@@ -682,6 +700,15 @@ def ui_generate(request: Request):
     # Knowledge set 一覧
     knowledge_sets = analysis.list_sets()
 
+    # マガジン一覧 (note のみ)
+    magazines = []
+    if platform == "note":
+        try:
+            from services.publisher import magazines as mag
+            magazines = mag.list_magazines()
+        except Exception:
+            pass
+
     # pending / scheduled 記事
     from core.db import get_connection
     conn = get_connection()
@@ -700,6 +727,7 @@ def ui_generate(request: Request):
                    total_articles=len(all_titles),
                    prompt_choices=prompt_choices,
                    knowledge_sets=knowledge_sets,
+                   magazines=magazines,
                    pending_articles=pending_articles)
 
 
@@ -803,6 +831,7 @@ def ui_do_generate(
     override_free_chars: int = Form(0),
     override_paid_chars: int = Form(0),
     override_price: int = Form(0),
+    magazine_key: str = Form(""),
 ):
     try:
         from services.publisher import automation
@@ -844,15 +873,18 @@ def ui_do_generate(
         from core.db import upsert_article
         pending_id = f"pending_{int(_now().timestamp() * 1000)}"
         categories = article.get("categories", [])
-        genre = article.get("genre", "") or (categories[0] if categories else "")
+        # genre は使ったプロンプト名 (article_free / article_mixed) を入れる
+        genre = chosen_prompt or article.get("genre", "")
         tags = list(article.get("tags", []))
-        tags_with_cat = tags + [f"cat:{c}" for c in categories]
+        tags_extras = [f"cat:{c}" for c in categories]
+        if magazine_key:
+            tags_extras.append(f"mag:{magazine_key}")
 
         upsert_article({
             "note_id": pending_id,
             "title": article.get("title", ""),
             "genre": genre,
-            "tags": tags_with_cat,
+            "tags": tags + tags_extras,
             "note_url": "",
             "status": "pending_review",
             "published_at": scheduled_iso,
@@ -992,8 +1024,9 @@ def api_approve(req: ApproveRequest):
         raise HTTPException(status_code=404, detail="pending_review not found")
 
     stored_tags = _parse_tags(row["tags"])
-    tags = [t for t in stored_tags if not (isinstance(t, str) and t.startswith("cat:"))]
+    tags = [t for t in stored_tags if isinstance(t, str) and not (t.startswith("cat:") or t.startswith("mag:"))]
     categories = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("cat:")]
+    magazine_keys = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("mag:")]
 
     article = {
         "title": row["title"],
@@ -1003,6 +1036,7 @@ def api_approve(req: ApproveRequest):
         "free_content": row["free_content"] or "",
         "paid_content": row["paid_content"] or "",
         "content": row["free_content"] or "",
+        "magazine_key": magazine_keys[0] if magazine_keys else "",
     }
 
     note_id = req.note_id

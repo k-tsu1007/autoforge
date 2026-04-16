@@ -124,6 +124,19 @@
     </script>
     {% endif %}
 
+    {% if magazines %}
+    <div class="gen-field">
+      <label class="gen-label">Magazine (note)</label>
+      <select class="gen-input" name="magazine_key">
+        <option value="">Auto (Claude が自動分類)</option>
+        {% for m in magazines %}
+        <option value="{{ m.key }}">{{ m.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="gen-hint">空にすると Claude が記事内容に応じて自動選択。Manage at <a href="/magazines">Magazines</a>.</div>
+    </div>
+    {% endif %}
+
     <div class="gen-field">
       <label class="gen-label">Knowledge Set (学習傾向)</label>
       <select class="gen-input" name="knowledge_set_id">
