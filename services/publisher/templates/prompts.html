@@ -159,6 +159,16 @@
       {% endif %}
     </div>
 
+    {% if p.mode_applicable %}
+    <div class="config-row" style="margin-top:.5rem;">
+      <label style="font-size:.72rem;color:var(--muted);width:100%;">タグ候補 (カンマ区切り):
+        <input type="text" name="tags" value="{{ p.settings.tags | join(', ') }}"
+               placeholder="例: #ChatGPT活用, #副業, #SNS運用, #生成AI, #AI副業"
+               style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.3rem .6rem;font-family:var(--font-mono);font-size:.78rem;margin-top:.2rem;">
+      </label>
+    </div>
+    {% endif %}
+
     <div class="p-actions" style="margin-top:.7rem;">
       <button type="submit" class="btn btn-primary">Save Settings</button>
       <span class="save-ok">Saved</span>

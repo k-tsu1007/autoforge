@@ -270,30 +270,34 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         n, g = _random.choice(article_formats)
         format_instruction = f"\n## 記事フォーマット（今回は「{n}」で書く）\n{g}\n"
 
-    # note の設定 (プロンプト個別設定 → UI オーバーライド の順で解決)
+    # プロンプト個別設定 (文字数 / 価格 / タグ) を取得
     note_settings_section = ""
-    note_price = 500
+    tags_section = ""
+    note_price = 0
     try:
         from services.publisher import automation
         ps = automation.get_prompt_settings(prompt_name or ("article_free" if free_only else "article_mixed"))
         free_c = int(override_free_chars or ps.get("free_chars", 1500))
         paid_c = int(override_paid_chars or ps.get("paid_chars", 0))
         note_price = int(override_price or ps.get("price", 0))
+        tags = ps.get("tags", []) or []
 
         if free_only or seo_mode:
-            note_settings_section = (
-                f"## 文字数・価格設定 (UI 設定で上書き、これを優先)\n"
-                f"- 合計文字数: 約 {free_c} 文字\n"
-                f"- これは無料記事 (paid_content は空文字)"
-            )
+            note_settings_section = f"## 文字数\n- 合計: 約 {free_c} 文字"
         else:
             total = free_c + paid_c
             note_settings_section = (
-                f"## 文字数・価格設定 (UI 設定で上書き、これを優先)\n"
+                f"## 文字数\n"
                 f"- 無料部分: 約 {free_c} 文字\n"
                 f"- 有料部分: 約 {paid_c} 文字\n"
-                f"- 合計: 約 {total} 文字\n"
-                f"- 想定価格: {note_price} 円"
+                f"- 合計: 約 {total} 文字"
+            )
+
+        if tags:
+            tags_section = (
+                "## タグ\n"
+                f"以下から記事に合うものを最低1つ選び、必要に応じて記事固有タグを1〜2個追加:\n"
+                + "\n".join(f"- {t}" for t in tags)
             )
     except Exception:
         pass
@@ -325,11 +329,15 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     if format_instruction:
         parts.append(format_instruction.strip())
 
-    # 7. UI 設定 (文字数/価格) — プロンプト記述より優先
+    # 7. UI 設定 (文字数) — プロンプト記述より優先
     if note_settings_section:
         parts.append(note_settings_section)
 
-    # 8. JSON 出力フォーマット — 最末尾
+    # 8. タグ候補
+    if tags_section:
+        parts.append(tags_section)
+
+    # 9. JSON 出力フォーマット — 最末尾
     parts.append(
         "## 出力フォーマット（厳守）\n"
         "以下のJSON形式で出力してください。それ以外のテキストは含めないでください。\n\n"

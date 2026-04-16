@@ -620,8 +620,9 @@ def ui_prompt_config(
     free_chars: int = Form(0),
     paid_chars: int = Form(0),
     price: int = Form(0),
+    tags: str = Form(""),
 ):
-    """1 プロンプトの全設定 (mode + weight + chars + price) をまとめて保存。"""
+    """1 プロンプトの全設定 (mode + weight + chars + price + tags) をまとめて保存。"""
     from services.publisher import automation
     if mode in ("free", "mixed"):
         automation.set_prompt_mode(name, mode)
@@ -631,6 +632,7 @@ def ui_prompt_config(
         free_chars=free_chars,
         paid_chars=paid_chars if mode == "mixed" else 0,
         price=price if mode == "mixed" else 0,
+        tags=tags,
     )
     return HTMLResponse("")
 

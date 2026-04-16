@@ -192,30 +192,35 @@ def set_note_settings(**fields) -> dict:
 
 
 def get_prompt_settings(name: str) -> dict:
-    """プロンプト個別の設定 (文字数/価格) を返す。
+    """プロンプト個別の設定 (文字数/価格/tags) を返す。
 
     モード別デフォルト:
-    - free  : {free_chars: 2500, paid_chars: 0, price: 0}
-    - mixed : {free_chars: 1500, paid_chars: 1250, price: 500}
+    - free  : {free_chars: 2500, paid_chars: 0, price: 0, tags: []}
+    - mixed : {free_chars: 1500, paid_chars: 1250, price: 500, tags: []}
     """
     cfg = load()
     mode = get_prompt_mode(name)
     if mode == "free":
-        defaults = {"free_chars": DEFAULT_FREE_CHARS, "paid_chars": 0, "price": 0}
+        defaults = {"free_chars": DEFAULT_FREE_CHARS, "paid_chars": 0, "price": 0, "tags": []}
     else:
         defaults = {
             "free_chars": DEFAULT_MIXED_FREE_CHARS,
             "paid_chars": DEFAULT_MIXED_PAID_CHARS,
             "price": DEFAULT_PRICE,
+            "tags": [],
         }
     settings = dict(defaults)
     per_prompt = (cfg.get("prompt_settings") or {}).get(name) or {}
     for k in defaults:
         if k in per_prompt and per_prompt[k] is not None:
-            try:
-                settings[k] = int(per_prompt[k])
-            except Exception:
-                pass
+            if k == "tags":
+                if isinstance(per_prompt[k], list):
+                    settings[k] = [str(t).strip() for t in per_prompt[k] if str(t).strip()]
+            else:
+                try:
+                    settings[k] = int(per_prompt[k])
+                except Exception:
+                    pass
     return settings
 
 
@@ -224,9 +229,17 @@ def set_prompt_settings(name: str, **fields) -> dict:
     all_settings = dict(cfg.get("prompt_settings") or {})
     current = dict(all_settings.get(name) or {})
     for k, v in fields.items():
-        if v is None or v == "":
+        if v is None:
             continue
-        if k in ("free_chars", "paid_chars", "price"):
+        if k == "tags":
+            # カンマ区切り文字列 or リスト
+            if isinstance(v, str):
+                v = [t.strip() for t in v.split(",") if t.strip()]
+            if isinstance(v, list):
+                current[k] = v
+        elif k in ("free_chars", "paid_chars", "price"):
+            if v == "":
+                continue
             try:
                 current[k] = int(v)
             except Exception:
