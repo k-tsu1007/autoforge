@@ -2,6 +2,14 @@
 {% block title %}Publisher — {{ instance }}{% endblock %}
 {% block content %}
 
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+  <h2 style="margin:0;font-size:1.1rem;">Dashboard</h2>
+  <div style="display:flex;gap:.5rem;">
+    <a href="/generate" class="btn btn-primary">+ Generate</a>
+    {% if pending_count > 0 %}<a href="/review" class="btn btn-ok">Review ({{ pending_count }})</a>{% endif %}
+  </div>
+</div>
+
 <div class="stat-row">
   <div class="stat-box">
     <div class="stat-val" style="color:var(--yellow);">{{ pending_count }}</div>

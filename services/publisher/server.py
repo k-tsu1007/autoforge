@@ -127,7 +127,8 @@ def ui_review(request: Request):
         "FROM articles WHERE status='pending_review' ORDER BY created_at DESC"
     ).fetchall()
     articles = [dict(r) for r in rows]
-    return _render(request, "review.html", active="review", articles=articles)
+    return _render(request, "review.html", active="review",
+                   articles=articles, next_slot=_next_publish_slot())
 
 
 @app.post("/review/{note_id}/approve", response_class=HTMLResponse)
@@ -228,13 +229,9 @@ def ui_regenerate(note_id: str, user_comment: str = Form("")):
     old_title = row["title"] or ""
 
     try:
-        from core.paths import strategy_path, history_path, program_md_path
+        from core.paths import strategy_path, program_md_path
         strategy = json.loads(open(strategy_path(), encoding="utf-8").read())
-        history = {"articles": []}
-        try:
-            history = json.loads(open(history_path(), encoding="utf-8").read())
-        except Exception:
-            pass
+        history = _load_history()
         program = ""
         try:
             program = open(program_md_path(), encoding="utf-8").read()
@@ -383,7 +380,15 @@ def ui_generate(request: Request):
     if platform == "wordpress":
         article_types = ["beginner", "comparison", "news", "handson"]
 
-    return _render(request, "generate.html", active="generate", article_types=article_types)
+    next_slot = _next_publish_slot()
+    history = _load_history()
+    recent_titles = [a["title"] for a in history.get("articles", [])[-10:]]
+
+    return _render(request, "generate.html", active="generate",
+                   article_types=article_types,
+                   next_slot=next_slot,
+                   recent_titles=recent_titles,
+                   total_articles=len(history.get("articles", [])))
 
 
 @app.post("/generate", response_class=HTMLResponse)
@@ -393,13 +398,9 @@ def ui_do_generate(
     article_type: str = Form(""),
 ):
     try:
-        from core.paths import strategy_path, history_path, program_md_path
+        from core.paths import strategy_path, program_md_path
         strategy = json.loads(open(strategy_path(), encoding="utf-8").read())
-        history = {"articles": []}
-        try:
-            history = json.loads(open(history_path(), encoding="utf-8").read())
-        except Exception:
-            pass
+        history = _load_history()
         program = ""
         try:
             program = open(program_md_path(), encoding="utf-8").read()
@@ -723,6 +724,65 @@ def _notify(platform: str, result: dict):
         send_discord(content=msg)
     except Exception:
         pass
+
+
+def _build_history_from_db() -> dict:
+    """DB の articles テーブルから history dict を構築する。history.json が無い場合のフォールバック。"""
+    from core.db import get_connection
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT title, genre, tags, note_url, status, published_at, "
+        "views, likes, comments, revenue "
+        "FROM articles WHERE status IN ('published', 'pending_review') "
+        "ORDER BY published_at ASC"
+    ).fetchall()
+    articles = []
+    for r in rows:
+        articles.append({
+            "title": r["title"] or "",
+            "genre": r["genre"] or "",
+            "tags": _parse_tags(r["tags"]),
+            "note_url": r["note_url"] or "",
+            "status": r["status"] or "",
+            "published_at": r["published_at"] or "",
+            "views": r["views"] or 0,
+            "likes": r["likes"] or 0,
+            "comments": r["comments"] or 0,
+            "revenue": r["revenue"] or 0,
+        })
+    return {"articles": articles}
+
+
+def _load_history() -> dict:
+    """history.json を優先、なければ DB から構築。"""
+    from core.paths import history_path
+    hp = history_path()
+    if hp.exists():
+        try:
+            h = json.loads(hp.read_text(encoding="utf-8"))
+            if h.get("articles"):
+                return h
+        except Exception:
+            pass
+    return _build_history_from_db()
+
+
+def _next_publish_slot() -> str:
+    """次の投稿スロット時刻を返す (HH:MM or 'N/A')。"""
+    now = _now()
+    try:
+        from core.learning.advisor import get_advice
+        adv = get_advice()
+        slots = adv.get("note_post_slots") or adv.get("wp_post_slots") or []
+        if not slots:
+            return "N/A"
+        from core.slot_utils import normalize_slots
+        normalized = normalize_slots(slots)
+        current = now.strftime("%H:%M")
+        future = sorted([s for s in normalized if s > current])
+        return future[0] if future else normalized[0] + " (tomorrow)"
+    except Exception:
+        return "N/A"
 
 
 def _parse_tags(raw) -> list[str]:

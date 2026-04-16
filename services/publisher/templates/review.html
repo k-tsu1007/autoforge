@@ -10,13 +10,17 @@
 
 {% block content %}
 
-<h2 style="margin-top:0;font-size:1.1rem;">Review</h2>
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <h2 style="margin:0;font-size:1.1rem;">Review</h2>
+  <span style="font-size:.78rem;color:var(--muted);">Next publish slot: <strong style="color:var(--blue);font-family:var(--font-mono);">{{ next_slot }}</strong></span>
+  <a href="/generate" class="btn btn-primary" style="margin-left:auto;">+ Generate New</a>
+</div>
 <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
-  Pending articles are listed below. Approve to publish immediately, or regenerate with comments.
+  Approve to publish immediately, or regenerate with comments.
 </p>
 
 {% if not articles %}
-<div class="empty">No pending articles.</div>
+<div class="empty">No pending articles. <a href="/generate">Generate one</a> to get started.</div>
 {% endif %}
 
 {% for a in articles %}
