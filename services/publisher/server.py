@@ -123,19 +123,24 @@ def ui_index(request: Request):
         "FROM articles WHERE status='pending_review' ORDER BY created_at DESC"
     ).fetchall()
 
+    # status='published' + status IS NULL (旧データ互換) 両方を含む
     recent = conn.execute(
         "SELECT title, genre, note_url, published_at, views, likes, comments "
-        "FROM articles WHERE status='published' ORDER BY published_at DESC"
+        "FROM articles "
+        "WHERE (status='published' OR status IS NULL) AND title IS NOT NULL "
+        "ORDER BY COALESCE(published_at, created_at) DESC"
     ).fetchall()
 
     published_today = conn.execute(
         "SELECT COUNT(*) AS c FROM articles "
-        "WHERE status='published' AND substr(published_at, 1, 10) = ?",
+        "WHERE (status='published' OR status IS NULL) AND title IS NOT NULL "
+        "AND substr(COALESCE(published_at, created_at), 1, 10) = ?",
         (today,),
     ).fetchone()["c"]
 
     published_total = conn.execute(
-        "SELECT COUNT(*) AS c FROM articles WHERE status='published'"
+        "SELECT COUNT(*) AS c FROM articles "
+        "WHERE (status='published' OR status IS NULL) AND title IS NOT NULL"
     ).fetchone()["c"]
 
     # drafts count
