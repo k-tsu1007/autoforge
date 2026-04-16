@@ -754,17 +754,18 @@ def _build_history_from_db() -> dict:
 
 
 def _load_history() -> dict:
-    """history.json を優先、なければ DB から構築。"""
+    """DB を優先 (source of truth)。記事が無ければ history.json にフォールバック。"""
+    db_history = _build_history_from_db()
+    if db_history.get("articles"):
+        return db_history
     from core.paths import history_path
     hp = history_path()
     if hp.exists():
         try:
-            h = json.loads(hp.read_text(encoding="utf-8"))
-            if h.get("articles"):
-                return h
+            return json.loads(hp.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return _build_history_from_db()
+    return {"articles": []}
 
 
 def _next_publish_slot() -> str:
