@@ -124,8 +124,8 @@ def ui_index(request: Request):
     ).fetchall()
 
     recent = conn.execute(
-        "SELECT title, genre, note_url, published_at, views, likes "
-        "FROM articles WHERE status='published' ORDER BY published_at DESC LIMIT 10"
+        "SELECT title, genre, note_url, published_at, views, likes, comments "
+        "FROM articles WHERE status='published' ORDER BY published_at DESC"
     ).fetchall()
 
     published_today = conn.execute(

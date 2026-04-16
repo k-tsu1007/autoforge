@@ -1,5 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Publisher — {{ instance }}{% endblock %}
+{% block head %}
+<style>
+.art-table {
+  width: 100%; border-collapse: collapse; font-size: .82rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden;
+}
+.art-table th, .art-table td {
+  text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--border);
+}
+.art-table th {
+  background: var(--surface2); color: var(--muted); font-weight: 600;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+  white-space: nowrap; cursor: pointer; user-select: none;
+}
+.art-table th.sort-asc::after { content: " ↑"; color: var(--blue); }
+.art-table th.sort-desc::after { content: " ↓"; color: var(--blue); }
+.art-table tr:hover td { background: var(--surface2); }
+.art-table tr:last-child td { border-bottom: none; }
+.art-title { color: var(--text); font-weight: 500; }
+.art-title a { color: var(--text); text-decoration: none; }
+.art-title a:hover { color: var(--blue); }
+.art-meta { color: var(--dim); font-family: var(--font-mono); font-size: .7rem; }
+.art-num { font-family: var(--font-mono); text-align: right; color: var(--text); white-space: nowrap; }
+.art-num.zero { color: var(--dim); }
+.art-num.hot { color: var(--green); font-weight: 700; }
+</style>
+{% endblock %}
 {% block content %}
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
@@ -48,15 +76,55 @@
 {% endif %}
 
 {% if recent %}
-<div class="section-hd">Recent Publications</div>
-{% for a in recent %}
-<div class="card">
-  <div class="card-title">
-    {% if a.note_url %}<a href="{{ a.note_url }}" target="_blank">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}
-  </div>
-  <div class="card-meta">{{ a.genre }} &middot; {{ a.published_at[:16] }} &middot; PV {{ a.views }} / Like {{ a.likes }}</div>
-</div>
-{% endfor %}
+<div class="section-hd">All Articles ({{ recent|length }})</div>
+<table class="art-table" id="art-table">
+  <thead>
+    <tr>
+      <th onclick="sortTable(0, 'date')" class="sort-desc">Date</th>
+      <th onclick="sortTable(1, 'str')">Title</th>
+      <th onclick="sortTable(2, 'str')">Genre</th>
+      <th onclick="sortTable(3, 'num')">PV</th>
+      <th onclick="sortTable(4, 'num')">Like</th>
+      <th onclick="sortTable(5, 'num')">Cmt</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in recent %}
+    <tr>
+      <td class="art-meta">{{ a.published_at[:10] }}</td>
+      <td class="art-title">
+        {% if a.note_url %}<a href="{{ a.note_url }}" target="_blank">{{ a.title }}</a>{% else %}{{ a.title }}{% endif %}
+      </td>
+      <td class="art-meta">{{ a.genre or '-' }}</td>
+      <td class="art-num{% if a.views == 0 %} zero{% elif a.views >= 25 %} hot{% endif %}">{{ a.views }}</td>
+      <td class="art-num{% if a.likes == 0 %} zero{% elif a.likes >= 3 %} hot{% endif %}">{{ a.likes }}</td>
+      <td class="art-num{% if a.comments == 0 %} zero{% endif %}">{{ a.comments }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+let sortDir = {0: 'desc', 1: 'asc', 2: 'asc', 3: 'asc', 4: 'asc', 5: 'asc'};
+function sortTable(col, type) {
+  const tbody = document.querySelector('#art-table tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const dir = sortDir[col] === 'asc' ? 'desc' : 'asc';
+  sortDir[col] = dir;
+  rows.sort((a, b) => {
+    let av = a.cells[col].textContent.trim();
+    let bv = b.cells[col].textContent.trim();
+    if (type === 'num') { av = parseInt(av) || 0; bv = parseInt(bv) || 0; return dir === 'asc' ? av - bv : bv - av; }
+    if (type === 'date') { return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av); }
+    return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  document.querySelectorAll('#art-table th').forEach((th, i) => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (i === col) th.classList.add('sort-' + dir);
+  });
+}
+</script>
 {% endif %}
 
 {% if not pending_articles and not recent %}
