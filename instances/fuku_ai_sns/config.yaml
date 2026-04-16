@@ -10,7 +10,8 @@ instance:
   name: fuku_ai_sns
   display_name: "ふく｜AIで稼ぐ非エンジニア"
   description: "副業×AI×SNS発信の検証係。非エンジニアが AI で Note を自動化中。"
-  webapp_port: 8001        # legacy v1 が 8000 を使うので衝突回避
+  webapp_port: 8001
+  publisher_port: 8011
   timezone: "Asia/Tokyo"
 
 # 各プラットフォームの有効化と接続情報

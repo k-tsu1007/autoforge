@@ -12,6 +12,7 @@ instance:
   display_name: "ケンタ｜AI弁当"
   description: "AIツールを毎日検証・比較する会社員。副業でAIスキルを活かす方法を発信中。"
   webapp_port: 8002
+  publisher_port: 8012
   timezone: "Asia/Tokyo"
 
 platforms:

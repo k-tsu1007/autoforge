@@ -589,7 +589,37 @@ def admin_daemon_restart(user: str = Depends(check_auth)):
 
 @app.post("/review/article/{note_id}/approve", response_class=HTMLResponse)
 def review_article_approve(note_id: str, request: Request, user: str = Depends(check_auth)):
-    """承認 → 即時投稿 (プラットフォームに応じて note / wordpress)。"""
+    """承認 → Publisher Service 経由で即時投稿 (fallback: 直接実行)。"""
+    from core.db import get_connection
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT note_id FROM articles WHERE note_id=? AND status='pending_review'",
+        (note_id,)
+    ).fetchone()
+    if not row:
+        return HTMLResponse('<div style="color:#f87171;">記事が見つかりません</div>')
+
+    def _do_approve():
+        # Publisher Service 経由を試みる
+        try:
+            from services.publisher.client import is_alive, approve
+            if is_alive():
+                print(f"[review] Publisher Service で承認: {note_id}")
+                result = approve(note_id)
+                print(f"[review] 結果: {result}")
+                return
+        except Exception as e:
+            print(f"[review] Publisher Service 接続失敗 ({e}), 直接実行にフォールバック")
+
+        # Fallback: 直接実行
+        _approve_direct(note_id)
+
+    _bg(_do_approve)
+    return HTMLResponse("")
+
+
+def _approve_direct(note_id: str):
+    """Publisher Service が使えない場合の直接投稿フォールバック。"""
     from core.db import get_connection
     from core.content_platform import get_content_platform
     conn = get_connection()
@@ -598,12 +628,11 @@ def review_article_approve(note_id: str, request: Request, user: str = Depends(c
         (note_id,)
     ).fetchone()
     if not row:
-        return HTMLResponse('<div style="color:#f87171;">記事が見つかりません</div>')
+        return
 
     stored_tags = _fromjson(row["tags"]) or []
     tags = [t for t in stored_tags if not (isinstance(t, str) and t.startswith("cat:"))]
     categories = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("cat:")]
-
     article = {
         "title": row["title"],
         "genre": row["genre"],
@@ -614,79 +643,47 @@ def review_article_approve(note_id: str, request: Request, user: str = Depends(c
         "content": row["free_content"] or "",
     }
 
-    # regen_log の未決を承認に更新
     conn.execute(
         "UPDATE regen_log SET approved=1 WHERE content_type='article' AND queue_id=? AND approved IS NULL",
-        (note_id,)
+        (note_id,),
     )
     conn.commit()
 
     platform = get_content_platform()
-
-    def _pub_note():
-        try:
+    try:
+        if platform == "wordpress":
+            from platforms.wordpress.publisher import publish_article
+            post_url = publish_article(article)
+            if post_url:
+                conn.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
+                conn.execute(
+                    "INSERT OR IGNORE INTO articles (note_id, title, genre, tags, note_url, status, published_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (post_url, article["title"], article.get("genre", ""),
+                     json.dumps(tags, ensure_ascii=False), post_url, "published",
+                     datetime.now(JST).isoformat()),
+                )
+                conn.commit()
+                try:
+                    from core.notify import send_discord
+                    send_discord(content=f"📝 WordPress公開 (手動承認) → {post_url}")
+                except Exception:
+                    pass
+        else:
             from platforms.note.publisher import publish_via_noteclient, record_article
             result = publish_via_noteclient(article)
             if isinstance(result, dict) and result.get("ok") is not False:
-                try:
-                    from core.db import transaction
-                    with transaction() as c:
-                        c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
-                except Exception:
-                    pass
-                try:
-                    record_article(article, result)
-                except Exception as e:
-                    print(f"[review] record_article 失敗: {e}")
+                conn.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
+                conn.commit()
+                record_article(article, result)
                 try:
                     from core.notify import send_discord
                     url = result.get("note_url") or (result.get("data") or {}).get("public_url", "")
                     send_discord(content=f"📝 note公開 (手動承認) → {url}" if url else "📝 note公開 (手動承認)")
                 except Exception:
                     pass
-            else:
-                print(f"[review] publish 失敗: {result}")
-        except Exception as e:
-            print(f"[review] 記事即時投稿エラー: {e}")
-
-    def _pub_wp():
-        try:
-            from platforms.wordpress.publisher import publish_article
-            post_url = publish_article(article)
-            if post_url:
-                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-                _JST = _tz(_td(hours=9))
-                try:
-                    from core.db import transaction
-                    with transaction() as c:
-                        c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
-                        c.execute(
-                            "INSERT OR IGNORE INTO articles (note_id, title, genre, tags, note_url, status, published_at) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (
-                                post_url,
-                                article["title"],
-                                article.get("genre", ""),
-                                json.dumps(article.get("tags", []), ensure_ascii=False),
-                                post_url,
-                                "published",
-                                _dt.now(_JST).isoformat(),
-                            ),
-                        )
-                except Exception as e:
-                    print(f"[review] WP DB 記録失敗: {e}")
-                try:
-                    from core.notify import send_discord
-                    send_discord(content=f"📝 WordPress公開 (手動承認) → {post_url}")
-                except Exception:
-                    pass
-            else:
-                print("[review] WordPress 投稿失敗")
-        except Exception as e:
-            print(f"[review] WP 即時投稿エラー: {e}")
-
-    _bg(_pub_wp if platform == "wordpress" else _pub_note)
-    return HTMLResponse("")
+    except Exception as e:
+        print(f"[review] 直接投稿エラー: {e}")
 
 
 @app.post("/review/article/{note_id}/reject", response_class=HTMLResponse)

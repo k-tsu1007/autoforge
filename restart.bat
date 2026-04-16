@@ -9,6 +9,12 @@ timeout /t 2 /nobreak >nul
 
 set PY=C:\Users\Tsubasa\AppData\Local\Programs\Python\Python311\python.exe
 
+echo [restart] starting fuku_ai_sns publisher...
+wmic process call create "%PY% -m services.publisher --instance fuku_ai_sns","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+
+echo [restart] starting ai_bento publisher...
+wmic process call create "%PY% -m services.publisher --instance ai_bento","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+
 echo [restart] starting fuku_ai_sns daemon...
 wmic process call create "%PY% -m tools.run_daemon --instance fuku_ai_sns","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
 
