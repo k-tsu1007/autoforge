@@ -118,11 +118,11 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
         news_context=news_context,
     )
 
-    # 過去タイトル（直近50本、重複回避）
+    # 過去タイトル（直近15本、重複回避）
     all_titles = [a["title"] for a in history.get("articles", [])]
     existing_context = ""
-    if all_titles[-50:]:
-        existing_context = "\n## 過去の記事タイトル（同じ型・テーマの繰り返しを避ける）\n" + "\n".join(f"- {t}" for t in all_titles[-50:])
+    if all_titles[-15:]:
+        existing_context = "\n## 過去の記事タイトル（同じ型・テーマの繰り返しを避ける）\n" + "\n".join(f"- {t}" for t in all_titles[-15:])
 
     # SEOキーワード指示
     seo_instruction = ""

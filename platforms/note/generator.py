@@ -142,9 +142,9 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     gen_params.setdefault("temperature", 0.8)
     top_context = build_top_articles_context(history) if history else ""
 
-    # 過去の記事タイトルリスト (直近50本)
+    # 過去の記事タイトルリスト (直近15本)
     all_titles = [a["title"] for a in history.get("articles", [])]
-    existing_titles = all_titles[-50:]
+    existing_titles = all_titles[-15:]
     existing_context = ""
     if existing_titles:
         existing_context = (
