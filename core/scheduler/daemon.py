@@ -317,35 +317,87 @@ def job_cleanup_jobs():
 
 
 def job_cleanup_temp():
-    """nodriver の残留 temp profile (uc_*) を掃除する。
+    """ディスク圧迫源を一括掃除する (1時間おき)。
 
-    browser.stop() は force-kill で Chrome を落とすため、ファイルロック
-    残留で nodriver 側が temp dir を消し損ねるケースが多い (184個残留など)。
-    1時間以上経過したものは使用中の browser と被らないので安全に削除できる。
+    対象:
+    1. nodriver 残留 temp profile (uc_*, 1時間以上前): ~165MB/個が標準
+    2. debug スクショ (7日以上前): 投稿失敗ごとに蓄積
+    3. 巨大ログファイル (50MB超): rotate して直近のみ残す
+    4. ディスク空きが危険域 (<2GB) ならログで警告
     """
     import tempfile
     import shutil
     import time
 
+    cutoff_hr = time.time() - 3600
+    cutoff_week = time.time() - 7 * 24 * 3600
+    total_freed = 0
+    stats = []
+
+    # --- 1. nodriver uc_* ---
     tmp = Path(tempfile.gettempdir())
-    cutoff = time.time() - 3600  # 1時間以上前
-    removed = 0
-    freed_mb = 0
+    n, freed = 0, 0
     for entry in tmp.glob("uc_*"):
         try:
-            if entry.stat().st_mtime < cutoff:
-                # サイズ計測 (概算)
+            if entry.stat().st_mtime < cutoff_hr:
                 try:
                     size = sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
-                    freed_mb += size / 1024 / 1024
+                    freed += size
                 except Exception:
                     pass
                 shutil.rmtree(entry, ignore_errors=True)
-                removed += 1
+                n += 1
         except Exception:
             continue
-    if removed:
-        log(f"🧹 nodriver temp 掃除: {removed}個 / {freed_mb:.0f}MB")
+    if n:
+        stats.append(f"nodriver temp {n}個 {freed // (1024*1024)}MB")
+        total_freed += freed
+
+    # --- 2. debug screenshots (7日以上前) ---
+    for screenshots_dir in ROOT.rglob("debug_screenshots"):
+        if not screenshots_dir.is_dir():
+            continue
+        n, freed = 0, 0
+        for f in screenshots_dir.rglob("*"):
+            try:
+                if f.is_file() and f.stat().st_mtime < cutoff_week:
+                    freed += f.stat().st_size
+                    f.unlink(missing_ok=True)
+                    n += 1
+            except Exception:
+                continue
+        if n:
+            stats.append(f"screenshots {n}個 {freed // (1024*1024)}MB")
+            total_freed += freed
+
+    # --- 3. 巨大ログファイル rotate (>50MB) ---
+    LOG_CAP = 50 * 1024 * 1024
+    for logfile in list((ROOT / "logs").glob("*.log")) + \
+                   list((ROOT / "data").glob("*.log")) + \
+                   list((ROOT / "instances").glob("*/data/*.log")):
+        try:
+            if logfile.is_file() and logfile.stat().st_size > LOG_CAP:
+                bak = logfile.with_suffix(logfile.suffix + ".old")
+                if bak.exists():
+                    bak.unlink(missing_ok=True)
+                logfile.rename(bak)
+                stats.append(f"rotated {logfile.name}")
+        except Exception:
+            continue
+
+    # --- 4. ディスク空きチェック ---
+    try:
+        import shutil as _s
+        free_gb = _s.disk_usage(str(ROOT)).free / (1024**3)
+        if free_gb < 2:
+            log(f"⚠️  ディスク残量 {free_gb:.1f}GB — 危険域")
+        elif free_gb < 5:
+            log(f"⚠️  ディスク残量 {free_gb:.1f}GB")
+    except Exception:
+        pass
+
+    if stats:
+        log(f"🧹 cleanup: {' / '.join(stats)}")
 
 
 # === メイン ===

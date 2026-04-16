@@ -126,6 +126,17 @@ def get_daemon_status() -> dict:
         pass
 
     bat = _daemon_bat()
+    # ディスク空き容量 (安全運転の指標)
+    disk_free_gb = None
+    disk_total_gb = None
+    try:
+        import shutil as _sh
+        usage = _sh.disk_usage(str(ROOT))
+        disk_free_gb = round(usage.free / (1024**3), 1)
+        disk_total_gb = round(usage.total / (1024**3), 0)
+    except Exception:
+        pass
+
     return {
         "running": pid is not None,
         "pid": pid,
@@ -133,6 +144,8 @@ def get_daemon_status() -> dict:
         "seconds_ago": secs_ago,
         "instance": _current_instance(),
         "bat_path": str(bat) if bat else None,
+        "disk_free_gb": disk_free_gb,
+        "disk_total_gb": disk_total_gb,
     }
 
 

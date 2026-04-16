@@ -321,7 +321,11 @@ a { color: var(--blue); }
       const info = document.getElementById('dmn-info');
       if (!dot) return;
       let state, text;
-      if (s.running && s.seconds_ago !== null && s.seconds_ago < 180) {
+      // ディスク危険は daemon 稼働状態を上書きする警告
+      const diskLow = s.disk_free_gb !== null && s.disk_free_gb !== undefined && s.disk_free_gb < 5;
+      if (diskLow) {
+        state = 'stale'; text = '⚠ 空き ' + s.disk_free_gb + 'GB';
+      } else if (s.running && s.seconds_ago !== null && s.seconds_ago < 180) {
         state = 'on';  text = 'daemon 稼働中';
       } else if (s.running) {
         state = 'stale'; text = 'daemon 沈黙 ' + fmtDur(s.seconds_ago);
@@ -334,6 +338,10 @@ a { color: var(--blue); }
       infoParts.push('instance: ' + (s.instance || '—'));
       infoParts.push('PID: ' + (s.pid || '—'));
       infoParts.push('最終HB: ' + (s.last_heartbeat ? s.last_heartbeat.substring(5, 16).replace('T', ' ') : '—'));
+      if (s.disk_free_gb !== null && s.disk_free_gb !== undefined) {
+        const diskColor = diskLow ? '#f87171' : (s.disk_free_gb < 20 ? '#facc15' : '#888');
+        infoParts.push('<span style="color:' + diskColor + ';">ディスク: ' + s.disk_free_gb + ' / ' + s.disk_total_gb + ' GB</span>');
+      }
       info.innerHTML = infoParts.join('<br>');
     } catch (e) {}
   }
