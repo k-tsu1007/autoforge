@@ -75,4 +75,5 @@
 - free_content に本文（Markdown）。ただし # タイトル見出しは含めない（title フィールドに別記）
 - paid_content は必ず空文字 ""
 - Markdownのテーブル記法（| xxx |）は絶対使用禁止
-- タグは {tags_main} から最低1つ + 記事固有のタグ
+- タグは以下から最低1つ + 記事固有のタグ:
+  #ChatGPT活用, #副業, #SNS運用, #生成AI, #AI副業

@@ -445,22 +445,13 @@ def ui_settings_prompt_weight(request: Request,
 # ─── Prompts UI ───────────────────────────────────────────────────────────
 
 PROMPT_META = {
-    "article_generator": {
-        "label": "Note: Legacy (article_generator)",
-        "variables": "{target_length}, {tags_main}, {free_ratio_pct}, {paid_ratio_pct}",
-    },
-    "article_free": {
-        "label": "Note: Free Article",
-        "variables": "{target_length}, {tags_main}",
-    },
-    "article_mixed": {
-        "label": "Note: Mixed Article (free + paid)",
-        "variables": "{target_length}, {tags_main}, {free_ratio_pct}, {paid_ratio_pct}",
-    },
-    "beginner": {"label": "WordPress: Beginner", "variables": "{keyword}, {audience}, {tone}"},
-    "comparison": {"label": "WordPress: Comparison", "variables": "{keyword}, {audience}, {tone}"},
-    "news": {"label": "WordPress: News", "variables": "{keyword}, {audience}, {tone}"},
-    "handson": {"label": "WordPress: Hands-on", "variables": "{keyword}, {audience}, {tone}"},
+    "article_generator": {"label": "Note: Legacy (article_generator)"},
+    "article_free": {"label": "Note: Free Article"},
+    "article_mixed": {"label": "Note: Mixed Article (free + paid)"},
+    "beginner": {"label": "WordPress: Beginner"},
+    "comparison": {"label": "WordPress: Comparison"},
+    "news": {"label": "WordPress: News"},
+    "handson": {"label": "WordPress: Hands-on"},
 }
 
 EXCLUDED_PROMPTS = {"tweet_generator", "engage_quote", "engage_reply", "mention_reply"}
@@ -492,7 +483,7 @@ def _list_prompts() -> list[dict]:
                 "name": name,
                 "filename": fp.name,
                 "label": meta.get("label", name),
-                "variables": meta.get("variables", ""),
+                "variables": "",  # プロンプトは自己完結、テンプレ変数なし
                 "content": content,
                 "weight": int(weights.get(name, 1)),
                 "mode": automation.get_prompt_mode(name),
@@ -628,15 +619,10 @@ def ui_do_generate(
     scheduled_at: str = Form(""),
 ):
     try:
-        from core.paths import strategy_path, program_md_path
         from services.publisher import automation
-        strategy = json.loads(open(strategy_path(), encoding="utf-8").read())
+        strategy = {}  # プロンプトが自己完結なので戦略設定は不要 (後方互換のためのみ)
         history = _load_history()
-        program = ""
-        try:
-            program = open(program_md_path(), encoding="utf-8").read()
-        except Exception:
-            pass
+        program = ""  # persona もプロンプト内に記述する方針
 
         platform = _platform()
 

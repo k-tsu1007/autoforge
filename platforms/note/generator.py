@@ -127,13 +127,20 @@ def _build_legacy_instruction(*, free_only: bool, seo_mode: bool, seo_keyword: s
 def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "") -> dict:
     """Claudeで記事を生成する。
 
-    prompt_name が指定されていればそのファイル (<name>.txt) を system prompt として使う。
+    プロンプトファイル (<prompt_name>.txt) が記事生成の指示を全て持つ (自己完結)。
+    strategy.json / program.md への依存は最小限 (後方互換のためのみ参照)。
+
+    prompt_name が指定されていればそのファイルを system prompt として使う。
     未指定 + free_only=True → article_free.txt、false → article_mixed.txt (あれば)。
-    どれも無ければ article_generator.txt + プログラム的なモード注入 (レガシー)。
+    どれも無ければ article_generator.txt + プログラム注入 (レガシー)。
     """
-    params = strategy["content_params"]
-    gen_params = strategy["generation_params"]
-    top_context = build_top_articles_context(history)
+    params = strategy.get("content_params", {}) if strategy else {}
+    gen_params = strategy.get("generation_params", {}) if strategy else {}
+    # デフォルト生成設定
+    gen_params.setdefault("model", "claude-opus-4-5-20251001")
+    gen_params.setdefault("max_tokens", 8000)
+    gen_params.setdefault("temperature", 0.8)
+    top_context = build_top_articles_context(history) if history else ""
 
     # 過去の記事タイトルリスト (直近50本)
     all_titles = [a["title"] for a in history.get("articles", [])]
@@ -205,24 +212,9 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         except Exception:
             mode_prompt = ""
 
-    # テンプレート変数の解決
-    free_ratio = params.get("free_ratio", 0.65)
-    template_vars = {
-        "target_length": params.get("target_length_chars", 2800),
-        "tags_main": json.dumps(params.get("tags_main", []), ensure_ascii=False),
-        "free_ratio_pct": int(free_ratio * 100),
-        "paid_ratio_pct": int((1 - free_ratio) * 100),
-        "free_ratio": free_ratio,
-    }
-
     if mode_prompt:
-        # 新方式: プロンプトファイルが全ての記事生成ルールを持つ
-        try:
-            article_instruction = mode_prompt.format(**template_vars)
-        except KeyError as e:
-            print(f"[generator] 変数置換失敗 ({e})、そのまま使用")
-            article_instruction = mode_prompt
-        content_instruction = ""  # 新方式では使わない
+        # 新方式: プロンプトファイルが全ての記事生成ルールを持つ (変数置換なし)
+        article_instruction = mode_prompt
         legacy_mode = False
     else:
         # レガシー方式: article_generator.txt + プログラム注入
@@ -230,8 +222,8 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
             free_only=free_only, seo_mode=seo_mode, seo_keyword=seo_keyword,
             params=params,
         )
-        content_instruction = ""
         legacy_mode = True
+    content_instruction = ""
 
     # 出力フォーマット
     if free_only or seo_mode:
