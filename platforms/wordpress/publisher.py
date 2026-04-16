@@ -214,6 +214,36 @@ def publish_article(article: dict) -> str | None:
         return None
 
 
+def _save_as_pending_review(article: dict) -> str:
+    """REVIEW_MODE 時に記事を publish せず DB に pending_review で保持する。
+
+    Returns: 割り当てた仮 note_id (pending_<timestamp>)
+    """
+    from core.db import upsert_article
+    now = datetime.now(JST)
+    pending_id = f"pending_{int(now.timestamp() * 1000)}"
+    categories = article.get("categories", [])
+    genre = article.get("genre", "") or (categories[0] if categories else "")
+    tags = list(article.get("tags", []))
+    # categories を tags に "cat:..." として残しておくと approve 時に復元できる
+    tags_with_cat = tags + [f"cat:{c}" for c in categories]
+    upsert_article({
+        "note_id": pending_id,
+        "title": article.get("title", ""),
+        "genre": genre,
+        "tags": tags_with_cat,
+        "note_url": "",
+        "status": "pending_review",
+        "published_at": "",
+        "created_at": now.isoformat(),
+        "free_content": article.get("content", article.get("free_content", "")),
+        "paid_content": "",
+        "views": 0, "likes": 0, "comments": 0, "revenue": 0,
+    })
+    print(f"pending_review 保存: {pending_id} {article.get('title','')[:40]}")
+    return pending_id
+
+
 def _find_next_draft() -> Path | None:
     """READY_DIR → DRAFTS_DIR の順に未投稿ドラフトを1件返す。"""
     for d in (READY_DIR, DRAFTS_DIR):
@@ -235,6 +265,23 @@ def main() -> tuple | None:
 
     article = json.loads(draft_path.read_text(encoding="utf-8"))
     print(f"投稿対象: {draft_path.name} — {article.get('title', '')}")
+
+    # レビューモード時は publish せず DB に pending_review として保留
+    try:
+        from core.db import review_mode_enabled
+        _review_on = review_mode_enabled()
+    except Exception:
+        _review_on = False
+
+    if _review_on:
+        print("📝 レビューモード ON → pending_review として保留")
+        try:
+            _save_as_pending_review(article)
+        except Exception as e:
+            print(f"pending_review 保存失敗: {e}")
+            return None
+        draft_path.rename(PUBLISHED_DIR / draft_path.name)
+        return article, "", []
 
     post_url = publish_article(article)
     if not post_url:

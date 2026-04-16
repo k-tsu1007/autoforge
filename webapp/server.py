@@ -589,8 +589,9 @@ def admin_daemon_restart(user: str = Depends(check_auth)):
 
 @app.post("/review/article/{note_id}/approve", response_class=HTMLResponse)
 def review_article_approve(note_id: str, request: Request, user: str = Depends(check_auth)):
-    """承認 → 即時 publish_via_noteclient() で note.com に投稿。"""
+    """承認 → 即時投稿 (プラットフォームに応じて note / wordpress)。"""
     from core.db import get_connection
+    from core.content_platform import get_content_platform
     conn = get_connection()
     row = conn.execute(
         "SELECT title, genre, tags, free_content, paid_content FROM articles WHERE note_id=?",
@@ -598,12 +599,19 @@ def review_article_approve(note_id: str, request: Request, user: str = Depends(c
     ).fetchone()
     if not row:
         return HTMLResponse('<div style="color:#f87171;">記事が見つかりません</div>')
+
+    stored_tags = _fromjson(row["tags"]) or []
+    tags = [t for t in stored_tags if not (isinstance(t, str) and t.startswith("cat:"))]
+    categories = [t[4:] for t in stored_tags if isinstance(t, str) and t.startswith("cat:")]
+
     article = {
         "title": row["title"],
         "genre": row["genre"],
-        "tags": _fromjson(row["tags"]),
+        "tags": tags,
+        "categories": categories,
         "free_content": row["free_content"] or "",
         "paid_content": row["paid_content"] or "",
+        "content": row["free_content"] or "",
     }
 
     # regen_log の未決を承認に更新
@@ -613,12 +621,13 @@ def review_article_approve(note_id: str, request: Request, user: str = Depends(c
     )
     conn.commit()
 
-    def _pub():
+    platform = get_content_platform()
+
+    def _pub_note():
         try:
             from platforms.note.publisher import publish_via_noteclient, record_article
             result = publish_via_noteclient(article)
             if isinstance(result, dict) and result.get("ok") is not False:
-                # DB の pending 行を削除して record_article で本番行を追加
                 try:
                     from core.db import transaction
                     with transaction() as c:
@@ -640,7 +649,43 @@ def review_article_approve(note_id: str, request: Request, user: str = Depends(c
         except Exception as e:
             print(f"[review] 記事即時投稿エラー: {e}")
 
-    _bg(_pub)
+    def _pub_wp():
+        try:
+            from platforms.wordpress.publisher import publish_article
+            post_url = publish_article(article)
+            if post_url:
+                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                _JST = _tz(_td(hours=9))
+                try:
+                    from core.db import transaction
+                    with transaction() as c:
+                        c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
+                        c.execute(
+                            "INSERT OR IGNORE INTO articles (note_id, title, genre, tags, note_url, status, published_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                post_url,
+                                article["title"],
+                                article.get("genre", ""),
+                                json.dumps(article.get("tags", []), ensure_ascii=False),
+                                post_url,
+                                "published",
+                                _dt.now(_JST).isoformat(),
+                            ),
+                        )
+                except Exception as e:
+                    print(f"[review] WP DB 記録失敗: {e}")
+                try:
+                    from core.notify import send_discord
+                    send_discord(content=f"📝 WordPress公開 (手動承認) → {post_url}")
+                except Exception:
+                    pass
+            else:
+                print("[review] WordPress 投稿失敗")
+        except Exception as e:
+            print(f"[review] WP 即時投稿エラー: {e}")
+
+    _bg(_pub_wp if platform == "wordpress" else _pub_note)
     return HTMLResponse("")
 
 
