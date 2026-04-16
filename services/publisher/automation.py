@@ -14,12 +14,19 @@ DEFAULT_CONFIG = {
     "slots": ["09:00", "14:00", "20:00"],
     "prompt_weights": {},
     "prompt_modes": {},  # {prompt_name: "free" | "mixed"}
-    "note_settings": {
-        "free_chars": 1500,    # 無料部分の目標文字数
-        "paid_chars": 1250,    # 有料部分の目標文字数
-        "price": 500,          # 有料記事の価格 (円)
+    "prompt_settings": {},  # {prompt_name: {free_chars, paid_chars, price}}
+    "note_settings": {       # フォールバック用デフォルト
+        "free_chars": 1500,
+        "paid_chars": 1250,
+        "price": 500,
     },
 }
+
+
+DEFAULT_FREE_CHARS = 2500
+DEFAULT_MIXED_FREE_CHARS = 1500
+DEFAULT_MIXED_PAID_CHARS = 1250
+DEFAULT_PRICE = 500
 
 
 def _config_path() -> Path:
@@ -165,7 +172,7 @@ def set_prompt_mode(name: str, mode: str) -> dict:
 
 
 def get_note_settings() -> dict:
-    """note の文字数/価格設定を返す。"""
+    """note のグローバルデフォルト (prompt 個別設定がないとき用)。"""
     cfg = load()
     settings = dict(DEFAULT_CONFIG["note_settings"])
     settings.update(cfg.get("note_settings", {}))
@@ -173,7 +180,6 @@ def get_note_settings() -> dict:
 
 
 def set_note_settings(**fields) -> dict:
-    """note 設定を部分更新する。"""
     cfg = load()
     settings = dict(DEFAULT_CONFIG["note_settings"])
     settings.update(cfg.get("note_settings", {}))
@@ -181,5 +187,51 @@ def set_note_settings(**fields) -> dict:
         if k in settings and v is not None:
             settings[k] = int(v)
     cfg["note_settings"] = settings
+    save(cfg)
+    return cfg
+
+
+def get_prompt_settings(name: str) -> dict:
+    """プロンプト個別の設定 (文字数/価格) を返す。
+
+    モード別デフォルト:
+    - free  : {free_chars: 2500, paid_chars: 0, price: 0}
+    - mixed : {free_chars: 1500, paid_chars: 1250, price: 500}
+    """
+    cfg = load()
+    mode = get_prompt_mode(name)
+    if mode == "free":
+        defaults = {"free_chars": DEFAULT_FREE_CHARS, "paid_chars": 0, "price": 0}
+    else:
+        defaults = {
+            "free_chars": DEFAULT_MIXED_FREE_CHARS,
+            "paid_chars": DEFAULT_MIXED_PAID_CHARS,
+            "price": DEFAULT_PRICE,
+        }
+    settings = dict(defaults)
+    per_prompt = (cfg.get("prompt_settings") or {}).get(name) or {}
+    for k in defaults:
+        if k in per_prompt and per_prompt[k] is not None:
+            try:
+                settings[k] = int(per_prompt[k])
+            except Exception:
+                pass
+    return settings
+
+
+def set_prompt_settings(name: str, **fields) -> dict:
+    cfg = load()
+    all_settings = dict(cfg.get("prompt_settings") or {})
+    current = dict(all_settings.get(name) or {})
+    for k, v in fields.items():
+        if v is None or v == "":
+            continue
+        if k in ("free_chars", "paid_chars", "price"):
+            try:
+                current[k] = int(v)
+            except Exception:
+                pass
+    all_settings[name] = current
+    cfg["prompt_settings"] = all_settings
     save(cfg)
     return cfg

@@ -2,29 +2,6 @@
 {% block title %}Prompts — {{ instance }}{% endblock %}
 {% block head %}
 <style>
-.prompt-card { margin-bottom: 1.2rem; }
-.prompt-card summary {
-  cursor: pointer; padding: .6rem .8rem; font-size: .85rem; font-weight: 600;
-  display: flex; align-items: center; gap: .5rem;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  list-style: none; user-select: none; color: var(--text);
-}
-.prompt-card summary::-webkit-details-marker { display: none; }
-.prompt-card summary::after { content: ""; margin-left: auto; color: var(--dim); font-size: .7rem; }
-.prompt-card[open] summary { border-radius: 8px 8px 0 0; }
-.prompt-card[open] summary::after { content: ""; }
-.prompt-inner {
-  border: 1px solid var(--border); border-top: none;
-  border-radius: 0 0 8px 8px; overflow: hidden;
-}
-.prompt-inner textarea { border: none; border-radius: 0; min-height: 250px; }
-.prompt-foot {
-  display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem;
-  background: var(--surface); border-top: 1px solid var(--border);
-}
-.prompt-vars { font-size: .72rem; color: var(--dim); margin-left: auto; }
-.save-ok { color: var(--green); font-size: .78rem; display: none; }
-
 .add-card {
   background: var(--surface); border: 1px dashed var(--border); border-radius: 8px;
   padding: 1rem; margin-bottom: 1.2rem;
@@ -36,7 +13,69 @@
   border: 1px solid var(--border); border-radius: 6px;
   padding: .4rem .6rem; font-size: .8rem;
 }
-.weight-inline { font-size: .7rem; color: var(--dim); margin-left: auto; }
+
+.p-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.1rem; margin-bottom: 1rem;
+}
+.p-hd {
+  display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem;
+  flex-wrap: wrap;
+}
+.p-name { font-weight: 700; font-size: .92rem; }
+.p-file { font-size: .68rem; color: var(--dim); font-family: var(--font-mono); }
+.p-mode-badge {
+  font-size: .68rem; font-family: var(--font-mono); padding: .1rem .5rem; border-radius: 999px;
+}
+.p-mode-badge.free { background: #0c2016; color: var(--green); border: 1px solid #4ade8033; }
+.p-mode-badge.mixed { background: #1c0f02; color: var(--yellow); border: 1px solid #facc1533; }
+
+.config-grid {
+  display: grid; grid-template-columns: max-content 1fr; gap: .4rem .8rem;
+  align-items: center; margin: .6rem 0;
+  background: var(--bg); padding: .7rem .9rem; border-radius: 6px;
+}
+.config-label { font-size: .72rem; color: var(--muted); }
+.config-row { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+.cfg-num {
+  width: 80px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: .25rem .5rem; font-family: var(--font-mono); font-size: .8rem;
+  text-align: center;
+}
+.cfg-num.wide { width: 100px; }
+.cfg-radio { display: inline-flex; gap: .8rem; }
+.cfg-radio label {
+  font-size: .76rem; cursor: pointer; display: inline-flex; gap: .25rem; align-items: center;
+}
+
+.p-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.save-ok { color: var(--green); font-size: .72rem; display: none; }
+
+/* Modal */
+.modal {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.7); align-items: flex-start; justify-content: center; padding: 2rem;
+  overflow-y: auto;
+}
+.modal.show { display: flex; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  width: 100%; max-width: 900px; padding: 1.2rem;
+}
+.modal-hd { display: flex; align-items: center; gap: .5rem; margin-bottom: .8rem; }
+.modal-hd h3 { font-size: .95rem; flex: 1; }
+.modal-close {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 6px; padding: .25rem .6rem; cursor: pointer; font-size: .9rem;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body textarea {
+  width: 100%; min-height: 480px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: .8rem;
+  font-family: var(--font-mono); font-size: .82rem; line-height: 1.6;
+}
+.modal-foot { display: flex; gap: .6rem; align-items: center; margin-top: .6rem; }
 </style>
 {% endblock %}
 
@@ -44,10 +83,9 @@
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
   <h2 style="margin:0;font-size:1.1rem;">Prompts</h2>
-  <a href="/settings" class="btn">Manage Rotation Weights</a>
 </div>
 <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
-  Article generation prompts. Changes take effect on the next generation. Set rotation weights in <a href="/settings">Automation</a>.
+  Each prompt has its own paywall mode, char counts, price, and rotation weight. Click "Edit Body" to edit the prompt text in a modal.
 </p>
 
 {# ─── Add new prompt ─── #}
@@ -62,58 +100,105 @@
   </form>
 </div>
 
-{# ─── Prompt list ─── #}
+{# ─── Prompt cards ─── #}
 {% for p in prompts %}
-<details class="prompt-card" {% if loop.first %}open{% endif %}>
-  <summary>
-    {{ p.label }}
-    <span style="font-size:.7rem;color:var(--dim);font-weight:400;">{{ p.filename }}</span>
+<div class="p-card">
+  <div class="p-hd">
+    <span class="p-name">{{ p.label }}</span>
+    <span class="p-file">{{ p.filename }}</span>
     {% if p.mode_applicable %}
-    <span style="font-size:.7rem;color:{% if p.mode == 'free' %}var(--green){% else %}var(--yellow){% endif %};font-family:var(--font-mono);">
-      {% if p.mode == 'free' %}🆓 free{% else %}💰 mixed{% endif %}
+    <span class="p-mode-badge {{ p.mode }}">{% if p.mode == 'free' %}🆓 free{% else %}💰 mixed{% endif %}</span>
+    {% endif %}
+    <span style="margin-left:auto;display:flex;gap:.5rem;align-items:center;">
+      <button class="btn" onclick="document.getElementById('modal-{{ p.name }}').classList.add('show')">📝 Edit Body</button>
+      <button class="btn btn-ng"
+              hx-post="/prompts/{{ p.name }}/delete"
+              hx-confirm="Delete prompt '{{ p.name }}'? This cannot be undone."
+              hx-target="body" hx-swap="outerHTML">Delete</button>
     </span>
-    {% endif %}
-    {% if p.weight is defined %}
-    <span class="weight-inline">weight: {{ p.weight }}</span>
-    {% endif %}
-  </summary>
-  <div class="prompt-inner">
+  </div>
+
+  {# 設定 (mode/weight/chars/price) を1フォームでまとめて保存 #}
+  <form hx-post="/prompts/{{ p.name }}/config" hx-swap="none"
+        hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},2000)">
+
     {% if p.mode_applicable %}
-    <div style="padding:.5rem .8rem;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem;">
-      <span style="font-size:.72rem;color:var(--muted);">Paywall mode:</span>
-      <label style="font-size:.78rem;cursor:pointer;">
-        <input type="radio" name="mode-{{ p.name }}" value="free"
-               {% if p.mode == 'free' %}checked{% endif %}
-               hx-post="/prompts/{{ p.name }}/mode" hx-vals='{"mode": "free"}' hx-swap="none"> 🆓 Free only
-      </label>
-      <label style="font-size:.78rem;cursor:pointer;">
-        <input type="radio" name="mode-{{ p.name }}" value="mixed"
-               {% if p.mode == 'mixed' %}checked{% endif %}
-               hx-post="/prompts/{{ p.name }}/mode" hx-vals='{"mode": "mixed"}' hx-swap="none"> 💰 Mixed (free+paid)
-      </label>
+    <div class="config-row">
+      <span class="config-label">Mode:</span>
+      <span class="cfg-radio">
+        <label><input type="radio" name="mode" value="free" {% if p.mode == 'free' %}checked{% endif %}
+                      onchange="updateModeFields(this.form, 'free')"> 🆓 Free</label>
+        <label><input type="radio" name="mode" value="mixed" {% if p.mode == 'mixed' %}checked{% endif %}
+                      onchange="updateModeFields(this.form, 'mixed')"> 💰 Mixed</label>
+      </span>
     </div>
     {% endif %}
-    <form hx-post="/prompts/{{ p.name }}/save" hx-swap="none"
-          hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},2000)">
-      <textarea name="text" rows="20">{{ p.content }}</textarea>
-      <div class="prompt-foot">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <span class="save-ok">Saved</span>
-        <button type="button" class="btn btn-ng"
-                hx-post="/prompts/{{ p.name }}/delete"
-                hx-confirm="Delete prompt '{{ p.name }}'? This cannot be undone."
-                hx-target="body" hx-swap="outerHTML">Delete</button>
-        {% if p.variables %}
-        <span class="prompt-vars">Variables: {{ p.variables }}</span>
-        {% endif %}
-      </div>
-    </form>
+
+    <div class="config-row" style="margin-top:.5rem;">
+      <label style="font-size:.72rem;color:var(--muted);">Weight:
+        <input type="number" name="weight" min="0" max="100" value="{{ p.weight }}" class="cfg-num" style="width:60px;">
+      </label>
+
+      {% if p.mode_applicable %}
+      <span class="cfg-mixed-fields" {% if p.mode != 'mixed' %}style="display:none"{% endif %}>
+        <label style="font-size:.72rem;color:var(--muted);margin-left:1rem;">無料部分:
+          <input type="number" name="free_chars" min="0" max="20000" value="{{ p.settings.free_chars }}" class="cfg-num"> 文字
+        </label>
+        <label style="font-size:.72rem;color:var(--muted);margin-left:.6rem;">有料部分:
+          <input type="number" name="paid_chars" min="0" max="20000" value="{{ p.settings.paid_chars }}" class="cfg-num"> 文字
+        </label>
+        <label style="font-size:.72rem;color:var(--muted);margin-left:.6rem;">価格:
+          <input type="number" name="price" min="0" max="50000" step="100" value="{{ p.settings.price }}" class="cfg-num"> 円
+        </label>
+      </span>
+      <span class="cfg-free-fields" {% if p.mode == 'mixed' %}style="display:none"{% endif %}>
+        <label style="font-size:.72rem;color:var(--muted);margin-left:1rem;">合計文字数:
+          <input type="number" name="free_chars" min="0" max="20000" value="{{ p.settings.free_chars }}" class="cfg-num wide"> 文字
+        </label>
+      </span>
+      {% endif %}
+    </div>
+
+    <div class="p-actions" style="margin-top:.7rem;">
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+      <span class="save-ok">Saved</span>
+    </div>
+  </form>
+</div>
+
+{# Modal: prompt body 編集 #}
+<div class="modal" id="modal-{{ p.name }}">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <h3>{{ p.label }} <span style="font-size:.72rem;color:var(--dim);font-family:var(--font-mono);">{{ p.filename }}</span></h3>
+      <button class="modal-close" onclick="document.getElementById('modal-{{ p.name }}').classList.remove('show')">×</button>
+    </div>
+    <div class="modal-body">
+      <form hx-post="/prompts/{{ p.name }}/save" hx-swap="none"
+            hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},1500)">
+        <textarea name="text">{{ p.content }}</textarea>
+        <div class="modal-foot">
+          <button type="submit" class="btn btn-primary">Save Body</button>
+          <span class="save-ok">Saved</span>
+          <button type="button" class="btn" onclick="document.getElementById('modal-{{ p.name }}').classList.remove('show')">Close</button>
+        </div>
+      </form>
+    </div>
   </div>
-</details>
+</div>
 {% endfor %}
 
 {% if not prompts %}
 <div class="empty">No prompts found. Add one above.</div>
 {% endif %}
+
+<script>
+function updateModeFields(form, mode) {
+  const mixedSpan = form.querySelector('.cfg-mixed-fields');
+  const freeSpan = form.querySelector('.cfg-free-fields');
+  if (mixedSpan) mixedSpan.style.display = (mode === 'mixed') ? '' : 'none';
+  if (freeSpan) freeSpan.style.display = (mode === 'free') ? '' : 'none';
+}
+</script>
 
 {% endblock %}

@@ -124,7 +124,7 @@ def _build_legacy_instruction(*, free_only: bool, seo_mode: bool, seo_keyword: s
     return reader + style + anti + constraint
 
 
-def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "", knowledge_set_id: str = "", instruction: str = "") -> dict:
+def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "", knowledge_set_id: str = "", instruction: str = "", override_free_chars: int = 0, override_paid_chars: int = 0, override_price: int = 0) -> dict:
     """Claudeで記事を生成する。
 
     プロンプトファイル (<prompt_name>.txt) が記事生成の指示を全て持つ (自己完結)。
@@ -270,23 +270,23 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         n, g = _random.choice(article_formats)
         format_instruction = f"\n## 記事フォーマット（今回は「{n}」で書く）\n{g}\n"
 
-    # note の UI 設定 (文字数 / 価格) を取得して制約セクションに追加
+    # note の設定 (プロンプト個別設定 → UI オーバーライド の順で解決)
     note_settings_section = ""
     note_price = 500
     try:
         from services.publisher import automation
-        ns = automation.get_note_settings()
-        note_price = int(ns.get("price", 500))
+        ps = automation.get_prompt_settings(prompt_name or ("article_free" if free_only else "article_mixed"))
+        free_c = int(override_free_chars or ps.get("free_chars", 1500))
+        paid_c = int(override_paid_chars or ps.get("paid_chars", 0))
+        note_price = int(override_price or ps.get("price", 0))
+
         if free_only or seo_mode:
-            total = int(ns.get("free_chars", 1500))
             note_settings_section = (
                 f"## 文字数・価格設定 (UI 設定で上書き、これを優先)\n"
-                f"- 合計文字数: 約 {total} 文字\n"
+                f"- 合計文字数: 約 {free_c} 文字\n"
                 f"- これは無料記事 (paid_content は空文字)"
             )
         else:
-            free_c = int(ns.get("free_chars", 1500))
-            paid_c = int(ns.get("paid_chars", 1250))
             total = free_c + paid_c
             note_settings_section = (
                 f"## 文字数・価格設定 (UI 設定で上書き、これを優先)\n"

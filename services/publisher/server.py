@@ -548,11 +548,11 @@ def _list_prompts() -> list[dict]:
                 "name": name,
                 "filename": fp.name,
                 "label": meta.get("label", name),
-                "variables": "",  # プロンプトは自己完結、テンプレ変数なし
                 "content": content,
                 "weight": int(weights.get(name, 1)),
                 "mode": automation.get_prompt_mode(name),
                 "mode_applicable": is_note,  # WordPress は常に無料なのでモード選択不要
+                "settings": automation.get_prompt_settings(name),
             })
     return prompts
 
@@ -609,6 +609,29 @@ def ui_prompt_mode(name: str, mode: str = Form(...)):
         automation.set_prompt_mode(name, mode)
     except ValueError:
         return HTMLResponse("Invalid mode", status_code=400)
+    return HTMLResponse("")
+
+
+@app.post("/prompts/{name}/config", response_class=HTMLResponse)
+def ui_prompt_config(
+    name: str,
+    mode: str = Form(""),
+    weight: int = Form(1),
+    free_chars: int = Form(0),
+    paid_chars: int = Form(0),
+    price: int = Form(0),
+):
+    """1 プロンプトの全設定 (mode + weight + chars + price) をまとめて保存。"""
+    from services.publisher import automation
+    if mode in ("free", "mixed"):
+        automation.set_prompt_mode(name, mode)
+    automation.set_prompt_weight(name, weight)
+    automation.set_prompt_settings(
+        name,
+        free_chars=free_chars,
+        paid_chars=paid_chars if mode == "mixed" else 0,
+        price=price if mode == "mixed" else 0,
+    )
     return HTMLResponse("")
 
 
@@ -687,6 +710,9 @@ def ui_generate_preview(
     knowledge_set_id: str = Form("none"),
     schedule_mode: str = Form("immediate"),
     scheduled_at: str = Form(""),
+    override_free_chars: int = Form(0),
+    override_paid_chars: int = Form(0),
+    override_price: int = Form(0),
 ):
     """LLM に渡る system prompt と user prompt をプレーンテキストでダウンロード可能にする。"""
     from fastapi.responses import PlainTextResponse
@@ -725,6 +751,9 @@ def ui_generate_preview(
                     free_only=(prompt_mode == "free"),
                     prompt_name=chosen_prompt,
                     knowledge_set_id=knowledge_set_id,
+                    override_free_chars=override_free_chars,
+                    override_paid_chars=override_paid_chars,
+                    override_price=override_price,
                 )
             except Exception as e:
                 pass
@@ -768,6 +797,9 @@ def ui_do_generate(
     knowledge_set_id: str = Form("none"),
     schedule_mode: str = Form("next_slot"),
     scheduled_at: str = Form(""),
+    override_free_chars: int = Form(0),
+    override_paid_chars: int = Form(0),
+    override_price: int = Form(0),
 ):
     try:
         from services.publisher import automation
@@ -797,6 +829,9 @@ def ui_do_generate(
                 free_only=(prompt_mode == "free"),
                 prompt_name=chosen_prompt,
                 knowledge_set_id=knowledge_set_id,
+                override_free_chars=override_free_chars,
+                override_paid_chars=override_paid_chars,
+                override_price=override_price,
             )
 
         # 投稿予約時刻を解決
