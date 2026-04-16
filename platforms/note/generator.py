@@ -180,10 +180,12 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 
     # 実験モード
     experiment_hint = ""
+    experiment_id = None
     try:
         from core.learning.hypothesis import get_active_for_experiment
         h = get_active_for_experiment()
         if h:
+            experiment_id = h.get("id")
             experiment_hint = (
                 f"\n## ★実験モード★\n"
                 f"以下の仮説を検証する記事を書いてください:\n"
