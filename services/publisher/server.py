@@ -446,8 +446,16 @@ def ui_settings_prompt_weight(request: Request,
 
 PROMPT_META = {
     "article_generator": {
-        "label": "Note: Article Generator",
-        "variables": "{genre}, {target_length}, {free_ratio}, {seo_keywords}, {recent_titles}",
+        "label": "Note: Legacy (article_generator)",
+        "variables": "{target_length}, {tags_main}, {free_ratio_pct}, {paid_ratio_pct}",
+    },
+    "article_free": {
+        "label": "Note: Free Article",
+        "variables": "{target_length}, {tags_main}",
+    },
+    "article_mixed": {
+        "label": "Note: Mixed Article (free + paid)",
+        "variables": "{target_length}, {tags_main}, {free_ratio_pct}, {paid_ratio_pct}",
     },
     "beginner": {"label": "WordPress: Beginner", "variables": "{keyword}, {audience}, {tone}"},
     "comparison": {"label": "WordPress: Comparison", "variables": "{keyword}, {audience}, {tone}"},
@@ -649,6 +657,7 @@ def ui_do_generate(
                 topic_hint=topic_hint,
                 user_comment=user_comment,
                 free_only=(prompt_mode == "free"),
+                prompt_name=chosen_prompt,  # article_free / article_mixed など
             )
 
         # 投稿予約時刻を解決

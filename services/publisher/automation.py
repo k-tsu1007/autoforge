@@ -130,10 +130,22 @@ def get_prompt_mode(name: str) -> str:
     - free : 100% 無料で公開 (有料部分なし)
     - mixed: 無料 + 有料 (note の free_ratio に従う)
 
+    ファイル名による推定:
+    - article_free → 'free'
+    - article_mixed → 'mixed'
+    - それ以外は automation.json で明示指定、無ければ 'mixed'
+
     WordPress には関係ない (常に無料)。
     """
     modes = load().get("prompt_modes", {})
-    return modes.get(name, "mixed")
+    if name in modes:
+        return modes[name]
+    # ファイル名で推定
+    if name.endswith("_free") or name == "article_free":
+        return "free"
+    if name.endswith("_mixed") or name == "article_mixed":
+        return "mixed"
+    return "mixed"
 
 
 def set_prompt_mode(name: str, mode: str) -> dict:

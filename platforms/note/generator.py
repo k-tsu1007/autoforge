@@ -79,8 +79,58 @@ def _detect_fabrication(article: dict) -> str | None:
     return None
 
 
-def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "") -> dict:
-    """Claudeで記事を生成する。seo_mode=True のときは完全無料・SEO最適化記事を生成する。"""
+def _build_legacy_instruction(*, free_only: bool, seo_mode: bool, seo_keyword: str, params: dict) -> str:
+    """article_generator.txt しかない場合のレガシー注入。新方式のプロンプトファイルが推奨。"""
+    from core.paths import load_prompt
+    try:
+        ext = load_prompt("article_generator.txt")
+    except Exception:
+        ext = ""
+
+    import re as _re
+    def _sec(text, heading):
+        p = rf"^## {_re.escape(heading)}.*?\n(.*?)(?=\n## |\Z)"
+        m = _re.search(p, text, _re.DOTALL | _re.MULTILINE)
+        return m.group(1).strip() if m else ""
+
+    reader_profile = _sec(ext, "読者像") if ext else ""
+    anti_fab = _sec(ext, "【絶対不可侵】捏造の絶対禁止") if ext else ""
+    title_guide = _sec(ext, "タイトル形式ガイド") if ext else "- タイトルは30文字以内"
+    style_rules = _sec(ext, "文体・トーンのルール（重要）") if ext else ""
+
+    reader = f"## 読者像\n{reader_profile}\n" if reader_profile else ""
+    style = f"## 文体・トーンのルール\n{style_rules}\n" if style_rules else ""
+    anti = f"## 【絶対不可侵】捏造の絶対禁止\n{anti_fab}\n" if anti_fab else ""
+
+    if free_only or seo_mode:
+        constraint = f"""## 制約 (完全無料記事)
+- paid_content は必ず空文字
+- 合計文字数は約{params.get('target_length_chars', 2800)}文字
+- 末尾でフォロー誘導を自然に入れる
+- タグは {json.dumps(params.get('tags_main', []), ensure_ascii=False)} から最低1つ
+- Markdownのテーブル記法は禁止
+{title_guide}
+"""
+    else:
+        constraint = f"""## 制約 (無料+有料記事)
+- 無料部分は全体の約{int(params.get('free_ratio', 0.65) * 100)}%
+- 合計文字数は約{params.get('target_length_chars', 2800)}文字
+- 有料部分は「そのまま使えるテンプレ/プロンプト/チェックリスト」のいずれかを必ず含める
+- タグは {json.dumps(params.get('tags_main', []), ensure_ascii=False)} から最低1つ
+- Markdownのテーブル記法は禁止
+{title_guide}
+"""
+
+    return reader + style + anti + constraint
+
+
+def generate_article(strategy: dict, program: str, history: dict, *, free_only: bool = False, topic_hint: str = "", seo_mode: bool = False, user_comment: str = "", prompt_name: str = "") -> dict:
+    """Claudeで記事を生成する。
+
+    prompt_name が指定されていればそのファイル (<name>.txt) を system prompt として使う。
+    未指定 + free_only=True → article_free.txt、false → article_mixed.txt (あれば)。
+    どれも無ければ article_generator.txt + プログラム的なモード注入 (レガシー)。
+    """
     params = strategy["content_params"]
     gen_params = strategy["generation_params"]
     top_context = build_top_articles_context(history)
@@ -93,8 +143,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         existing_context = (
             "\n## 直近の記事タイトル（同じ型・テーマの繰り返しを避ける）\n"
             + "\n".join(f"- {t}" for t in existing_titles)
-            + "\n\n**重要**: 上記タイトルの「形式」（「〇〇な人の△つの特徴」「〇〇する3つの方法」など）を分析し、"
-            "同じ形式を連続させないこと。形式のバリエーションを確認してから新タイトルを決めること。\n"
+            + "\n"
         )
 
     topic_instruction = ""
@@ -109,12 +158,10 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
             seo_keyword = get_next()
             if seo_keyword:
                 print(f"SEOキーワード: {seo_keyword}")
-            else:
-                print("未使用キーワードなし。汎用SEO記事を生成します。")
         except Exception as e:
             print(f"キーワード取得失敗: {e}")
 
-    # Knowledge: 確証された知見のみを読み込む (累積汚染を防ぐ)
+    # Knowledge: 確証された知見のみ
     learning_hint = ""
     try:
         from core.learning.knowledge import format_for_prompt
@@ -124,171 +171,99 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
     except Exception as e:
         print(f"knowledge 取得失敗: {e}")
 
-    # 実験モード: 仮説検証用の記事を1本書く (3本に1本ペース)
+    # 実験モード
     experiment_hint = ""
-    experiment_id = None
     try:
         from core.learning.hypothesis import get_active_for_experiment
         h = get_active_for_experiment()
         if h:
-            experiment_id = h.get("id")
             experiment_hint = (
                 f"\n## ★実験モード★\n"
                 f"以下の仮説を検証する記事を書いてください:\n"
                 f"- 仮説: {h.get('claim','')}\n"
                 f"- 検証方法: {h.get('test_plan','')}\n"
-                f"通常の制約より仮説検証を優先してください。\n"
             )
     except Exception:
         pass
 
-    # インスタンスのプロンプトファイルから戦略固有部分を読み込む
-    _ext_prompt = ""
-    try:
-        from core.paths import load_prompt
-        _ext_prompt = load_prompt("article_generator.txt")
-    except Exception:
-        pass
+    # プロンプトファイルを選択: 明示 > モード別 > レガシー
+    from core.paths import load_prompt
+    mode_prompt = ""
+    chosen_prompt_name = ""
+    if prompt_name:
+        try:
+            mode_prompt = load_prompt(f"{prompt_name}.txt") or load_prompt(f"{prompt_name}.md")
+            chosen_prompt_name = prompt_name
+        except Exception:
+            mode_prompt = ""
+    if not mode_prompt:
+        # モード別ファイルを試す
+        target_file = "article_free.txt" if (free_only or seo_mode) else "article_mixed.txt"
+        try:
+            mode_prompt = load_prompt(target_file)
+            chosen_prompt_name = target_file.replace(".txt", "")
+        except Exception:
+            mode_prompt = ""
 
-    if _ext_prompt:
-        # 外部ファイルからセクションを抽出
-        import re as _re
-        def _extract_section(text, heading):
-            pattern = rf"^## {_re.escape(heading)}.*?\n(.*?)(?=\n## |\Z)"
-            m = _re.search(pattern, text, _re.DOTALL | _re.MULTILINE)
-            return m.group(1).strip() if m else ""
+    # テンプレート変数の解決
+    free_ratio = params.get("free_ratio", 0.65)
+    template_vars = {
+        "target_length": params.get("target_length_chars", 2800),
+        "tags_main": json.dumps(params.get("tags_main", []), ensure_ascii=False),
+        "free_ratio_pct": int(free_ratio * 100),
+        "paid_ratio_pct": int((1 - free_ratio) * 100),
+        "free_ratio": free_ratio,
+    }
 
-        _reader_profile = _extract_section(_ext_prompt, "読者像")
-        anti_fabrication = "\n## 【絶対不可侵】捏造の絶対禁止\n" + _extract_section(_ext_prompt, "【絶対不可侵】捏造の絶対禁止")
-        anti_fabrication += "\n\n【違反した場合】\n- 記事は即座に破棄され、Noteにも投稿されません\n- 信頼を失う行為として記録されます\n"
-        title_format_guide = _extract_section(_ext_prompt, "タイトル形式ガイド")
-        _style_rules = _extract_section(_ext_prompt, "文体・トーンのルール（重要）")
+    if mode_prompt:
+        # 新方式: プロンプトファイルが全ての記事生成ルールを持つ
+        try:
+            article_instruction = mode_prompt.format(**template_vars)
+        except KeyError as e:
+            print(f"[generator] 変数置換失敗 ({e})、そのまま使用")
+            article_instruction = mode_prompt
+        content_instruction = ""  # 新方式では使わない
+        legacy_mode = False
     else:
-        _reader_profile = ""
-        _style_rules = ""
-        anti_fabrication = ""
-        title_format_guide = ""
+        # レガシー方式: article_generator.txt + プログラム注入
+        article_instruction = _build_legacy_instruction(
+            free_only=free_only, seo_mode=seo_mode, seo_keyword=seo_keyword,
+            params=params,
+        )
+        content_instruction = ""
+        legacy_mode = True
 
-    # フォールバック: ファイルがない場合の最小定義
-    if not anti_fabrication:
-        anti_fabrication = """
-## 【絶対不可侵】捏造の絶対禁止
-- 数値実績・架空の実体験・収益実績は全て禁止
-- 一般論・読者目線・仮定形で書くこと
-"""
-    if not title_format_guide:
-        title_format_guide = "- タイトルは30文字以内。直近5記事と同じ構造にしない"
-
-    output_format_base = """{
+    # 出力フォーマット
+    if free_only or seo_mode:
+        output_format = """{
   "title": "記事タイトル",
   "genre": "ジャンル名",
   "tags": ["タグ1", "タグ2", "タグ3"],
-  "free_content": "本文（Markdown。タイトルは含めない）",
-  "paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"
+  "free_content": "本文（Markdown。# タイトル見出しは含めない）",
+  "paid_content": ""
+}"""
+    else:
+        output_format = """{
+  "title": "記事タイトル",
+  "genre": "ジャンル名",
+  "tags": ["タグ1", "タグ2", "タグ3"],
+  "free_content": "無料部分の本文（Markdown。# タイトル見出しは含めない）",
+  "paid_content": "有料部分の本文（Markdown）"
 }"""
 
-    if seo_mode:
-        # 完全無料・SEO最適化の集客記事
-        output_format = output_format_base.replace(
-            '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
-            '"paid_content": ""'
-        )
-        if seo_keyword:
-            seo_title_guide = f"""- ターゲットキーワード: 「{seo_keyword}」
-- タイトルにこのキーワード（またはその自然な変形）を必ず含める
-- タイトルは40文字以内
-- 読者が「{seo_keyword}」で検索したときに求めている内容を満たす記事にする"""
-        else:
-            seo_title_guide = """- タイトルは「読者が検索しそうなキーワード」を含める（例: 「副業 始め方」「ChatGPT 使い方 仕事」「note 収益化 初心者」）
-- タイトルは40文字以内
-- 検索意図を満たす具体的な内容にする"""
-        content_instruction = f"""## 制約（SEO集客記事モード）
-{anti_fabrication}
-- これは完全無料記事。paid_contentは必ず空文字
-- free_contentにタイトル（# 見出し）を含めないこと
-{seo_title_guide}
-- 合計文字数は約3500文字（SEOは文字数が重要）
-- 読者がこの記事1本で悩みを解決できる完結した内容にする
-- 末尾に「このアカウントでは〇〇について定期的に発信しています」とフォロー誘導を自然に入れる
-- タグは検索されやすいワードを優先: {json.dumps(params['tags_main'], ensure_ascii=False)}
-- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）
-"""
-    elif free_only:
-        output_format = output_format_base.replace(
-            '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
-            '"paid_content": ""'
-        )
-        content_instruction = f"""## 制約
-- これは無料記事です。paid_contentは空文字にしてください
-- free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
-{title_format_guide}
-- 合計文字数は約{params['target_length_chars']}文字
-- 読者がすぐ実践できる具体的な内容にする
-- 記事末尾に「もっと詳しく知りたい方はプロフィールから有料記事もチェックしてください」という導線を自然に入れる
-- タグは{json.dumps(params['tags_main'], ensure_ascii=False)}から最低1つ + 記事固有のタグ
-- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）
-{anti_fabrication}
-"""
-    else:
-        output_format = output_format_base.replace(
-            '"free_content": "本文（Markdown。タイトルは含めない）"',
-            '"free_content": "無料部分の本文（Markdown。タイトルは含めない）"'
-        ).replace(
-            '"paid_content": "有料部分（SEO/free_only/seo_mode の場合は空文字）"',
-            '"paid_content": "有料部分の本文（Markdown）"'
-        )
-        content_instruction = f"""## 制約
-{anti_fabrication}
-- 無料部分は全体の約{int(params['free_ratio'] * 100)}%
-- free_contentにタイトル（# 見出し）を含めないこと。タイトルはtitleフィールドにのみ記載する
-{title_format_guide}
-- 合計文字数は約{params['target_length_chars']}文字
-- 【有料パートの必須要件】以下のいずれかを必ず含める（「説明の続き」だけにしない）:
-    1. そのまま使えるテンプレート（穴埋め形式など）
-    2. 実際に使えるプロンプト文（ChatGPT用など）
-    3. チェックリスト（10項目以上）
-    4. 具体的なケーススタディ（数値ではなく状況の具体性）
-  → 読者が「これのためだけに買う価値がある」と感じる密度にすること
-- タグは{json.dumps(params['tags_main'], ensure_ascii=False)}から最低1つ + 記事固有のタグ
-- 【絶対禁止】Markdownのテーブル記法（| xxx | xxx |）
-"""
-
-    # 記事フォーマットを毎回ローテーション（単調化防止）
-    import random as _random
-    article_formats = [
-        ("対話形式", """読者（Aさん）とライターの対話形式で書く。
-「Aさん: ○○で困っています」「そうですよね。実は〜」のような往復で展開する。
-説教せず、一緒に考えるトーン。"""),
-        ("ケーススタディ形式", """架空の読者（例: 「本業があるBさん」）のケースを設定し、
-その人が直面する状況→試行錯誤→気づきの流れで書く。
-ビフォーアフターではなく「試行錯誤の途中」として書くこと（完璧な成功談にしない）。"""),
-        ("一点集中形式", """一つのテーマだけを深掘りする。
-「〜について3点」ではなく「〜のこれだけ」という絞り込み構成。
-読者が「これだけ読めばいい」と思える密度にする。"""),
-        ("問いかけ展開形式", """読者への問いを起点に記事を展開する。
-「あなたはこんな経験ありませんか？」から始め、問いに答えながら本題に進む。
-読者が自分ごととして読める構成にする。"""),
-        ("比較・検証形式", """AとBを比べる、または「よく言われること」と「実際」を対比する形式。
-断定せず「こういう傾向がある」「こちらの方が〇〇な場合が多い」の表現を使う。"""),
-    ]
-    chosen_format_name, chosen_format_guide = _random.choice(article_formats)
-
-    format_instruction = f"""
-## 記事フォーマット（今回は「{chosen_format_name}」で書く）
-{chosen_format_guide}
-"""
-
-    reader_section = f"""【このアカウントの読者像】
-{_reader_profile}""" if _reader_profile else """【このアカウントの読者像】
-本業をしながらAI・SNS・noteで副収入を試している20〜30代。
-完璧主義で最初の一歩が踏み出せない人、忙しくて時間がない人。"""
-
-    style_section = f"""## 文体・トーンのルール（重要）
-{_style_rules}""" if _style_rules else """## 文体・トーンのルール（重要）
-- 「〜しましょう」「〜することが大切です」の教訓・説教口調禁止
-- 冒頭の読者悩み代弁は1文に絞る
-- 記事全体を通じて「一緒に考えている」感を出す
-- 同じ構成（悩み代弁→N個のポイント→有料リード）を繰り返さない"""
+    # 記事フォーマットはレガシー方式の場合のみ挿入 (新方式はプロンプト内に含まれる想定)
+    format_instruction = ""
+    if legacy_mode:
+        import random as _random
+        article_formats = [
+            ("対話形式", "読者（Aさん）とライターの対話形式。説教せず一緒に考えるトーン。"),
+            ("ケーススタディ形式", "架空の読者ケースで試行錯誤→気づきを書く（完璧な成功談にしない）。"),
+            ("一点集中形式", "一つのテーマを深掘り。「〜のこれだけ」という絞り込み構成。"),
+            ("問いかけ展開形式", "読者への問いを起点に展開。自分ごととして読める構成。"),
+            ("比較・検証形式", "AとB、または「よく言われること」と「実際」を対比。断定しない。"),
+        ]
+        n, g = _random.choice(article_formats)
+        format_instruction = f"\n## 記事フォーマット（今回は「{n}」で書く）\n{g}\n"
 
     user_steer = ""
     if user_comment:
@@ -299,10 +274,8 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
         )
 
     system_prompt = f"""あなたはNote(note.com)向けの記事ライターです。
-以下の戦略指示書に従って、読者に価値のある記事を1本生成してください。
+以下の指示に従って、読者に価値のある記事を1本生成してください。
 {user_steer}
-{reader_section}
-
 {program}
 
 {top_context}
@@ -312,7 +285,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, free_only: 
 {experiment_hint}
 {format_instruction}
 
-{style_section}
+{article_instruction}
 
 ## 出力フォーマット（厳守）
 以下のJSON形式で出力してください。それ以外のテキストは含めないでください。
