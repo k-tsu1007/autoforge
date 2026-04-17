@@ -193,7 +193,7 @@ def generate_article(strategy: dict, program: str, history: dict, *, topic_hint:
     from core.llm.claude import call_claude_json
     article = call_claude_json(
         "新しいWordPress記事を1本生成してください。",
-        model=gen_params.get("model", "claude-opus-4-5-20251001"),
+        model=gen_params.get("model", "opus"),
         system=system_prompt,
         max_tokens=gen_params.get("max_tokens", 4000),
         temperature=gen_params.get("temperature", 0.8),

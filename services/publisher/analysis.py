@@ -222,7 +222,7 @@ def generate_from_articles(range_days: int = 30, focus_hint: str = "") -> dict:
 - 固有名詞 (具体的な記事タイトル) は使わず、次の記事生成に直接使える知見にする"""
 
     from core.llm.claude import call_claude_json
-    result = call_claude_json(prompt_txt, model="claude-opus-4-5-20251001",
+    result = call_claude_json(prompt_txt, model="opus",
                                max_tokens=2000, temperature=0.5)
 
     if not isinstance(result, dict):
