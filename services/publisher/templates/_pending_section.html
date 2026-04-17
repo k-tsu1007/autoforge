@@ -1,4 +1,7 @@
-<div id="pending-section">
+<div id="pending-section"
+     {% if pending_articles|selectattr("status", "in", ["generating", "publishing"])|list %}
+     hx-get="/api/pending_section" hx-trigger="every 5s" hx-swap="outerHTML"
+     {% endif %}>
   <div class="section-hd">Pending Review ({{ pending_articles|length }})</div>
 
   {% if not pending_articles %}
@@ -6,9 +9,12 @@
   {% endif %}
 
   {% for a in pending_articles %}
-  <div class="card{% if a.status == 'approved' %} approved{% endif %}" id="card-{{ a.note_id }}">
+  <div class="card{% if a.status == 'approved' %} approved{% elif a.status == 'generating' %}" style="border-color:var(--yellow);opacity:.7{% elif a.status == 'publishing' %}" style="border-color:var(--green);opacity:.7{% endif %}" id="card-{{ a.note_id }}">
     <div class="card-title">
-      {% if a.status == 'approved' %}<span style="color:var(--blue);font-size:.7rem;">📅 SCHEDULED</span> {% endif %}
+      {% if a.status == 'generating' %}<span style="color:var(--yellow);font-size:.7rem;">⏳ GENERATING...</span>
+      {% elif a.status == 'publishing' %}<span style="color:var(--green);font-size:.7rem;">📤 PUBLISHING...</span>
+      {% elif a.status == 'approved' %}<span style="color:var(--blue);font-size:.7rem;">📅 SCHEDULED</span>
+      {% endif %}
       {{ a.title }}
     </div>
     <div class="card-meta">
@@ -29,7 +35,11 @@
       {% endif %}
     </details>
     <div class="card-actions">
-      {% if a.status == 'approved' %}
+      {% if a.status == 'generating' %}
+      <span style="font-size:.78rem;color:var(--yellow);">Generating article with Claude... Please wait or reload later.</span>
+      {% elif a.status == 'publishing' %}
+      <span style="font-size:.78rem;color:var(--green);">Publishing to {{ platform }}... Please wait or reload later.</span>
+      {% elif a.status == 'approved' %}
       <button class="btn btn-ng"
               hx-post="/review/{{ a.note_id }}/reject"
               hx-target="#card-{{ a.note_id }}" hx-swap="outerHTML"

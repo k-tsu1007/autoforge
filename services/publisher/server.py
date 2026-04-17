@@ -172,11 +172,11 @@ def ui_review_redirect():
 
 @app.post("/review/{note_id}/approve", response_class=HTMLResponse)
 def ui_approve(note_id: str):
-    """承認。published_at に未来時刻があれば 'approved' でその時刻まで待機。"""
+    """承認。即座に DB status を変更して永続化。"""
     from core.db import get_connection
     conn = get_connection()
     row = conn.execute(
-        "SELECT title, published_at FROM articles WHERE note_id=? AND status='pending_review'",
+        "SELECT title, published_at FROM articles WHERE note_id=? AND status IN ('pending_review', 'generating')",
         (note_id,),
     ).fetchone()
     if not row:
@@ -196,7 +196,7 @@ def ui_approve(note_id: str):
     except Exception:
         pass
 
-    # 予約時刻が未来 → status='approved' にして待機 (auto-poll が時刻判定して投稿)
+    # 予約時刻が未来 → status='approved' にして auto-poll 待ち
     is_scheduled = False
     if scheduled_iso:
         try:
@@ -216,16 +216,22 @@ def ui_approve(note_id: str):
             f'Approved & scheduled: {title[:60]} — will publish at {scheduled_iso[:16]}</div></div>'
         )
 
-    # 即時投稿
+    # 即時投稿: まず status='publishing' に変更 (リロードしても pending に戻らない)
+    conn.execute("UPDATE articles SET status='publishing' WHERE note_id=?", (note_id,))
+    conn.commit()
     threading.Thread(target=_publish_pending, args=(note_id,), daemon=True).start()
     return HTMLResponse(
         f'<div class="card approved"><div class="card-body" style="color:var(--green);">'
-        f'Approved: {title[:60]} — publishing in background...</div></div>'
+        f'Publishing: {title[:60]}...</div></div>'
     )
 
 
 def _publish_pending(note_id: str):
-    """approved/pending_review の記事を投稿 (背景処理)。"""
+    """publishing/approved の記事を実際に投稿する (背景処理)。
+
+    成功 → 行を DELETE + 新規 published 行を記録。
+    失敗 → status を pending_review に戻す (リトライ可能)。
+    """
     from core.db import get_connection
     conn = get_connection()
     row = conn.execute(
@@ -249,23 +255,31 @@ def _publish_pending(note_id: str):
         "content": row["free_content"] or "",
         "magazine_key": magazine_keys[0] if magazine_keys else "",
     }
-    with _lock:
-        platform = _platform()
-        try:
+    platform = _platform()
+    try:
+        with _lock:
             if platform == "wordpress":
                 result = _publish_wordpress(article)
             else:
                 result = _publish_note(article)
-        except Exception as e:
-            print(f"[publisher] _publish_pending error: {e}")
-            return
-    try:
-        c = get_connection()
-        c.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
-        c.commit()
-    except Exception:
-        pass
-    _notify(platform, result)
+        if result.get("ok"):
+            conn.execute("DELETE FROM articles WHERE note_id=?", (note_id,))
+            conn.commit()
+            _notify(platform, result)
+            print(f"[publisher] published: {article['title'][:50]}")
+        else:
+            print(f"[publisher] publish failed: {result}")
+            conn.execute("UPDATE articles SET status='pending_review' WHERE note_id=?", (note_id,))
+            conn.commit()
+    except Exception as e:
+        print(f"[publisher] _publish_pending error: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            conn.execute("UPDATE articles SET status='pending_review' WHERE note_id=?", (note_id,))
+            conn.commit()
+        except Exception:
+            pass
 
 
 @app.post("/review/{note_id}/reject", response_class=HTMLResponse)
@@ -725,8 +739,8 @@ def ui_generate(request: Request):
     rows = conn.execute(
         "SELECT note_id, title, genre, tags, free_content, paid_content, "
         "created_at, published_at, status "
-        "FROM articles WHERE status IN ('pending_review', 'approved') "
-        "ORDER BY status='pending_review' DESC, created_at DESC"
+        "FROM articles WHERE status IN ('generating', 'pending_review', 'approved', 'publishing') "
+        "ORDER BY created_at DESC"
     ).fetchall()
     pending_articles = [dict(r) for r in rows]
 
@@ -843,79 +857,104 @@ def ui_do_generate(
     override_price: int = Form(0),
     magazine_key: str = Form(""),
 ):
-    try:
-        from services.publisher import automation
-        strategy = {}  # プロンプトが自己完結なので戦略設定は不要 (後方互換のためのみ)
-        history = _load_history()
-        program = ""  # persona もプロンプト内に記述する方針
+    """Generate を非同期化。DB に status='generating' で即登録 → 背景で LLM 呼び出し → 完了後 'pending_review'。"""
+    from services.publisher import automation
+    from core.db import upsert_article
 
-        platform = _platform()
+    # プロンプトを決定
+    chosen_prompt = prompt_name or _pick_prompt_by_weight()
+    prompt_mode = automation.get_prompt_mode(chosen_prompt) if chosen_prompt else "mixed"
+    scheduled_iso = _resolve_schedule(schedule_mode, scheduled_at)
 
-        # プロンプトを決定 (明示指定 → weight によるランダム)
-        chosen_prompt = prompt_name or _pick_prompt_by_weight()
-        # プロンプト別 mode 判定 (free / mixed)
-        prompt_mode = automation.get_prompt_mode(chosen_prompt) if chosen_prompt else "mixed"
+    # 即座に DB に 'generating' 行を作る (リロードしても見える)
+    pending_id = f"pending_{int(_now().timestamp() * 1000)}"
+    genre = chosen_prompt or ""
+    tags_extras = []
+    if magazine_key:
+        tags_extras.append(f"mag:{magazine_key}")
 
-        if platform == "wordpress":
-            if chosen_prompt:
-                strategy.setdefault("content_params", {})["article_type"] = chosen_prompt
-            from platforms.wordpress.generator import generate_article
-            article = generate_article(strategy, program, history, topic_hint=topic_hint)
-        else:
-            from platforms.note.generator import generate_article
-            article = generate_article(
-                strategy, program, history,
-                topic_hint=topic_hint,
-                user_comment=user_comment,
-                instruction=instruction,
-                free_only=(prompt_mode == "free"),
-                prompt_name=chosen_prompt,
-                knowledge_set_id=knowledge_set_id,
-                override_free_chars=override_free_chars,
-                override_paid_chars=override_paid_chars,
-                override_price=override_price,
-            )
+    upsert_article({
+        "note_id": pending_id,
+        "title": "(generating...)",
+        "genre": genre,
+        "tags": tags_extras,
+        "note_url": "",
+        "status": "generating",
+        "published_at": scheduled_iso,
+        "created_at": _now().isoformat(),
+        "free_content": "",
+        "paid_content": "",
+        "views": 0, "likes": 0, "comments": 0, "revenue": 0,
+    })
 
-        # 投稿予約時刻を解決
-        scheduled_iso = _resolve_schedule(schedule_mode, scheduled_at)
+    # 背景スレッドで LLM 呼び出し → 完了後に DB 更新
+    def _bg_generate():
+        try:
+            history = _load_history()
+            platform = _platform()
+            strategy = {}
 
-        # pending_review として保存
-        from core.db import upsert_article
-        pending_id = f"pending_{int(_now().timestamp() * 1000)}"
-        categories = article.get("categories", [])
-        # genre は使ったプロンプト名 (article_free / article_mixed) を入れる
-        genre = chosen_prompt or article.get("genre", "")
-        tags = list(article.get("tags", []))
-        tags_extras = [f"cat:{c}" for c in categories]
-        if magazine_key:
-            tags_extras.append(f"mag:{magazine_key}")
+            if platform == "wordpress":
+                if chosen_prompt:
+                    strategy.setdefault("content_params", {})["article_type"] = chosen_prompt
+                from platforms.wordpress.generator import generate_article
+                article = generate_article(strategy, "", history, topic_hint=topic_hint)
+            else:
+                from platforms.note.generator import generate_article
+                article = generate_article(
+                    strategy, "", history,
+                    topic_hint=topic_hint,
+                    user_comment=user_comment,
+                    instruction=instruction,
+                    free_only=(prompt_mode == "free"),
+                    prompt_name=chosen_prompt,
+                    knowledge_set_id=knowledge_set_id,
+                    override_free_chars=override_free_chars,
+                    override_paid_chars=override_paid_chars,
+                    override_price=override_price,
+                )
 
-        upsert_article({
-            "note_id": pending_id,
-            "title": article.get("title", ""),
-            "genre": genre,
-            "tags": tags + tags_extras,
-            "note_url": "",
-            "status": "pending_review",
-            "published_at": scheduled_iso,
-            "created_at": _now().isoformat(),
-            "free_content": article.get("free_content", article.get("content", "")),
-            "paid_content": article.get("paid_content", ""),
-            "views": 0, "likes": 0, "comments": 0, "revenue": 0,
-        })
+            categories = article.get("categories", [])
+            tags = list(article.get("tags", []))
+            tags_all = tags + tags_extras + [f"cat:{c}" for c in categories]
 
-        # 更新された pending section を返す (フォーム側 hx-target="#pending-section")
-        return _render_pending_section(request)
+            upsert_article({
+                "note_id": pending_id,
+                "title": article.get("title", "Untitled"),
+                "genre": genre,
+                "tags": tags_all,
+                "note_url": "",
+                "status": "pending_review",
+                "published_at": scheduled_iso,
+                "created_at": _now().isoformat(),
+                "free_content": article.get("free_content", article.get("content", "")),
+                "paid_content": article.get("paid_content", ""),
+                "views": 0, "likes": 0, "comments": 0, "revenue": 0,
+            })
+            print(f"[publisher] generated: {article.get('title', '')[:50]}")
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(
-            f'<div id="pending-section">'
-            f'<div class="card" style="border-color:var(--red);">'
-            f'<div class="card-body" style="color:var(--red);">Generation failed: {str(e)[:300]}</div></div>'
-            f'</div>'
-        )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # 失敗 → generating 行を削除
+            try:
+                from core.db import get_connection
+                c = get_connection()
+                c.execute("DELETE FROM articles WHERE note_id=?", (pending_id,))
+                c.commit()
+            except Exception:
+                pass
+
+    threading.Thread(target=_bg_generate, daemon=True).start()
+
+    # 即座に pending section を返す (generating 状態が見える)
+    return _render_pending_section(request)
+
+
+@app.get("/api/pending_section", response_class=HTMLResponse)
+def api_pending_section(request: Request):
+    """HTMX polling 用: generating/publishing 中に 5 秒ごとに呼ばれる。"""
+    return _render_pending_section(request)
 
 
 def _render_pending_section(request: Request):
@@ -925,8 +964,8 @@ def _render_pending_section(request: Request):
     rows = conn.execute(
         "SELECT note_id, title, genre, tags, free_content, paid_content, "
         "created_at, published_at, status "
-        "FROM articles WHERE status IN ('pending_review', 'approved') "
-        "ORDER BY status='pending_review' DESC, created_at DESC"
+        "FROM articles WHERE status IN ('generating', 'pending_review', 'approved', 'publishing') "
+        "ORDER BY created_at DESC"
     ).fetchall()
     return _render(request, "_pending_section.html",
                    pending_articles=[dict(r) for r in rows])
