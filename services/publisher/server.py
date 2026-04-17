@@ -315,24 +315,30 @@ def ui_regenerate(request: Request, note_id: str, user_comment: str = Form("")):
 
     old_title = row["title"] or ""
     prompt_name = row["genre"] or ""
-    # prompt_name が未設定 or 無効なら妥当なデフォルト
-    if prompt_name not in ("article_free", "article_mixed", "article_generator"):
-        prompt_name = "article_mixed"
-
     try:
         history = _load_history()
         platform = _platform()
+        regen_instruction = f"既存タイトル「{old_title}」と違う切り口で書き直してください。{user_comment}".strip()
+
         if platform == "wordpress":
+            # WordPress の prompt_name は article_type (beginner/comparison/news/handson)
+            wp_prompts = {"beginner", "comparison", "news", "handson"}
+            if prompt_name not in wp_prompts:
+                prompt_name = ""  # auto
             from platforms.wordpress.generator import generate_article
             new_article = generate_article(
                 {}, "", history,
-                topic_hint=f"既存タイトル「{old_title}」と違う切り口で書き直し。 {user_comment}".strip(),
+                instruction=regen_instruction,
+                prompt_name=prompt_name,
             )
         else:
+            note_prompts = {"article_free", "article_mixed", "article_generator"}
+            if prompt_name not in note_prompts:
+                prompt_name = "article_mixed"
             from platforms.note.generator import generate_article
             new_article = generate_article(
                 {}, "", history,
-                instruction=f"既存タイトル「{old_title}」と違う切り口で書き直してください。{user_comment}".strip(),
+                instruction=regen_instruction,
                 free_only=(prompt_name == "article_free"),
                 prompt_name=prompt_name,
             )
@@ -792,7 +798,13 @@ def ui_generate_preview(
         if platform == "wordpress":
             from platforms.wordpress.generator import generate_article
             try:
-                generate_article({}, "", history, topic_hint=topic_hint)
+                generate_article(
+                    {}, "", history,
+                    topic_hint=topic_hint,
+                    instruction=instruction,
+                    prompt_name=chosen_prompt,
+                    knowledge_set_id=knowledge_set_id,
+                )
             except Exception as e:
                 pass
         else:
@@ -895,10 +907,14 @@ def ui_do_generate(
             strategy = {}
 
             if platform == "wordpress":
-                if chosen_prompt:
-                    strategy.setdefault("content_params", {})["article_type"] = chosen_prompt
                 from platforms.wordpress.generator import generate_article
-                article = generate_article(strategy, "", history, topic_hint=topic_hint)
+                article = generate_article(
+                    {}, "", history,
+                    topic_hint=topic_hint,
+                    instruction=instruction,
+                    prompt_name=chosen_prompt,
+                    knowledge_set_id=knowledge_set_id,
+                )
             else:
                 from platforms.note.generator import generate_article
                 article = generate_article(
