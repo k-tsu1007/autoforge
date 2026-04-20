@@ -170,17 +170,33 @@ def generate_from_articles(range_days: int = 30, focus_hint: str = "") -> dict:
     """
     from core.db import get_connection
     conn = get_connection()
-    # PV/スキのあるものを優先
+    # status='published' OR NULL (旧データ互換) で、PV/Like があるものを対象
     cutoff = (datetime.now(JST) - timedelta(days=range_days)).isoformat()
     rows = conn.execute(
-        "SELECT title, genre, tags, views, likes, free_content "
-        "FROM articles WHERE status='published' "
-        "AND COALESCE(published_at, created_at) >= ? "
-        "ORDER BY COALESCE(published_at, created_at) DESC",
+        "SELECT title, genre, tags, views, likes, free_content, "
+        "COALESCE(NULLIF(published_at, ''), created_at) AS pub_date "
+        "FROM articles "
+        "WHERE (status='published' OR status IS NULL) "
+        "AND title IS NOT NULL "
+        "AND COALESCE(NULLIF(published_at, ''), created_at) >= ? "
+        "ORDER BY pub_date DESC",
         (cutoff,),
     ).fetchall()
+
+    # 日付フィルタに引っかからない場合、日付無視で PV/Like > 0 のものを全取得
     if not rows:
-        raise RuntimeError("分析対象の記事がありません (範囲内に published 記事なし)")
+        rows = conn.execute(
+            "SELECT title, genre, tags, views, likes, free_content, "
+            "COALESCE(NULLIF(published_at, ''), created_at) AS pub_date "
+            "FROM articles "
+            "WHERE (status='published' OR status IS NULL) "
+            "AND title IS NOT NULL "
+            "AND (views > 0 OR likes > 0) "
+            "ORDER BY views DESC",
+        ).fetchall()
+
+    if not rows:
+        raise RuntimeError("分析対象の記事がありません")
 
     articles_summary = []
     for r in rows[:30]:  # 最大30件
