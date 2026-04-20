@@ -1371,6 +1371,94 @@ def _parse_tags(raw) -> list[str]:
 _poll_interval_sec = int(os.environ.get("PUBLISHER_POLL_INTERVAL", "300"))
 
 
+def _auto_generate_if_slot():
+    """スロット時刻に一致していたら記事を自動生成 → 即投稿 (レビュー不要)。
+
+    automation.json の slots と現在時刻を照合。
+    今日そのスロットで既に投稿済みならスキップ。
+    """
+    try:
+        from services.publisher import automation
+        slots = automation.get_slots()
+        if not slots:
+            return
+
+        now = _now()
+        current_hm = now.strftime("%H:%M")
+
+        # 10 分刻みのスロット照合 (例: slot=09:00, 現在=09:03 → 一致)
+        matched_slot = None
+        for s in sorted(slots):
+            # 現在時刻がスロットの ±5 分以内ならマッチ
+            sh, sm = int(s[:2]), int(s[3:5])
+            from datetime import datetime as _dt
+            slot_time = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            diff = abs((now - slot_time).total_seconds())
+            if diff <= 300:  # 5分以内
+                matched_slot = s
+                break
+
+        if not matched_slot:
+            return
+
+        # 今日このスロットで既に生成/投稿済みか確認
+        from core.db import get_connection
+        conn = get_connection()
+        today = now.strftime("%Y-%m-%d")
+        existing = conn.execute(
+            "SELECT COUNT(*) AS c FROM articles "
+            "WHERE substr(COALESCE(published_at, created_at), 1, 10) = ? "
+            "AND substr(COALESCE(published_at, created_at), 12, 5) BETWEEN ? AND ?",
+            (today,
+             f"{int(matched_slot[:2]):02d}:{max(0,int(matched_slot[3:5])-5):02d}",
+             f"{int(matched_slot[:2]):02d}:{min(59,int(matched_slot[3:5])+5):02d}"),
+        ).fetchone()["c"]
+        if existing > 0:
+            return
+
+        print(f"[publisher] slot {matched_slot} matched → auto-generate starting")
+
+        # プロンプトを重み付きで選択
+        chosen_prompt = _pick_prompt_by_weight()
+        prompt_mode = "mixed"
+        try:
+            prompt_mode = automation.get_prompt_mode(chosen_prompt)
+        except Exception:
+            pass
+
+        platform = _platform()
+        history = _load_history()
+
+        if platform == "wordpress":
+            from platforms.wordpress.generator import generate_article
+            article = generate_article({}, "", history, prompt_name=chosen_prompt)
+        else:
+            from platforms.note.generator import generate_article
+            article = generate_article(
+                {}, "", history,
+                free_only=(prompt_mode == "free"),
+                prompt_name=chosen_prompt,
+            )
+
+        # 即投稿 (automation はレビュー不要)
+        with _lock:
+            if platform == "wordpress":
+                result = _publish_wordpress(article)
+            else:
+                result = _publish_note(article)
+
+        if result.get("ok"):
+            _notify(platform, result)
+            print(f"[publisher] auto-generated & published: {article.get('title', '')[:50]}")
+        else:
+            print(f"[publisher] auto-generate publish failed: {result}")
+
+    except Exception as e:
+        import traceback
+        print(f"[publisher] auto-generate error: {e}")
+        traceback.print_exc()
+
+
 def _publish_overdue_scheduled():
     """status='approved' で published_at が過去の記事を投稿する。"""
     from core.db import get_connection
@@ -1393,11 +1481,15 @@ def _auto_poll_loop():
     while True:
         time.sleep(_poll_interval_sec)
         try:
-            print(f"[publisher] auto-poll at {_now().strftime('%H:%M:%S')}")
+            now_str = _now().strftime('%H:%M:%S')
+            print(f"[publisher] auto-poll at {now_str}")
+            _auto_generate_if_slot()
             _publish_overdue_scheduled()
             api_poll()
         except Exception as e:
+            import traceback
             print(f"[publisher] auto-poll error: {e}")
+            traceback.print_exc()
 
 
 @app.on_event("startup")
