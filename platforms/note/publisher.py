@@ -213,7 +213,7 @@ def publish_via_noteclient(article: dict) -> dict:
         hashtags = article.get("tags", [])
         is_publish = "--draft" not in sys.argv
 
-        # サムネイル生成
+        # サムネイル生成 (SD 無効化 → Pillow のみで高速生成)
         eyecatch_path = None
         try:
             from core.image.thumbnail import generate_thumbnail
@@ -221,6 +221,7 @@ def publish_via_noteclient(article: dict) -> dict:
                 article["title"],
                 genre=article.get("genre", ""),
                 tags=article.get("tags", []),
+                use_sd=False,  # SD は 3 分かかるため無効化。Gemini に移行予定
             )
         except Exception as e:
             print(f"サムネイル生成スキップ: {e}")

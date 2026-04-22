@@ -1459,6 +1459,32 @@ def _auto_generate_if_slot():
         traceback.print_exc()
 
 
+def _recover_stuck_publishing():
+    """10分以上 'publishing' のまま放置された記事を 'pending_review' に戻す。
+
+    deploy やプロセス再起動でバックグラウンドスレッドが死んだ場合の復旧。
+    """
+    try:
+        from core.db import get_connection
+        conn = get_connection()
+        cutoff = (_now() - timedelta(minutes=10)).isoformat()
+        stuck = conn.execute(
+            "SELECT note_id, title FROM articles "
+            "WHERE status='publishing' AND created_at < ?",
+            (cutoff,),
+        ).fetchall()
+        for row in stuck:
+            conn.execute(
+                "UPDATE articles SET status='pending_review' WHERE note_id=?",
+                (row["note_id"],),
+            )
+            print(f"[publisher] recovered stuck: {row['title'][:40]}")
+        if stuck:
+            conn.commit()
+    except Exception as e:
+        print(f"[publisher] recover error: {e}")
+
+
 def _publish_overdue_scheduled():
     """status='approved' で published_at が過去の記事を投稿する。"""
     from core.db import get_connection
@@ -1483,6 +1509,7 @@ def _auto_poll_loop():
         try:
             now_str = _now().strftime('%H:%M:%S')
             print(f"[publisher] auto-poll at {now_str}")
+            _recover_stuck_publishing()
             _auto_generate_if_slot()
             _publish_overdue_scheduled()
             api_poll()
