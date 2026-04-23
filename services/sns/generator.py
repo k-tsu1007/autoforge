@@ -66,6 +66,21 @@ def delete_prompt(name: str):
             fp.unlink()
 
 
+def _recent_posts_context() -> str:
+    """直近の投稿テキストを取得 (類似回避用)。"""
+    try:
+        from core.db import get_connection
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT text FROM sns_posts WHERE status='posted' ORDER BY id DESC LIMIT 15"
+        ).fetchall()
+        if rows:
+            return "\n".join(f"- {r['text'][:80]}" for r in rows)
+    except Exception:
+        pass
+    return ""
+
+
 def generate_tweet(article: dict, prompt_name: str = "article_promo") -> str:
     """記事情報からツイート文を生成する。
 
@@ -77,18 +92,23 @@ def generate_tweet(article: dict, prompt_name: str = "article_promo") -> str:
     """
     prompt_template = get_prompt(prompt_name)
     if not prompt_template:
-        # フォールバック: シンプルなツイート
         title = article.get("title", "")
         url = article.get("url", "")
         return f"{title}\n\n{url}"
 
     system = prompt_template
 
+    recent = _recent_posts_context()
     user = (
         f"記事タイトル: {article.get('title', '')}\n"
         f"記事URL: {article.get('url', '')}\n"
         f"記事の冒頭: {article.get('excerpt', '')[:300]}\n"
     )
+    if recent:
+        user += (
+            f"\n## 直近の投稿 (これらと同じ内容・構文パターンは避ける)\n"
+            f"{recent}\n"
+        )
 
     try:
         from core.llm.claude import call_claude

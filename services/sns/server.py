@@ -451,10 +451,22 @@ def _auto_generate_standalone():
         print("[sns] standalone prompt not found, skipping")
         return
 
+    # 直近の投稿を取得して LLM に渡す (類似投稿の回避)
+    recent = conn.execute(
+        "SELECT text FROM sns_posts WHERE status='posted' ORDER BY id DESC LIMIT 15"
+    ).fetchall()
+    recent_texts = "\n".join(f"- {r['text'][:80]}" for r in recent) if recent else "(まだ投稿なし)"
+
+    user_prompt = (
+        f"## 直近の投稿 (これらと同じ内容・同じ切り口・同じ構文パターンは避ける)\n"
+        f"{recent_texts}\n\n"
+        f"上記と被らない新しいツイートを 1 つ生成してください。"
+    )
+
     try:
         from core.llm.claude import call_claude
         tweet_text = call_claude(
-            "新しいツイートを 1 つ生成してください。",
+            user_prompt,
             model="sonnet",
             system=prompt_content,
             temperature=0.9,
