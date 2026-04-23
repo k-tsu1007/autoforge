@@ -242,10 +242,33 @@ def publish_via_noteclient(article: dict) -> dict:
         except Exception as e:
             print(f"  マガジン分類スキップ: {e}")
 
+        # is_refund を有料記事の場合 True にするためモンキーパッチ
+        _orig_publish = client.publish.__func__
+        import types
+
+        def _publish_with_refund(self, *args, **kwargs):
+            result = _orig_publish(self, *args, **kwargs)
+            # 有料記事なら is_refund=True で更新
+            if result.get("ok") and price > 0:
+                note_id = (result.get("data") or {}).get("note_id")
+                if note_id:
+                    try:
+                        self.http.put(
+                            f"https://note.com/api/v1/text_notes/{note_id}",
+                            headers=self.headers,
+                            json={"is_refund": True},
+                        )
+                        print("  返金申請受付: ON")
+                    except Exception as e:
+                        print(f"  返金申請設定失敗: {e}")
+            return result
+
+        client.publish = types.MethodType(_publish_with_refund, client)
+
         result = client.publish(
             title=article["title"],
             md_file_path=md_path,
-            eyecatch_path=eyecatch_path,  # モンキーパッチ済み(1280x670)で送信
+            eyecatch_path=eyecatch_path,
             hashtags=hashtags,
             price=price,
             magazine_key=magazine_keys,
