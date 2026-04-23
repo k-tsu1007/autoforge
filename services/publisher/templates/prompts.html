@@ -140,20 +140,16 @@
       </label>
 
       {% if p.mode_applicable %}
+      <label style="font-size:.72rem;color:var(--muted);margin-left:1rem;">
+        <span class="cfg-free-label">{% if p.mode == 'free' %}合計文字数{% else %}無料部分{% endif %}</span>:
+        <input type="number" name="free_chars" min="0" max="20000" value="{{ p.settings.free_chars }}" class="cfg-num"> 文字
+      </label>
       <span class="cfg-mixed-fields" {% if p.mode != 'mixed' %}style="display:none"{% endif %}>
-        <label style="font-size:.72rem;color:var(--muted);margin-left:1rem;">無料部分:
-          <input type="number" name="free_chars" min="0" max="20000" value="{{ p.settings.free_chars }}" class="cfg-num"> 文字
-        </label>
         <label style="font-size:.72rem;color:var(--muted);margin-left:.6rem;">有料部分:
           <input type="number" name="paid_chars" min="0" max="20000" value="{{ p.settings.paid_chars }}" class="cfg-num"> 文字
         </label>
         <label style="font-size:.72rem;color:var(--muted);margin-left:.6rem;">価格:
           <input type="number" name="price" min="0" max="50000" step="100" value="{{ p.settings.price }}" class="cfg-num"> 円
-        </label>
-      </span>
-      <span class="cfg-free-fields" {% if p.mode == 'mixed' %}style="display:none"{% endif %}>
-        <label style="font-size:.72rem;color:var(--muted);margin-left:1rem;">合計文字数:
-          <input type="number" name="free_chars" min="0" max="20000" value="{{ p.settings.free_chars }}" class="cfg-num wide"> 文字
         </label>
       </span>
       {% endif %}
@@ -205,9 +201,9 @@
 <script>
 function updateModeFields(form, mode) {
   const mixedSpan = form.querySelector('.cfg-mixed-fields');
-  const freeSpan = form.querySelector('.cfg-free-fields');
+  const label = form.querySelector('.cfg-free-label');
   if (mixedSpan) mixedSpan.style.display = (mode === 'mixed') ? '' : 'none';
-  if (freeSpan) freeSpan.style.display = (mode === 'free') ? '' : 'none';
+  if (label) label.textContent = (mode === 'free') ? '合計文字数' : '無料部分';
 }
 </script>
 
