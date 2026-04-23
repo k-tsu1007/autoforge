@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Posts — SNS Service{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+  <h2 style="margin:0;font-size:1.1rem;">Post History</h2>
+  <div style="display:flex;gap:.5rem;align-items:center;">
+    {% if x_configured %}
+    <span class="badge-ok">X API: Connected</span>
+    {% else %}
+    <span class="badge-fail">X API: Not configured</span>
+    {% endif %}
+    <a href="/generate" class="btn btn-primary">+ New Post</a>
+  </div>
+</div>
+
+{% if not posts %}
+<div class="empty">No posts yet. <a href="/generate">Create one</a> or wait for auto-posting from published articles.</div>
+{% else %}
+<table class="post-table">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Platform</th>
+      <th>Text</th>
+      <th>Source</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in posts %}
+    <tr>
+      <td class="post-meta">{{ p.posted_at[:16] if p.posted_at else '-' }}</td>
+      <td class="post-meta">{{ p.platform or '-' }}</td>
+      <td class="post-text">
+        {% if p.post_url %}<a href="{{ p.post_url }}" target="_blank">{{ p.text[:120] }}</a>{% else %}{{ p.text[:120] }}{% endif %}
+        {% if p.text|length > 120 %}...{% endif %}
+      </td>
+      <td class="post-meta">{{ p.source_type }} / {{ p.prompt_name or '-' }}</td>
+      <td>{% if p.status == 'posted' %}<span class="badge-ok">OK</span>{% else %}<span class="badge-fail">{{ p.status }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% endblock %}

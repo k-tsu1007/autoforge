@@ -15,6 +15,9 @@ wmic process call create "%PY% -m services.publisher --instance fuku_ai_sns","C:
 echo [restart] starting ai_bento publisher...
 wmic process call create "%PY% -m services.publisher --instance ai_bento","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
 
+echo [restart] starting fuku_ai_sns SNS service...
+wmic process call create "%PY% -m services.sns --instance fuku_ai_sns --port 8020","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+
 REM --- autoforge (daemon/webapp) は停止中 ---
 REM echo [restart] starting fuku_ai_sns daemon...
 REM wmic process call create "%PY% -m tools.run_daemon --instance fuku_ai_sns","C:\Users\Tsubasa\autoforge" | findstr ReturnValue

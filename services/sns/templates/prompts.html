@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Prompts — SNS Service{% endblock %}
+{% block head %}
+<style>
+.add-card { background: var(--surface); border: 1px dashed var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+.p-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+.p-hd { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+.p-name { font-weight: 700; font-size: .92rem; }
+.save-ok { color: var(--green); font-size: .78rem; display: none; }
+</style>
+{% endblock %}
+{% block content %}
+
+<h2 style="margin-top:0;font-size:1.1rem;">SNS Prompts</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  ツイート生成用のプロンプト。記事連動投稿や手動投稿で使われます。
+</p>
+
+<div class="add-card">
+  <form hx-post="/prompts/add" hx-target="body" hx-swap="outerHTML" style="display:flex;gap:.5rem;align-items:center;">
+    <input type="text" name="name" placeholder="prompt_name (e.g. thread, reply)" required pattern="[a-z0-9_]+" style="flex:1;">
+    <button type="submit" class="btn btn-primary">+ Add</button>
+  </form>
+</div>
+
+{% for p in prompts %}
+<div class="p-card">
+  <div class="p-hd">
+    <span class="p-name">{{ p.name }}</span>
+    <span style="font-size:.68rem;color:var(--dim);">{{ p.filename }}</span>
+    <span style="margin-left:auto;">
+      <button class="btn btn-ng" hx-post="/prompts/{{ p.name }}/delete"
+              hx-confirm="Delete?" hx-target="body" hx-swap="outerHTML">Delete</button>
+    </span>
+  </div>
+  <form hx-post="/prompts/{{ p.name }}/save" hx-swap="none"
+        hx-on::after-request="this.querySelector('.save-ok').style.display='inline';setTimeout(()=>{this.querySelector('.save-ok').style.display='none'},2000)">
+    <textarea name="text" rows="12">{{ p.content }}</textarea>
+    <div style="margin-top:.4rem;display:flex;gap:.5rem;align-items:center;">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span class="save-ok">Saved</span>
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+{% if not prompts %}
+<div class="empty">No prompts yet. Add one above. "article_promo" is used for auto-posting.</div>
+{% endif %}
+
+{% endblock %}

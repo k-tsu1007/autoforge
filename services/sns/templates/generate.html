@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Post — SNS Service{% endblock %}
+{% block head %}
+<style>
+.gen-input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: .5rem .8rem; font-size: .82rem; }
+.gen-field { margin-bottom: 1rem; }
+.gen-label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: .3rem; font-weight: 600; }
+</style>
+{% endblock %}
+{% block content %}
+
+<h2 style="margin-top:0;font-size:1.1rem;">Post to X</h2>
+<p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
+  記事を選んでツイートを自動生成するか、自由テキストで投稿。
+</p>
+
+<form hx-post="/generate" hx-target="#result" hx-swap="innerHTML">
+
+  <div class="gen-field">
+    <label class="gen-label">記事を選択 (記事連動投稿)</label>
+    <select class="gen-input" name="source_id">
+      <option value="">— 記事を選ばずに自由テキストで投稿 —</option>
+      {% for a in articles %}
+      <option value="{{ a.note_id }}">{{ a.title[:60] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% if prompts %}
+  <div class="gen-field">
+    <label class="gen-label">Prompt</label>
+    <select class="gen-input" name="prompt_name">
+      {% for p in prompts %}
+      <option value="{{ p.name }}" {% if p.name == 'article_promo' %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="gen-field">
+    <label class="gen-label">自由テキスト (記事未選択の場合、これがそのまま投稿される)</label>
+    <textarea class="gen-input" name="custom_text" rows="4"
+              placeholder="直接ツイートしたいテキストを入力..."></textarea>
+  </div>
+
+  <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">Post to X</button>
+</form>
+
+<div id="result" style="margin-top:1rem;"></div>
+
+{% endblock %}
