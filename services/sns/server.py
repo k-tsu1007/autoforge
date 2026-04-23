@@ -404,6 +404,87 @@ def _poll_new_articles():
         time.sleep(5)
 
 
+def _auto_generate_standalone():
+    """スロット時刻に単独ツイートを自動生成 → 即投稿。"""
+    from services.sns import automation, generator, x_client
+
+    if not x_client.is_configured():
+        return
+
+    slots = automation.get_slots()
+    if not slots:
+        return
+
+    now = _now()
+    matched_slot = None
+    for s in sorted(slots):
+        sh, sm = int(s[:2]), int(s[3:5])
+        slot_time = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+        diff = abs((now - slot_time).total_seconds())
+        if diff <= 300:  # ±5分
+            matched_slot = s
+            break
+
+    if not matched_slot:
+        return
+
+    # 今日このスロットで既に投稿済みか (article promo 含む)
+    from core.db import get_connection
+    conn = get_connection()
+    today = now.strftime("%Y-%m-%d")
+    existing = conn.execute(
+        "SELECT COUNT(*) AS c FROM sns_posts "
+        "WHERE substr(COALESCE(posted_at, scheduled_at), 1, 10) = ? "
+        "AND substr(COALESCE(posted_at, scheduled_at), 12, 5) BETWEEN ? AND ?",
+        (today,
+         f"{int(matched_slot[:2]):02d}:{max(0,int(matched_slot[3:5])-5):02d}",
+         f"{int(matched_slot[:2]):02d}:{min(59,int(matched_slot[3:5])+5):02d}"),
+    ).fetchone()["c"]
+    if existing > 0:
+        return
+
+    print(f"[sns] slot {matched_slot} → generating standalone tweet")
+
+    # standalone プロンプトで生成
+    prompt_content = generator.get_prompt("standalone")
+    if not prompt_content:
+        print("[sns] standalone prompt not found, skipping")
+        return
+
+    try:
+        from core.llm.claude import call_claude
+        tweet_text = call_claude(
+            "新しいツイートを 1 つ生成してください。",
+            model="sonnet",
+            system=prompt_content,
+            temperature=0.9,
+            max_tokens=200,
+        ).strip().strip('"').strip("'")
+    except Exception as e:
+        print(f"[sns] standalone generation failed: {e}")
+        return
+
+    if not tweet_text:
+        return
+
+    result = x_client.post_tweet(tweet_text)
+    status = "posted" if result.get("ok") else "failed"
+    _insert_post("standalone", f"slot_{matched_slot}_{today}", "x",
+                 tweet_text, "standalone", status=status)
+
+    if result.get("ok"):
+        from core.db import get_connection as gc
+        c = gc()
+        c.execute(
+            "UPDATE sns_posts SET post_url=?, posted_at=? WHERE id=(SELECT MAX(id) FROM sns_posts)",
+            (result.get("tweet_url", ""), now.isoformat()),
+        )
+        c.commit()
+        print(f"[sns] standalone posted: {result.get('tweet_url', '')}")
+    else:
+        print(f"[sns] standalone failed: {result.get('error', '')[:100]}")
+
+
 def _post_scheduled():
     """status='approved' + scheduled_at が過去のものを投稿。"""
     from core.db import get_connection
@@ -441,6 +522,7 @@ def _auto_poll_loop():
         try:
             print(f"[sns] auto-poll at {_now().strftime('%H:%M:%S')}")
             _poll_new_articles()
+            _auto_generate_standalone()
             _post_scheduled()
         except Exception as e:
             import traceback
