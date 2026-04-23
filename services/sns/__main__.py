@@ -36,6 +36,14 @@ def main() -> int:
     for k, v in inst.env().items():
         os.environ.setdefault(k, v)
 
+    # SNS Service 独自の .env (X_API_KEY 等はここに置く)
+    sns_env = Path(__file__).parent / ".env"
+    if sns_env.exists():
+        from tools._env_loader import _parse_dotenv
+        for k, v in _parse_dotenv(sns_env).items():
+            os.environ[k] = v  # インスタンス .env より優先
+        print(f"[sns] loaded {sns_env}")
+
     port = args.port or DEFAULT_PORT
     print(f"[sns] instance={inst.name} port={port}")
 
