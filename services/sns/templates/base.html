@@ -27,6 +27,8 @@ a:hover { text-decoration: underline; }
 .btn { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem .8rem; border-radius: 6px; border: 1px solid var(--border); font-size: .78rem; font-weight: 600; cursor: pointer; transition: all .15s; background: var(--surface2); color: var(--muted); }
 .btn:hover { border-color: var(--muted); color: var(--text); }
 .btn-primary { border-color: var(--blue); color: #000; background: var(--blue); }
+.btn-ok { border-color: #4ade8033; color: var(--green); background: #0c2016; }
+.btn-ok:hover { background: #0f2e1c; }
 .btn-ng { border-color: #f8717133; color: var(--red); background: #1c0808; }
 textarea, input[type="text"] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: .6rem .8rem; font-family: var(--font-mono); font-size: .8rem; line-height: 1.6; resize: vertical; }
 textarea:focus, input:focus { outline: none; border-color: var(--blue); }
@@ -48,8 +50,9 @@ textarea:focus, input:focus { outline: none; border-color: var(--blue); }
   <div class="hdr-logo"><span>SNS</span> &middot; {{ instance }}</div>
   <nav class="hdr-nav">
     <a href="/" class="{% if active == 'home' %}active{% endif %}">Posts</a>
+    <a href="/generate" class="{% if active == 'generate' %}active{% endif %}">Generate</a>
     <a href="/prompts" class="{% if active == 'prompts' %}active{% endif %}">Prompts</a>
-    <a href="/generate" class="{% if active == 'generate' %}active{% endif %}">Post</a>
+    <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Automation</a>
   </nav>
 </header>
 <main class="main">{% block content %}{% endblock %}</main>

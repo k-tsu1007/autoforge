@@ -1,0 +1,12 @@
+<div class="slot-list" id="slot-list">
+  {% for s in slots %}
+  <span class="slot-chip">
+    {{ s }}
+    <button class="slot-x" hx-post="/settings/slots/remove" hx-vals='{"time": "{{ s }}"}'
+            hx-target="#slot-list" hx-swap="outerHTML">×</button>
+  </span>
+  {% endfor %}
+  {% if not slots %}
+  <span style="font-size:.78rem;color:var(--dim);">No slots. Approved posts will be sent immediately.</span>
+  {% endif %}
+</div>

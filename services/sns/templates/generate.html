@@ -9,17 +9,17 @@
 {% endblock %}
 {% block content %}
 
-<h2 style="margin-top:0;font-size:1.1rem;">Post to X</h2>
+<h2 style="margin-top:0;font-size:1.1rem;">Generate Post</h2>
 <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem;">
-  記事を選んでツイートを自動生成するか、自由テキストで投稿。
+  記事を選んで AI でツイートを生成、または自由テキストで作成。生成後に確認・編集してから投稿。
 </p>
 
-<form hx-post="/generate" hx-target="#result" hx-swap="innerHTML">
+<form hx-post="/generate" hx-target="#pending-section" hx-swap="outerHTML">
 
   <div class="gen-field">
-    <label class="gen-label">記事を選択 (記事連動投稿)</label>
+    <label class="gen-label">記事を選択 (記事連動)</label>
     <select class="gen-input" name="source_id">
-      <option value="">— 記事を選ばずに自由テキストで投稿 —</option>
+      <option value="">— 記事なし (自由テキスト) —</option>
       {% for a in articles %}
       <option value="{{ a.note_id }}">{{ a.title[:60] }}</option>
       {% endfor %}
@@ -38,14 +38,15 @@
   {% endif %}
 
   <div class="gen-field">
-    <label class="gen-label">自由テキスト (記事未選択の場合、これがそのまま投稿される)</label>
-    <textarea class="gen-input" name="custom_text" rows="4"
-              placeholder="直接ツイートしたいテキストを入力..."></textarea>
+    <label class="gen-label">自由テキスト (記事未選択の場合、これがそのまま下書きになる)</label>
+    <textarea class="gen-input" name="custom_text" rows="4" placeholder="直接ツイートしたいテキスト..."></textarea>
   </div>
 
-  <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">Post to X</button>
+  <button type="submit" class="btn btn-primary" style="padding:.5rem 1.5rem;">Generate → Pending</button>
 </form>
 
-<div id="result" style="margin-top:1rem;"></div>
+<div style="margin-top:1.5rem;">
+{% include "_pending.html" %}
+</div>
 
 {% endblock %}

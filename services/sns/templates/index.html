@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Posts — SNS Service{% endblock %}
+{% block title %}SNS — {{ instance }}{% endblock %}
 {% block content %}
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
-  <h2 style="margin:0;font-size:1.1rem;">Post History</h2>
+  <h2 style="margin:0;font-size:1.1rem;">SNS Posts</h2>
   <div style="display:flex;gap:.5rem;align-items:center;">
     {% if x_configured %}
     <span class="badge-ok">X API: Connected</span>
@@ -14,9 +14,12 @@
   </div>
 </div>
 
-{% if not posts %}
-<div class="empty">No posts yet. <a href="/generate">Create one</a> or wait for auto-posting from published articles.</div>
-{% else %}
+{# ─── Pending ─── #}
+{% include "_pending.html" %}
+
+{# ─── History ─── #}
+{% if history %}
+<div class="section-hd" style="margin-top:1.5rem;">Post History ({{ history|length }})</div>
 <table class="post-table">
   <thead>
     <tr>
@@ -28,7 +31,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for p in posts %}
+    {% for p in history %}
     <tr>
       <td class="post-meta">{{ p.posted_at[:16] if p.posted_at else '-' }}</td>
       <td class="post-meta">{{ p.platform or '-' }}</td>
@@ -42,6 +45,10 @@
     {% endfor %}
   </tbody>
 </table>
+{% endif %}
+
+{% if not pending and not history %}
+<div class="empty">No posts yet. <a href="/generate">Create one</a> or enable auto-posting in <a href="/settings">Automation</a>.</div>
 {% endif %}
 
 {% endblock %}

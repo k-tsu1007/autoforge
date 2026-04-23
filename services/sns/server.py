@@ -1,7 +1,7 @@
 """SNS Service — X/Threads 投稿を専任する独立サービス。
 
-Publisher と疎結合: DB の articles テーブルをポーリングして新着記事を検出、ツイート生成・投稿。
-プロンプト管理 UI 付き。
+Publisher と疎結合: DB の articles テーブルをポーリングして新着記事を検出。
+Generate → Pending → Approve → Post のフロー (Publisher と同じ設計)。
 
 起動: python -m services.sns --instance fuku_ai_sns --port 8020
 """
@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 JST = timezone(timedelta(hours=9))
@@ -57,60 +57,207 @@ def _ensure_table():
             platform TEXT,
             text TEXT,
             post_url TEXT,
+            scheduled_at TEXT,
             posted_at TEXT,
             prompt_name TEXT,
-            status TEXT DEFAULT 'posted'
+            status TEXT DEFAULT 'pending'
         )
     """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_sns_source ON sns_posts(source_type, source_id)
-    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sns_source ON sns_posts(source_type, source_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sns_status ON sns_posts(status)")
     conn.commit()
 
 
-def _get_posts(limit: int = 50) -> list[dict]:
+def _get_pending() -> list[dict]:
     from core.db import get_connection
     conn = get_connection()
     rows = conn.execute(
-        "SELECT * FROM sns_posts ORDER BY id DESC LIMIT ?", (limit,)
+        "SELECT * FROM sns_posts WHERE status IN ('pending', 'approved') ORDER BY id DESC"
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def _already_posted(source_id: str) -> bool:
+def _get_history(limit: int = 50) -> list[dict]:
+    from core.db import get_connection
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM sns_posts WHERE status IN ('posted', 'failed') ORDER BY id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _already_queued(source_id: str) -> bool:
     from core.db import get_connection
     conn = get_connection()
     row = conn.execute(
-        "SELECT COUNT(*) AS c FROM sns_posts WHERE source_id=? AND status='posted'",
+        "SELECT COUNT(*) AS c FROM sns_posts WHERE source_id=? AND status IN ('pending','approved','posted')",
         (source_id,),
     ).fetchone()
     return (row["c"] or 0) > 0
 
 
-def _record_post(source_type: str, source_id: str, platform: str,
-                 text: str, post_url: str, prompt_name: str, status: str = "posted"):
+def _insert_post(source_type: str, source_id: str, platform: str,
+                 text: str, prompt_name: str, scheduled_at: str = "",
+                 status: str = "pending") -> int:
     from core.db import get_connection
     conn = get_connection()
-    conn.execute(
-        "INSERT INTO sns_posts (source_type, source_id, platform, text, post_url, posted_at, prompt_name, status) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (source_type, source_id, platform, text, post_url, _now().isoformat(), prompt_name, status),
+    cur = conn.execute(
+        "INSERT INTO sns_posts (source_type, source_id, platform, text, post_url, "
+        "scheduled_at, posted_at, prompt_name, status) "
+        "VALUES (?, ?, ?, ?, '', ?, '', ?, ?)",
+        (source_type, source_id, platform, text, scheduled_at, prompt_name, status),
     )
     conn.commit()
+    return cur.lastrowid
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# UI
+# UI: Home (投稿履歴 + Pending)
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/", response_class=HTMLResponse)
 def ui_home(request: Request):
     from services.sns import x_client
-    posts = _get_posts(50)
+    pending = _get_pending()
+    history = _get_history(50)
     return _render(request, "index.html", active="home",
-                   posts=posts,
+                   pending=pending,
+                   history=history,
                    x_configured=x_client.is_configured())
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UI: Generate (ツイート生成 → pending へ)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/generate", response_class=HTMLResponse)
+def ui_generate(request: Request):
+    from core.db import get_connection
+    from services.sns import generator
+    conn = get_connection()
+    articles = conn.execute(
+        "SELECT note_id, title, note_url FROM articles "
+        "WHERE (status='published' OR status IS NULL) AND title IS NOT NULL "
+        "AND note_url IS NOT NULL AND note_url != '' "
+        "ORDER BY COALESCE(NULLIF(published_at,''), created_at) DESC LIMIT 20"
+    ).fetchall()
+    prompts = generator.list_prompts()
+    return _render(request, "generate.html", active="generate",
+                   articles=[dict(r) for r in articles],
+                   prompts=prompts)
+
+
+@app.post("/generate", response_class=HTMLResponse)
+def ui_do_generate(
+    request: Request,
+    source_id: str = Form(""),
+    custom_text: str = Form(""),
+    prompt_name: str = Form("article_promo"),
+    schedule_mode: str = Form("immediate"),
+):
+    """ツイートを生成 → pending に保存 (即投稿しない)。"""
+    from services.sns import generator
+
+    if custom_text.strip():
+        tweet_text = custom_text.strip()
+        src_type = "manual"
+        src_id = f"manual_{int(_now().timestamp())}"
+    elif source_id:
+        from core.db import get_connection
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT title, note_url, free_content FROM articles WHERE note_id=?",
+            (source_id,),
+        ).fetchone()
+        if not row:
+            return HTMLResponse('<div style="color:var(--red);">Article not found</div>')
+        article = {
+            "title": row["title"] or "",
+            "url": row["note_url"] or "",
+            "excerpt": (row["free_content"] or "")[:300],
+        }
+        tweet_text = generator.generate_tweet(article, prompt_name=prompt_name)
+        src_type = "article"
+        src_id = source_id
+    else:
+        return HTMLResponse('<div style="color:var(--red);">No content specified</div>')
+
+    scheduled_at = ""
+    if schedule_mode == "immediate":
+        scheduled_at = ""
+    # 将来: next_slot, custom
+
+    _insert_post(src_type, src_id, "x", tweet_text, prompt_name,
+                 scheduled_at=scheduled_at, status="pending")
+
+    # pending リストを返す
+    return _render_pending(request)
+
+
+def _render_pending(request: Request):
+    return _render(request, "_pending.html", pending=_get_pending())
+
+
+@app.get("/api/pending_section", response_class=HTMLResponse)
+def api_pending_section(request: Request):
+    return _render_pending(request)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UI: Approve / Reject / Edit
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.post("/post/{post_id}/approve", response_class=HTMLResponse)
+def ui_approve(request: Request, post_id: int):
+    """承認 → 即投稿。"""
+    from core.db import get_connection
+    from services.sns import x_client
+    conn = get_connection()
+
+    row = conn.execute("SELECT * FROM sns_posts WHERE id=? AND status='pending'", (post_id,)).fetchone()
+    if not row:
+        return HTMLResponse('<div style="color:var(--red);">Not found</div>')
+
+    result = x_client.post_tweet(row["text"])
+
+    if result.get("ok"):
+        conn.execute(
+            "UPDATE sns_posts SET status='posted', post_url=?, posted_at=? WHERE id=?",
+            (result.get("tweet_url", ""), _now().isoformat(), post_id),
+        )
+        conn.commit()
+    else:
+        conn.execute(
+            "UPDATE sns_posts SET status='failed', posted_at=? WHERE id=?",
+            (_now().isoformat(), post_id),
+        )
+        conn.commit()
+
+    return _render_pending(request)
+
+
+@app.post("/post/{post_id}/reject", response_class=HTMLResponse)
+def ui_reject(request: Request, post_id: int):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("DELETE FROM sns_posts WHERE id=?", (post_id,))
+    conn.commit()
+    return _render_pending(request)
+
+
+@app.post("/post/{post_id}/edit", response_class=HTMLResponse)
+def ui_edit(request: Request, post_id: int, text: str = Form("")):
+    from core.db import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE sns_posts SET text=? WHERE id=?", (text.strip(), post_id))
+    conn.commit()
+    return _render_pending(request)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UI: Prompts
+# ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/prompts", response_class=HTMLResponse)
 def ui_prompts(request: Request):
@@ -146,78 +293,43 @@ def ui_prompt_delete(name: str):
     return RedirectResponse(url="/prompts", status_code=303)
 
 
-@app.get("/generate", response_class=HTMLResponse)
-def ui_generate(request: Request):
-    """手動ツイート生成ページ。"""
-    from core.db import get_connection
-    from services.sns import generator
-    conn = get_connection()
-    articles = conn.execute(
-        "SELECT note_id, title, note_url FROM articles "
-        "WHERE (status='published' OR status IS NULL) AND title IS NOT NULL "
-        "AND note_url IS NOT NULL AND note_url != '' "
-        "ORDER BY COALESCE(NULLIF(published_at,''), created_at) DESC LIMIT 20"
-    ).fetchall()
-    prompts = generator.list_prompts()
-    return _render(request, "generate.html", active="generate",
-                   articles=[dict(r) for r in articles],
-                   prompts=prompts)
+# ═══════════════════════════════════════════════════════════════════════════
+# UI: Automation Settings
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/settings", response_class=HTMLResponse)
+def ui_settings(request: Request):
+    from services.sns import automation
+    return _render(request, "settings.html", active="settings",
+                   auto_promo=automation.is_auto_promo_enabled(),
+                   slots=automation.get_slots())
 
 
-@app.post("/generate", response_class=HTMLResponse)
-def ui_do_generate(
-    source_id: str = Form(""),
-    custom_text: str = Form(""),
-    prompt_name: str = Form("article_promo"),
-):
-    """ツイートを生成して X に投稿する。"""
-    from services.sns import generator, x_client
+@app.post("/settings/auto_promo/toggle", response_class=HTMLResponse)
+def ui_toggle_auto_promo():
+    from services.sns import automation
+    cfg = automation.load()
+    new_val = not cfg.get("auto_article_promo", True)
+    automation.update(auto_article_promo=new_val)
+    label = "ON — new articles auto-tweeted" if new_val else "OFF — manual only"
+    cls = "on" if new_val else ""
+    return HTMLResponse(
+        f'<div class="toggle {cls}" hx-post="/settings/auto_promo/toggle" hx-swap="outerHTML"></div>'
+    )
 
-    if custom_text.strip():
-        tweet_text = custom_text.strip()
-        src_type = "manual"
-        src_id = f"manual_{int(_now().timestamp())}"
-    elif source_id:
-        from core.db import get_connection
-        conn = get_connection()
-        row = conn.execute(
-            "SELECT title, note_url, free_content FROM articles WHERE note_id=?",
-            (source_id,),
-        ).fetchone()
-        if not row:
-            return HTMLResponse('<div style="color:var(--red);">Article not found</div>')
-        article = {
-            "title": row["title"] or "",
-            "url": row["note_url"] or "",
-            "excerpt": (row["free_content"] or "")[:300],
-        }
-        tweet_text = generator.generate_tweet(article, prompt_name=prompt_name)
-        src_type = "article"
-        src_id = source_id
-    else:
-        return HTMLResponse('<div style="color:var(--red);">No content specified</div>')
 
-    # X に投稿
-    result = x_client.post_tweet(tweet_text)
+@app.post("/settings/slots/add", response_class=HTMLResponse)
+def ui_add_slot(request: Request, time: str = Form(...)):
+    from services.sns import automation
+    automation.add_slot(time)
+    return _render(request, "_slot_list.html", slots=automation.get_slots())
 
-    if result.get("ok"):
-        _record_post(src_type, src_id, "x", tweet_text,
-                     result.get("tweet_url", ""), prompt_name)
-        return HTMLResponse(
-            f'<div class="card" style="border-color:var(--green);">'
-            f'<div class="card-body" style="color:var(--green);">Posted to X</div>'
-            f'<div style="font-size:.82rem;color:var(--muted);margin-top:.3rem;white-space:pre-wrap;">{tweet_text}</div>'
-            f'</div>'
-        )
-    else:
-        _record_post(src_type, src_id, "x", tweet_text, "", prompt_name, status="failed")
-        error = result.get("error", "Unknown error")
-        return HTMLResponse(
-            f'<div class="card" style="border-color:var(--red);">'
-            f'<div class="card-body" style="color:var(--red);">Failed: {error[:200]}</div>'
-            f'<div style="font-size:.82rem;color:var(--muted);margin-top:.3rem;white-space:pre-wrap;">{tweet_text}</div>'
-            f'</div>'
-        )
+
+@app.post("/settings/slots/remove", response_class=HTMLResponse)
+def ui_remove_slot(request: Request, time: str = Form(...)):
+    from services.sns import automation
+    automation.remove_slot(time)
+    return _render(request, "_slot_list.html", slots=automation.get_slots())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -235,33 +347,29 @@ def api_health():
     }
 
 
-@app.get("/api/posts")
-def api_posts(limit: int = 50):
-    return _get_posts(limit)
-
-
 # ═══════════════════════════════════════════════════════════════════════════
-# AUTO-POLL — 記事連動投稿 (Publisher と疎結合)
+# AUTO-POLL — 記事連動 + スロット投稿
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _poll_new_articles():
-    """DB の articles テーブルから未ツイートの記事を検出して投稿する。"""
-    from services.sns import x_client, generator
+    """新着記事 → ツイート生成 → pending に入れる (自動投稿 ON なら即投稿)。"""
+    from services.sns import automation, generator, x_client
 
+    if not automation.is_auto_promo_enabled():
+        return
     if not x_client.is_configured():
         return
 
     from core.db import get_connection
     conn = get_connection()
 
-    # published で URL があり、まだ sns_posts に記録されていない記事
     rows = conn.execute(
         "SELECT a.note_id, a.title, a.note_url, a.free_content "
         "FROM articles a "
         "WHERE (a.status='published' OR a.status IS NULL) "
         "AND a.note_url IS NOT NULL AND a.note_url != '' "
         "AND a.note_id NOT IN ("
-        "    SELECT source_id FROM sns_posts WHERE source_type='article' AND status='posted'"
+        "    SELECT source_id FROM sns_posts WHERE source_type='article'"
         ") "
         "ORDER BY COALESCE(NULLIF(a.published_at,''), a.created_at) DESC "
         "LIMIT 3"
@@ -273,21 +381,58 @@ def _poll_new_articles():
             "url": row["note_url"] or "",
             "excerpt": (row["free_content"] or "")[:300],
         }
-        print(f"[sns] auto-posting for: {article['title'][:40]}")
+        print(f"[sns] auto-promo: {article['title'][:40]}")
 
         tweet_text = generator.generate_tweet(article, prompt_name="article_promo")
-        result = x_client.post_tweet(tweet_text)
 
+        # auto_promo ON → 即投稿
+        result = x_client.post_tweet(tweet_text)
         if result.get("ok"):
-            _record_post("article", row["note_id"], "x", tweet_text,
-                         result.get("tweet_url", ""), "article_promo")
+            _insert_post("article", row["note_id"], "x", tweet_text,
+                         "article_promo", status="posted")
+            conn.execute(
+                "UPDATE sns_posts SET post_url=?, posted_at=? WHERE source_id=? AND status='posted' ORDER BY id DESC LIMIT 1",
+                (result.get("tweet_url", ""), _now().isoformat(), row["note_id"]),
+            )
+            conn.commit()
             print(f"[sns] posted: {result.get('tweet_url', '')}")
         else:
-            _record_post("article", row["note_id"], "x", tweet_text, "",
+            _insert_post("article", row["note_id"], "x", tweet_text,
                          "article_promo", status="failed")
             print(f"[sns] failed: {result.get('error', '')[:100]}")
 
-        time.sleep(5)  # rate limit
+        time.sleep(5)
+
+
+def _post_scheduled():
+    """status='approved' + scheduled_at が過去のものを投稿。"""
+    from core.db import get_connection
+    from services.sns import x_client
+
+    if not x_client.is_configured():
+        return
+
+    conn = get_connection()
+    now_iso = _now().isoformat()
+    rows = conn.execute(
+        "SELECT * FROM sns_posts WHERE status='approved' AND (scheduled_at <= ? OR scheduled_at = '')",
+        (now_iso,),
+    ).fetchall()
+
+    for row in rows:
+        result = x_client.post_tweet(row["text"])
+        if result.get("ok"):
+            conn.execute(
+                "UPDATE sns_posts SET status='posted', post_url=?, posted_at=? WHERE id=?",
+                (result.get("tweet_url", ""), _now().isoformat(), row["id"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE sns_posts SET status='failed', posted_at=? WHERE id=?",
+                (_now().isoformat(), row["id"]),
+            )
+        conn.commit()
+        time.sleep(3)
 
 
 def _auto_poll_loop():
@@ -296,6 +441,7 @@ def _auto_poll_loop():
         try:
             print(f"[sns] auto-poll at {_now().strftime('%H:%M:%S')}")
             _poll_new_articles()
+            _post_scheduled()
         except Exception as e:
             import traceback
             print(f"[sns] auto-poll error: {e}")

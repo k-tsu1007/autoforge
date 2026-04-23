@@ -1,0 +1,50 @@
+<div id="pending-section">
+  <div class="section-hd">Pending ({{ pending|length }})</div>
+  {% if not pending %}
+  <div class="empty" style="padding:1rem;">No pending posts. <a href="/generate">Generate one</a>.</div>
+  {% endif %}
+
+  {% for p in pending %}
+  <div class="card" id="post-{{ p.id }}" style="{% if p.status == 'approved' %}border-color:#60a5fa44;{% endif %}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">
+      <div style="flex:1;">
+        {% if p.status == 'approved' %}
+        <span style="font-size:.7rem;color:var(--blue);">📅 SCHEDULED</span>
+        {% endif %}
+        <div style="font-size:.85rem;white-space:pre-wrap;line-height:1.6;">{{ p.text }}</div>
+        <div class="post-meta" style="margin-top:.3rem;">
+          {{ p.platform }} &middot; {{ p.source_type }} &middot; {{ p.prompt_name or '-' }}
+          {% if p.scheduled_at %} &middot; ⏰ {{ p.scheduled_at[:16] }}{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.3rem;flex-shrink:0;">
+        {% if p.status == 'pending' %}
+        <button class="btn btn-ok"
+                hx-post="/post/{{ p.id }}/approve"
+                hx-target="#pending-section" hx-swap="outerHTML"
+                style="font-size:.72rem;">Approve & Post</button>
+        <button class="btn btn-ng"
+                hx-post="/post/{{ p.id }}/reject"
+                hx-target="#pending-section" hx-swap="outerHTML"
+                style="font-size:.72rem;">Reject</button>
+        {% elif p.status == 'approved' %}
+        <button class="btn btn-ng"
+                hx-post="/post/{{ p.id }}/reject"
+                hx-target="#pending-section" hx-swap="outerHTML"
+                style="font-size:.72rem;">Cancel</button>
+        {% endif %}
+      </div>
+    </div>
+    {% if p.status == 'pending' %}
+    <details style="margin-top:.5rem;">
+      <summary style="font-size:.72rem;color:var(--blue);cursor:pointer;">Edit</summary>
+      <form hx-post="/post/{{ p.id }}/edit" hx-target="#pending-section" hx-swap="outerHTML"
+            style="margin-top:.3rem;">
+        <textarea name="text" rows="3" style="font-size:.82rem;">{{ p.text }}</textarea>
+        <button type="submit" class="btn btn-primary" style="margin-top:.3rem;font-size:.72rem;">Save Edit</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
