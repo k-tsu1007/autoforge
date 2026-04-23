@@ -104,7 +104,7 @@ def evaluate_all():
             "genre": meta.get("genre", "") if meta else "",
             "tags": meta.get("tags", []) if meta else [],
             "note_id": str(n.get("id", "")),
-            "note_url": f"https://note.com/ai_fuku07/n/{n.get('key', '')}",
+            "note_url": f"https://note.com/{os.environ.get('NOTE_URLNAME', 'uta_lab_')}/n/{n.get('key', '')}",
             "status": "published",
             "published_at": meta.get("published_at", "") if meta else "",
             "views": n.get("read_count", 0),

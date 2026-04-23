@@ -18,7 +18,7 @@ instance:
 platforms:
   note:
     enabled: true
-    urlname: "ai_fuku07"
+    urlname: "uta_lab_"
     # 認証情報は cookies/session.json に格納 (env で上書き可)
     magazine_auto_classify: true
 
@@ -96,4 +96,4 @@ pipelines:
 env:
   USE_CLAUDE_CLI: "1"
   X_USERNAME: "fuku_ai07"
-  NOTE_URLNAME: "ai_fuku07"
+  NOTE_URLNAME: "uta_lab_"
