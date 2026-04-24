@@ -351,24 +351,12 @@ def api_health():
 # AUTO-POLL — 記事連動 + スロット投稿
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _poll_new_articles():
-    """新着記事のみツイート (直近1時間以内に投稿された記事だけ、1件/サイクル)。
-
-    過去の全記事を遡って投稿しない。新しく投稿された記事だけをキャッチする。
-    """
-    from services.sns import automation, generator, x_client
-
-    if not automation.is_auto_promo_enabled():
-        return
-    if not x_client.is_configured():
-        return
-
+def _find_unposted_article() -> dict | None:
+    """直近24時間以内で未ツイートの記事を 1 件返す。なければ None。"""
     from core.db import get_connection
     conn = get_connection()
-
-    # 直近1時間以内に投稿された記事のみ対象 (過去記事の遡り投稿を防ぐ)
-    one_hour_ago = (_now() - timedelta(hours=1)).isoformat()
-    rows = conn.execute(
+    one_day_ago = (_now() - timedelta(hours=24)).isoformat()
+    row = conn.execute(
         "SELECT a.note_id, a.title, a.note_url, a.free_content "
         "FROM articles a "
         "WHERE (a.status='published' OR a.status IS NULL) "
@@ -379,38 +367,19 @@ def _poll_new_articles():
         ") "
         "ORDER BY COALESCE(NULLIF(a.published_at,''), a.created_at) DESC "
         "LIMIT 1",
-        (one_hour_ago,),
-    ).fetchall()
-
-    for row in rows:
-        article = {
-            "title": row["title"] or "",
-            "url": row["note_url"] or "",
-            "excerpt": (row["free_content"] or "")[:300],
-        }
-        print(f"[sns] auto-promo: {article['title'][:40]}")
-
-        tweet_text = generator.generate_tweet(article, prompt_name="article_promo")
-
-        result = x_client.post_tweet(tweet_text)
-        if result.get("ok"):
-            _insert_post("article", row["note_id"], "x", tweet_text,
-                         "article_promo", status="posted")
-            conn.execute(
-                "UPDATE sns_posts SET post_url=?, posted_at=? "
-                "WHERE id=(SELECT MAX(id) FROM sns_posts WHERE source_id=?)",
-                (result.get("tweet_url", ""), _now().isoformat(), row["note_id"]),
-            )
-            conn.commit()
-            print(f"[sns] posted: {result.get('tweet_url', '')}")
-        else:
-            _insert_post("article", row["note_id"], "x", tweet_text,
-                         "article_promo", status="failed")
-            print(f"[sns] failed: {result.get('error', '')[:100]}")
+        (one_day_ago,),
+    ).fetchone()
+    if row:
+        return {"note_id": row["note_id"], "title": row["title"] or "",
+                "url": row["note_url"] or "", "excerpt": (row["free_content"] or "")[:300]}
+    return None
 
 
-def _auto_generate_standalone():
-    """スロット時刻に単独ツイートを自動生成 → 即投稿。"""
+def _auto_post_at_slot():
+    """スロット時刻に 1 投稿: 未ツイート記事があれば promo、なければ standalone を生成 → 即投稿。
+
+    全てスロット時刻にのみ投稿。スロット外では何もしない。
+    """
     from services.sns import automation, generator, x_client
 
     if not x_client.is_configured():
@@ -426,14 +395,14 @@ def _auto_generate_standalone():
         sh, sm = int(s[:2]), int(s[3:5])
         slot_time = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
         diff = abs((now - slot_time).total_seconds())
-        if diff <= 300:  # ±5分
+        if diff <= 300:
             matched_slot = s
             break
 
     if not matched_slot:
         return
 
-    # 今日このスロットで既に投稿済みか (article promo 含む)
+    # 今日このスロットで既に投稿済みか
     from core.db import get_connection
     conn = get_connection()
     today = now.strftime("%Y-%m-%d")
@@ -448,58 +417,57 @@ def _auto_generate_standalone():
     if existing > 0:
         return
 
-    print(f"[sns] slot {matched_slot} → generating standalone tweet")
+    # 未ツイートの新着記事があれば promo、なければ standalone
+    unposted = _find_unposted_article() if automation.is_auto_promo_enabled() else None
 
-    # standalone プロンプトで生成
-    prompt_content = generator.get_prompt("standalone")
-    if not prompt_content:
-        print("[sns] standalone prompt not found, skipping")
-        return
+    if unposted:
+        # 記事連動ツイート
+        print(f"[sns] slot {matched_slot} → article promo: {unposted['title'][:40]}")
+        tweet_text = generator.generate_tweet(unposted, prompt_name="article_promo")
+        src_type, src_id, prompt_name = "article", unposted["note_id"], "article_promo"
+    else:
+        # 単独ツイート
+        print(f"[sns] slot {matched_slot} → standalone tweet")
+        prompt_content = generator.get_prompt("standalone")
+        if not prompt_content:
+            return
 
-    # 直近の投稿を取得して LLM に渡す (類似投稿の回避)
-    recent = conn.execute(
-        "SELECT text FROM sns_posts WHERE status='posted' ORDER BY id DESC LIMIT 15"
-    ).fetchall()
-    recent_texts = "\n".join(f"- {r['text'][:80]}" for r in recent) if recent else "(まだ投稿なし)"
+        recent = conn.execute(
+            "SELECT text FROM sns_posts WHERE status='posted' ORDER BY id DESC LIMIT 15"
+        ).fetchall()
+        recent_texts = "\n".join(f"- {r['text'][:80]}" for r in recent) if recent else "(まだ投稿なし)"
 
-    user_prompt = (
-        f"## 直近の投稿 (これらと同じ内容・同じ切り口・同じ構文パターンは避ける)\n"
-        f"{recent_texts}\n\n"
-        f"上記と被らない新しいツイートを 1 つ生成してください。"
-    )
-
-    try:
-        from core.llm.claude import call_claude
-        tweet_text = call_claude(
-            user_prompt,
-            model="sonnet",
-            system=prompt_content,
-            temperature=0.9,
-            max_tokens=200,
-        ).strip().strip('"').strip("'")
-    except Exception as e:
-        print(f"[sns] standalone generation failed: {e}")
-        return
+        try:
+            from core.llm.claude import call_claude
+            tweet_text = call_claude(
+                f"## 直近の投稿 (同じ内容・切り口・構文は避ける)\n{recent_texts}\n\n"
+                f"上記と被らない新しいツイートを 1 つ生成してください。",
+                model="sonnet",
+                system=prompt_content,
+                temperature=0.9,
+                max_tokens=200,
+            ).strip().strip('"').strip("'")
+        except Exception as e:
+            print(f"[sns] generation failed: {e}")
+            return
+        src_type, src_id, prompt_name = "standalone", f"slot_{matched_slot}_{today}", "standalone"
 
     if not tweet_text:
         return
 
     result = x_client.post_tweet(tweet_text)
     status = "posted" if result.get("ok") else "failed"
-    _insert_post("standalone", f"slot_{matched_slot}_{today}", "x",
-                 tweet_text, "standalone", status=status)
+    _insert_post(src_type, src_id, "x", tweet_text, prompt_name, status=status)
 
     if result.get("ok"):
-        from core.db import get_connection as gc
-        c = gc()
-        c.execute(
+        conn.execute(
             "UPDATE sns_posts SET post_url=?, posted_at=? WHERE id=(SELECT MAX(id) FROM sns_posts)",
             (result.get("tweet_url", ""), now.isoformat()),
         )
-        c.commit()
-        print(f"[sns] standalone posted: {result.get('tweet_url', '')}")
+        conn.commit()
+        print(f"[sns] posted: {result.get('tweet_url', '')}")
     else:
-        print(f"[sns] standalone failed: {result.get('error', '')[:100]}")
+        print(f"[sns] failed: {result.get('error', '')[:100]}")
 
 
 def _post_scheduled():
@@ -538,8 +506,7 @@ def _auto_poll_loop():
         time.sleep(_poll_interval_sec)
         try:
             print(f"[sns] auto-poll at {_now().strftime('%H:%M:%S')}")
-            _poll_new_articles()
-            _auto_generate_standalone()
+            _auto_post_at_slot()
             _post_scheduled()
         except Exception as e:
             import traceback
