@@ -352,7 +352,10 @@ def api_health():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _poll_new_articles():
-    """新着記事 → ツイート生成 → pending に入れる (自動投稿 ON なら即投稿)。"""
+    """新着記事のみツイート (直近1時間以内に投稿された記事だけ、1件/サイクル)。
+
+    過去の全記事を遡って投稿しない。新しく投稿された記事だけをキャッチする。
+    """
     from services.sns import automation, generator, x_client
 
     if not automation.is_auto_promo_enabled():
@@ -363,16 +366,20 @@ def _poll_new_articles():
     from core.db import get_connection
     conn = get_connection()
 
+    # 直近1時間以内に投稿された記事のみ対象 (過去記事の遡り投稿を防ぐ)
+    one_hour_ago = (_now() - timedelta(hours=1)).isoformat()
     rows = conn.execute(
         "SELECT a.note_id, a.title, a.note_url, a.free_content "
         "FROM articles a "
         "WHERE (a.status='published' OR a.status IS NULL) "
         "AND a.note_url IS NOT NULL AND a.note_url != '' "
+        "AND COALESCE(NULLIF(a.published_at,''), a.created_at) >= ? "
         "AND a.note_id NOT IN ("
         "    SELECT source_id FROM sns_posts WHERE source_type='article'"
         ") "
         "ORDER BY COALESCE(NULLIF(a.published_at,''), a.created_at) DESC "
-        "LIMIT 3"
+        "LIMIT 1",
+        (one_hour_ago,),
     ).fetchall()
 
     for row in rows:
@@ -385,13 +392,13 @@ def _poll_new_articles():
 
         tweet_text = generator.generate_tweet(article, prompt_name="article_promo")
 
-        # auto_promo ON → 即投稿
         result = x_client.post_tweet(tweet_text)
         if result.get("ok"):
             _insert_post("article", row["note_id"], "x", tweet_text,
                          "article_promo", status="posted")
             conn.execute(
-                "UPDATE sns_posts SET post_url=?, posted_at=? WHERE source_id=? AND status='posted' ORDER BY id DESC LIMIT 1",
+                "UPDATE sns_posts SET post_url=?, posted_at=? "
+                "WHERE id=(SELECT MAX(id) FROM sns_posts WHERE source_id=?)",
                 (result.get("tweet_url", ""), _now().isoformat(), row["note_id"]),
             )
             conn.commit()
@@ -400,8 +407,6 @@ def _poll_new_articles():
             _insert_post("article", row["note_id"], "x", tweet_text,
                          "article_promo", status="failed")
             print(f"[sns] failed: {result.get('error', '')[:100]}")
-
-        time.sleep(5)
 
 
 def _auto_generate_standalone():
