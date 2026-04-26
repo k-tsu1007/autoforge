@@ -501,13 +501,24 @@ def is_already_posted_today(text: str) -> bool:
 
 
 def review_mode_enabled() -> bool:
-    """automation.json (Publisher UI で切替) を優先、無ければ環境変数 REVIEW_MODE。"""
+    """automation.json (Publisher UI で切替) を優先、無ければ環境変数 REVIEW_MODE。
+
+    automation.json の読み取りは core.db に直接埋め込む（services.publisher への逆依存を排除）。
+    Publisher が分離された場合も、autoforge 単体で動作できるようにしている。
+    """
+    import os
+    import json as _json
+    # automation.json をインスタンスの data/ から直接読む（services.publisher を経由しない）
     try:
-        from services.publisher import automation
-        return automation.get_review_mode()
+        from core.instance import get_active_instance
+        inst = get_active_instance()
+        cfg_path = inst.root / "data" / "automation.json"
+        if cfg_path.exists():
+            cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
+            return bool(cfg.get("review_mode", True))
     except Exception:
         pass
-    import os
+    # フォールバック: 環境変数
     return os.environ.get("REVIEW_MODE", "").strip() in ("1", "true", "True", "yes")
 
 
