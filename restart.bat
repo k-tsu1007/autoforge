@@ -19,10 +19,10 @@ if exist logs\publisher_fuku.log move /Y logs\publisher_fuku.log logs\publisher_
 if exist logs\publisher_ai_bento.log move /Y logs\publisher_ai_bento.log logs\publisher_ai_bento_%TS%.log >nul
 
 echo [restart] starting fuku_ai_sns publisher (log: logs\publisher_fuku.log)...
-wmic process call create "cmd /c %PY% -m services.publisher --instance fuku_ai_sns >> logs\publisher_fuku.log 2>&1","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+wmic process call create "cmd /c %PY% -u -m services.publisher --instance fuku_ai_sns >> logs\publisher_fuku.log 2>&1","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
 
 echo [restart] starting ai_bento publisher (log: logs\publisher_ai_bento.log)...
-wmic process call create "cmd /c %PY% -m services.publisher --instance ai_bento >> logs\publisher_ai_bento.log 2>&1","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+wmic process call create "cmd /c %PY% -u -m services.publisher --instance ai_bento >> logs\publisher_ai_bento.log 2>&1","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
 
 REM echo [restart] starting fuku_ai_sns SNS service...
 REM wmic process call create "%PY% -m services.sns --instance fuku_ai_sns --port 8020","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
