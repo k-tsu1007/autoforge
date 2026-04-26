@@ -194,22 +194,40 @@ def set_note_settings(**fields) -> dict:
 def get_prompt_settings(name: str) -> dict:
     """プロンプト個別の設定 (文字数/価格/tags) を返す。
 
-    モード別デフォルト:
-    - free  : {free_chars: 2500, paid_chars: 0, price: 0, tags: []}
-    - mixed : {free_chars: 1500, paid_chars: 1250, price: 500, tags: []}
+    優先順位:
+    1. automation.json の prompt_settings (UI 手動設定)
+    2. prompts_config.yaml の prompts.<name> 設定
+    3. モード別デフォルト (free: 2500字, mixed: 1500+1250字 500円)
     """
     cfg = load()
     mode = get_prompt_mode(name)
+
+    # prompts_config.yaml からデフォルト値を取得
+    pc = get_prompt_config(name)
+    target_chars = pc.get("target_chars", [])
+    pc_free_chars = target_chars[0] if len(target_chars) >= 1 else None
+    pc_paid_chars = (target_chars[1] - target_chars[0]) if len(target_chars) >= 2 else None
+    pc_price = pc.get("price")
+
+    # モード別フォールバック
     if mode == "free":
-        defaults = {"free_chars": DEFAULT_FREE_CHARS, "paid_chars": 0, "price": 0, "tags": []}
-    else:
         defaults = {
-            "free_chars": DEFAULT_MIXED_FREE_CHARS,
-            "paid_chars": DEFAULT_MIXED_PAID_CHARS,
-            "price": DEFAULT_PRICE,
+            "free_chars": int(pc_free_chars or DEFAULT_FREE_CHARS),
+            "paid_chars": 0,
+            "price": 0,
             "tags": [],
         }
+    else:
+        defaults = {
+            "free_chars": int(pc_free_chars or DEFAULT_MIXED_FREE_CHARS),
+            "paid_chars": int(pc_paid_chars or DEFAULT_MIXED_PAID_CHARS),
+            "price": int(pc_price if pc_price is not None else DEFAULT_PRICE),
+            "tags": [],
+        }
+
     settings = dict(defaults)
+
+    # automation.json の手動設定で上書き (UI からの変更を最優先)
     per_prompt = (cfg.get("prompt_settings") or {}).get(name) or {}
     for k in defaults:
         if k in per_prompt and per_prompt[k] is not None:
@@ -222,6 +240,79 @@ def get_prompt_settings(name: str) -> dict:
                 except Exception:
                     pass
     return settings
+
+
+# ==========================================================================
+# prompts_config.yaml サポート
+# ==========================================================================
+
+def _prompts_config_path() -> Path:
+    """インスタンスの data/prompts_config.yaml のパス。"""
+    from core.instance import get_active_instance
+    inst = get_active_instance()
+    return inst.root / "data" / "prompts_config.yaml"
+
+
+def load_prompts_config() -> dict:
+    """prompts_config.yaml を読み込む。ファイルがなければ空dict。"""
+    p = _prompts_config_path()
+    if not p.exists():
+        return {}
+    try:
+        import yaml
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except ImportError:
+        # PyYAML がない環境ではフォールバック
+        return {}
+    except Exception:
+        return {}
+
+
+def get_current_phase() -> str:
+    """現在のフェーズを返す。prompts_config.yaml の current_phase に従う。"""
+    cfg = load_prompts_config()
+    return cfg.get("current_phase", "phase1")
+
+
+def set_current_phase(phase: str) -> None:
+    """フェーズを更新する。prompts_config.yaml を書き換える。"""
+    p = _prompts_config_path()
+    if not p.exists():
+        return
+    try:
+        import yaml
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        data["current_phase"] = phase
+        p.write_text(
+            yaml.dump(data, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def get_phase_weights() -> dict:
+    """現在のフェーズの weight_distribution を返す。
+    automation.json の prompt_weights で上書き可能。
+    """
+    cfg = load_prompts_config()
+    phase = cfg.get("current_phase", "phase1")
+    phases = cfg.get("phases", {})
+    phase_cfg = phases.get(phase, {})
+    base_weights = dict(phase_cfg.get("weight_distribution", {}))
+
+    # automation.json の手動設定で上書き (UI からの変更を優先)
+    manual = get_prompt_weights()
+    if manual:
+        base_weights.update(manual)
+
+    return base_weights
+
+
+def get_prompt_config(name: str) -> dict:
+    """prompts_config.yaml の prompts.<name> 設定を返す。"""
+    cfg = load_prompts_config()
+    return dict((cfg.get("prompts") or {}).get(name) or {})
 
 
 def set_prompt_settings(name: str, **fields) -> dict:

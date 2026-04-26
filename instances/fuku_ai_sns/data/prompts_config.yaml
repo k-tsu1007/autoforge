@@ -1,0 +1,92 @@
+# prompts_config.yaml (fuku_ai_sns インスタンス用)
+# 各プロンプトの設定一元管理 + フェーズ戦略
+#
+# 更新時は ~/contexts/dream/prompts/prompts_config.yaml と同期すること。
+
+# ==========================================================================
+# Phase 管理
+# ==========================================================================
+current_phase: phase1  # phase1 / phase2 / phase3
+
+phases:
+  phase1:
+    name: 信頼形成期
+    description: フォロワー獲得 + 初購入実績作り。まず買ってもらう体験を積む。
+    transition_condition: 購入実績 >= 10件
+    weight_distribution:
+      article_nikko_free: 70
+      article_nikko_paid_100: 25
+      article_nikko_paid_480: 5
+
+  phase2:
+    name: 単価UP期
+    description: 購入実績ができたら客単価を上げる。開発ノートも投入し始める。
+    transition_condition: 月収 >= 10000円
+    weight_distribution:
+      article_nikko_free: 50
+      article_nikko_paid_100: 10
+      article_nikko_paid_480: 25
+      article_devnote_paid_980: 15
+
+  phase3:
+    name: 安定収益期
+    description: 単価の高い記事を中心に安定収益を狙う。
+    weight_distribution:
+      article_nikko_free: 30
+      article_nikko_paid_480: 25
+      article_devnote_paid_980: 25
+      article_devnote_paid_1480: 15
+      article_devnote_paid_1980: 5
+
+# ==========================================================================
+# プロンプト個別設定
+# ==========================================================================
+prompts:
+  article_nikko_free:
+    magazine: うたの副業日報
+    mode: free
+    price: 0
+    target_chars: [1500, 2000]
+    label: "副業日報: 無料（引きつけ）"
+
+  article_nikko_paid_100:
+    magazine: うたの副業日報
+    mode: mixed
+    price: 100
+    target_chars: [1000, 1500]
+    label: "副業日報: 100円（購入実績作り）"
+
+  article_nikko_paid_480:
+    magazine: うたの副業日報
+    mode: mixed
+    price: 480
+    target_chars: [1800, 2500]
+    label: "副業日報: 480円（実用テンプレ）"
+
+  article_devnote_free:
+    magazine: うたの開発ノート
+    mode: free
+    price: 0
+    target_chars: [1500, 2000]
+    label: "開発ノート: 無料（なぜ作ったか）"
+
+  article_devnote_paid_980:
+    magazine: うたの開発ノート
+    mode: mixed
+    price: 980
+    target_chars: [2000, 2500]
+    label: "開発ノート: 980円（コード抜粋）"
+
+  article_devnote_paid_1480:
+    magazine: うたの開発ノート
+    mode: mixed
+    price: 1480
+    target_chars: [2500, 3000]
+    label: "開発ノート: 1480円（完全実装）"
+
+  article_devnote_paid_1980:
+    magazine: うたの開発ノート
+    mode: mixed
+    price: 1980
+    target_chars: [3000, 4000]
+    label: "開発ノート: 1980円（大規模）"

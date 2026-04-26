@@ -402,15 +402,30 @@ def _list_prompt_files() -> list[str]:
 
 
 def _build_prompt_weights() -> list[dict]:
-    """[{name, weight, pct}] のリストを返す。"""
+    """[{name, weight, pct}] のリストを返す。
+
+    phase_weights（prompts_config.yaml）を優先。
+    automation.json の手動設定があればそちらで上書き。
+    """
     from services.publisher import automation
-    weights = automation.get_prompt_weights()
+
+    # フェーズ重み（prompts_config.yaml → automation.json 手動設定で上書き）
+    phase_weights = automation.get_phase_weights()
+    manual_weights = automation.get_prompt_weights()
     names = _list_prompt_files()
 
-    # automation.json に重みが無い場合はデフォルト 1
     items = []
     for n in names:
-        items.append({"name": n, "weight": int(weights.get(n, 1))})
+        if manual_weights and n in manual_weights:
+            # 手動設定が優先
+            w = int(manual_weights[n])
+        elif phase_weights and n in phase_weights:
+            # フェーズ重みを使う
+            w = int(phase_weights[n])
+        else:
+            # どちらにも無い = 重み 0 (フェーズ対象外)。UI では表示するが重み 0 で表記
+            w = 0
+        items.append({"name": n, "weight": w})
 
     total = sum(x["weight"] for x in items) or 1
     for x in items:
@@ -750,6 +765,18 @@ def ui_generate(request: Request):
     ).fetchall()
     pending_articles = [dict(r) for r in rows]
 
+    # フェーズ情報
+    current_phase = "phase1"
+    phase_label = ""
+    try:
+        current_phase = automation.get_current_phase()
+        pc = automation.load_prompts_config()
+        phases = pc.get("phases", {})
+        phase_cfg = phases.get(current_phase, {})
+        phase_label = phase_cfg.get("name", current_phase)
+    except Exception:
+        pass
+
     return _render(request, "generate.html", active="generate",
                    article_types=article_types,
                    next_slot=next_slot,
@@ -758,7 +785,9 @@ def ui_generate(request: Request):
                    prompt_choices=prompt_choices,
                    knowledge_sets=knowledge_sets,
                    magazines=magazines,
-                   pending_articles=pending_articles)
+                   pending_articles=pending_articles,
+                   current_phase=current_phase,
+                   phase_label=phase_label)
 
 
 @app.post("/generate/preview")
@@ -988,14 +1017,34 @@ def _render_pending_section(request: Request):
 
 
 def _pick_prompt_by_weight() -> str:
-    """重み付きランダムでプロンプトを選ぶ。"""
+    """重み付きランダムでプロンプトを選ぶ。
+
+    prompts_config.yaml の phase_weights を優先。
+    automation.json の手動設定があればそちらで上書き。
+    """
     import random
     from services.publisher import automation
-    weights = automation.get_prompt_weights()
+
+    # フェーズ重みを取得 (prompts_config.yaml → automation.json の手動設定で上書き)
+    phase_weights = automation.get_phase_weights()
+
     names = _list_prompt_files()
     if not names:
         return ""
-    items = [(n, max(0, int(weights.get(n, 1)))) for n in names]
+
+    # フェーズ重みがあればそれを使う。なければ automation.json の手動設定。
+    if phase_weights:
+        # インスタンスの prompts/ に存在するファイルのみ対象
+        items = [(n, max(0, int(phase_weights.get(n, 0)))) for n in names]
+        # 重みゼロのものを除外
+        items = [(n, w) for n, w in items if w > 0]
+        if not items:
+            # フェーズ重みにないプロンプトのみの場合は全て weight=1 で均等に
+            items = [(n, 1) for n in names]
+    else:
+        manual_weights = automation.get_prompt_weights()
+        items = [(n, max(0, int(manual_weights.get(n, 1)))) for n in names]
+
     total = sum(w for _, w in items)
     if total <= 0:
         return names[0]
