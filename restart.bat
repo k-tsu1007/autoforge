@@ -9,11 +9,20 @@ timeout /t 2 /nobreak >nul
 
 set PY=C:\Users\Tsubasa\AppData\Local\Programs\Python\Python311\python.exe
 
-echo [restart] starting fuku_ai_sns publisher...
-wmic process call create "%PY% -m services.publisher --instance fuku_ai_sns","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+REM ログディレクトリ確保
+if not exist logs mkdir logs
 
-echo [restart] starting ai_bento publisher...
-wmic process call create "%PY% -m services.publisher --instance ai_bento","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+REM 前回ログをローテート (タイムスタンプ付きで退避)
+for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value ^| find "="') do set TS=%%I
+set TS=%TS:~0,8%_%TS:~8,6%
+if exist logs\publisher_fuku.log move /Y logs\publisher_fuku.log logs\publisher_fuku_%TS%.log >nul
+if exist logs\publisher_ai_bento.log move /Y logs\publisher_ai_bento.log logs\publisher_ai_bento_%TS%.log >nul
+
+echo [restart] starting fuku_ai_sns publisher (log: logs\publisher_fuku.log)...
+wmic process call create "cmd /c %PY% -m services.publisher --instance fuku_ai_sns >> logs\publisher_fuku.log 2>&1","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
+
+echo [restart] starting ai_bento publisher (log: logs\publisher_ai_bento.log)...
+wmic process call create "cmd /c %PY% -m services.publisher --instance ai_bento >> logs\publisher_ai_bento.log 2>&1","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
 
 REM echo [restart] starting fuku_ai_sns SNS service...
 REM wmic process call create "%PY% -m services.sns --instance fuku_ai_sns --port 8020","C:\Users\Tsubasa\autoforge" | findstr ReturnValue
