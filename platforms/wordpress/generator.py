@@ -55,19 +55,25 @@ def generate_article(strategy: dict, program: str, history: dict, *,
     prompt_name: 記事タイプ (beginner/comparison/news/handson) を明示指定。
     instruction: user prompt として送るテキスト。
     """
-    # 過去タイトル (直近15本 + PV/Like)
+    # 過去タイトル (直近20本 + PV/Like)
+    # 20本に広げることで禁止パターン検出の窓を確保する
     articles_list = history.get("articles", []) or []
     all_titles = [a.get("title", "") for a in articles_list]
-    recent_articles = articles_list[-15:]
+    recent_articles = articles_list[-20:]
     existing_context = ""
     if recent_articles:
-        lines = ["## 過去の記事タイトル（同じ型・テーマの繰り返しを避ける、PV/Like も参考に）"]
+        lines = [
+            "## 過去の記事タイトル（直近20本）",
+            "タイトル・語尾・テーマが重複しないようにすること。PV/Like も参考に。",
+        ]
         for a in recent_articles:
             title = a.get("title", "")
+            atype = a.get("article_type", "") or a.get("genre", "")
             pv = a.get("views", 0) or 0
             likes = a.get("likes", 0) or 0
             metrics = f" (PV:{pv} Like:{likes})" if (pv or likes) else ""
-            lines.append(f"- {title}{metrics}")
+            type_label = f"[{atype}] " if atype else ""
+            lines.append(f"- {type_label}{title}{metrics}")
         existing_context = "\n".join(lines)
 
     # 記事タイプ決定
