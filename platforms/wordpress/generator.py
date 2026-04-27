@@ -220,6 +220,14 @@ def save_draft(article: dict) -> str:
 
 
 def main():
+    # .env 読み込み（単体実行時にも USE_CLAUDE_CLI 等を適用するため）
+    try:
+        from tools._env_loader import load_envfiles
+        from core.paths import REPO_ROOT, instance_root
+        load_envfiles(REPO_ROOT, instance_root())
+    except Exception:
+        pass
+
     history = load_history()
     from datetime import datetime, timezone, timedelta
     jst = timezone(timedelta(hours=9))
