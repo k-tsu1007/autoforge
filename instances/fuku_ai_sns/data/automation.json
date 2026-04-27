@@ -1,0 +1,12 @@
+{
+  "review_mode": true,
+  "slots": [],
+  "prompt_weights": {},
+  "prompt_modes": {},
+  "prompt_settings": {},
+  "note_settings": {
+    "free_chars": 1500,
+    "paid_chars": 1250,
+    "price": 500
+  }
+}

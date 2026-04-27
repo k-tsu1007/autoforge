@@ -1,0 +1,8 @@
+{
+  "review_mode": true,
+  "slots": [],
+  "prompt_weights": {},
+  "prompt_modes": {},
+  "prompt_settings": {},
+  "_comment": "auto_generate 廃止済み (2026-04-27). generator (cron) 方式に移行。slots は常に空で運用。"
+}

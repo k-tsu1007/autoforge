@@ -1428,13 +1428,16 @@ _poll_interval_sec = int(os.environ.get("PUBLISHER_POLL_INTERVAL", "300"))
 
 
 def _auto_generate_if_slot():
-    """スロット時刻に一致していたら記事を自動生成 → 即投稿 (レビュー不要)。
+    """[廃止済み] publisher 内蔵 auto_generate は方式2（cron + generator）へ移行完了。
 
-    automation.json の slots と現在時刻を照合。
-    今日そのスロットで既に投稿済みならスキップ。
-    review_mode=true の場合は生成しない（安全装置）。
+    2026-04-27 移行: Windows タスクスケジューラ + ~/generator/ が代替する。
+    この関数は安全のため残すが、冒頭で常に早期リターンする。
+    slots / review_mode の設定値に関わらず一切動作しない。
     """
-    try:
+    # AUTO_GENERATE_DISABLED: 全インスタンスで generator (cron) 方式に移行済み
+    return  # noqa: unreachable
+
+    try:  # type: ignore[unreachable]  # 以下は参照用に残す（実行されない）
         from services.publisher import automation
         # review_mode=true のときは自動生成を完全にスキップ
         if automation.get_review_mode():
