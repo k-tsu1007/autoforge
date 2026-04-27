@@ -220,6 +220,24 @@ def save_draft(article: dict) -> str:
 
 
 def main():
+    # --instance 引数を処理してからパス解決する（先に set_active_instance が必要）
+    instance_name = ""
+    for i, arg in enumerate(sys.argv):
+        if arg == "--instance" and i + 1 < len(sys.argv):
+            instance_name = sys.argv[i + 1]
+            break
+
+    if instance_name:
+        from core.instance import set_active_instance
+        set_active_instance(instance_name)
+    elif not __import__("os").environ.get("AC_INSTANCE"):
+        print(
+            "[wp-generator] ERROR: インスタンスが指定されていません。"
+            " --instance <name> を指定するか AC_INSTANCE 環境変数を設定してください。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # .env 読み込み（単体実行時にも USE_CLAUDE_CLI 等を適用するため）
     try:
         from tools._env_loader import load_envfiles
