@@ -1234,7 +1234,14 @@ def _record_wp_article(article: dict, post_url: str):
 
 
 def _poll_note() -> dict:
-    """Automation (drafts/) → 常に即時投稿 (レビューなし)。"""
+    """Automation (drafts/) → review_mode=false のときのみ即時投稿。
+
+    review_mode=true のときは drafts を投稿せず 'skipped (review_mode)' を返す。
+    """
+    from services.publisher import automation
+    if automation.get_review_mode():
+        return {"published": 0, "message": "skipped (review_mode=true)"}
+
     from core.paths import drafts_dir, published_dir
     dd = drafts_dir()
     pd = published_dir()
@@ -1425,9 +1432,13 @@ def _auto_generate_if_slot():
 
     automation.json の slots と現在時刻を照合。
     今日そのスロットで既に投稿済みならスキップ。
+    review_mode=true の場合は生成しない（安全装置）。
     """
     try:
         from services.publisher import automation
+        # review_mode=true のときは自動生成を完全にスキップ
+        if automation.get_review_mode():
+            return
         slots = automation.get_slots()
         if not slots:
             return
